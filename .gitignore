@@ -3,6 +3,11 @@
 # pelo repo do hub. Cada um se versiona no seu próprio remote.
 workers/
 
+# ─── SEGREDOS: cookies de sessão (NUNCA commitar) ───
+cookies/
+*cookies*.json
+*.session
+
 # ─── runtime / python ───
 __pycache__/
 *.pyc

@@ -1,0 +1,13 @@
+# ─── Cada worker tem o SEU PRÓPRIO repositório ───
+# Eles vivem aqui fisicamente (pra rodar tudo junto), mas NÃO são versionados
+# pelo repo do hub. Cada um se versiona no seu próprio remote.
+workers/
+
+# ─── runtime / python ───
+__pycache__/
+*.pyc
+*.log
+output/
+.venv/
+venv/
+.env

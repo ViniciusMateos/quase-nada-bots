@@ -16,3 +16,9 @@ output/
 .venv/
 venv/
 .env
+
+# ─── app RN (frontend) ───
+**/node_modules/
+**/.expo/
+.env.local
+dist/

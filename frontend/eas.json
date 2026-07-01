@@ -1,0 +1,22 @@
+{
+  "cli": {
+    "version": ">=13.3.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "APP_VARIANT": "development",
+        "EXPO_PUBLIC_API_URL": "http://192.168.0.10:8010"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "APP_VARIANT": "preview",
+        "EXPO_PUBLIC_API_URL": "http://147.15.7.119:8010"
+      }
+    }
+  }
+}

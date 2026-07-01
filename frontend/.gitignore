@@ -1,0 +1,17 @@
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+
+# segredos / ambiente
+.env
+.env.local
+.env.*
+
+# nativo gerado
+/ios
+/android
+
+# os
+.DS_Store

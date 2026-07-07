@@ -19,8 +19,8 @@ const variant = requested === 'development' ? 'development' : 'preview';
 const isDev = variant === 'development';
 
 const variants = {
-  development: { name: 'QN Bots Dev', scheme: 'qnbots-dev', bundleId: 'app.quasenada.bots.dev' },
-  preview: { name: 'Quase Nada Bots', scheme: 'qnbots', bundleId: 'app.quasenada.bots.preview' },
+  development: { name: 'QN Bots Dev', scheme: 'qnbots-dev', bundleId: 'app.quasenada.bots.dev', icon: './src/assets/icon-teste.png' },
+  preview: { name: 'Quase Nada Bots', scheme: 'qnbots', bundleId: 'app.quasenada.bots.preview', icon: './src/assets/icon.png' },
 };
 const current = variants[variant];
 
@@ -39,7 +39,8 @@ module.exports = {
     scheme: current.scheme,
     userInterfaceStyle: 'dark',
     backgroundColor: '#0F0F0F',
-    splash: { resizeMode: 'contain', backgroundColor: '#0F0F0F' },
+    icon: current.icon,
+    splash: { image: './src/assets/splash.png', resizeMode: 'cover', backgroundColor: '#8114B0' },
     ios: {
       bundleIdentifier: current.bundleId,
       supportsTablet: false,
@@ -52,6 +53,7 @@ module.exports = {
     android: {
       package: current.bundleId,
       usesCleartextTraffic: isDev,
+      adaptiveIcon: { foregroundImage: current.icon, backgroundColor: '#8114B0' },
     },
     plugins: ['expo-secure-store', 'expo-notifications', 'expo-font', 'expo-asset'],
     extra,

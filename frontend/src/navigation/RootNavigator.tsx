@@ -6,12 +6,20 @@ import { HubScreen } from '@/screens/HubScreen';
 import { BotScreen } from '@/screens/BotScreen';
 import { RunScreen } from '@/screens/RunScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
+import { ChatsScreen } from '@/screens/ChatsScreen';
+import { EditModoScreen } from '@/screens/EditModoScreen';
+import { InstagramLoginScreen } from '@/screens/InstagramLoginScreen';
+import { ProxyScreen } from '@/screens/ProxyScreen';
 
 export type RootStackParamList = {
   Hub: undefined;
   Bot: { botId: string; nome: string };
   Run: { runId: string; nome: string };
   Settings: undefined;
+  Chats: { botId: string };
+  EditModo: { botId: string; modoNome: string };
+  InstagramLogin: undefined;
+  Proxy: { botId: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -38,6 +46,12 @@ export function RootNavigator() {
         <Stack.Screen name="Bot" component={BotScreen} options={({ route }) => ({ title: route.params.nome })} />
         <Stack.Screen name="Run" component={RunScreen} options={({ route }) => ({ title: route.params.nome })} />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Configurações' }} />
+        <Stack.Screen name="Chats" component={ChatsScreen} options={{ title: 'Chats salvos' }} />
+        <Stack.Screen name="EditModo" component={EditModoScreen}
+          options={({ route }) => ({ title: `Modo: ${route.params.modoNome}` })} />
+        <Stack.Screen name="InstagramLogin" component={InstagramLoginScreen}
+          options={{ title: 'Conectar Instagram' }} />
+        <Stack.Screen name="Proxy" component={ProxyScreen} options={{ title: 'Proxy' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

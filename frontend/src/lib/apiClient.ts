@@ -7,7 +7,11 @@ export async function baseUrl(): Promise<string> {
   return (await getServerUrl()) || env.apiBaseUrl;
 }
 
-const instance = axios.create({ timeout: 30000, headers: { 'Content-Type': 'application/json' } });
+const instance = axios.create({
+  timeout: 30000,
+  // 'Bypass-Tunnel-Reminder' pula a página de aviso do localtunnel (ao testar via túnel)
+  headers: { 'Content-Type': 'application/json', 'Bypass-Tunnel-Reminder': '1' },
+});
 
 instance.interceptors.request.use(async (config) => {
   config.baseURL = await baseUrl();

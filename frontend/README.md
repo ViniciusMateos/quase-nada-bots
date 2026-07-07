@@ -1,7 +1,7 @@
 # Quase Nada Bots — App (frontend)
 
-App React Native (Expo + TypeScript) que é o **hub dos bots** (auto-like, dm-followers,
-brecho-tracker). Conecta no backend FastAPI, dispara runs, mostra o **log ao vivo** e
+App React Native (Expo + TypeScript) que é o **hub dos bots** (auto-like,
+dm-followers). Conecta no backend FastAPI, dispara runs, mostra o **log ao vivo** e
 controla modos/chats. Mesmo modelo dos apps Quase Nada Lembretes/Finanças.
 
 ## Stack

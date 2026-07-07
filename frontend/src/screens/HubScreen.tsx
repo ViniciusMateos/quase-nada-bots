@@ -1,11 +1,13 @@
 import React, { useCallback, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { api, Bot, RunInfo } from '@/lib/api';
 import { colors, statusCor } from '@/theme';
-import { Card, Pill } from '@/ui/components';
+import { Aparece, BarraProgresso, Card, CartaoTocavel, Pill, Pulsar } from '@/ui/components';
+import { TelaCarregando } from '@/ui/LoadingDog';
+import { useDogRefresh } from '@/ui/DogRefresh';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -32,16 +34,23 @@ export function HubScreen() {
 
   useFocusEffect(useCallback(() => { carregar(); }, [carregar]));
 
+  const { scrollProps, dog, spacerEl } = useDogRefresh(carregar);
+
   const ativos = runs.filter((r) => ['rodando', 'iniciando'].includes(r.status)).reverse();
+
+  if (loading && bots.length === 0 && !erro) return <TelaCarregando />;
 
   return (
     <View style={styles.tela}>
+      {dog}
       <FlatList
         data={bots}
         keyExtractor={([id]) => id}
         contentContainerStyle={{ padding: 16, gap: 12 }}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={carregar} tintColor={colors.laranja} />}
+        {...scrollProps}
         ListHeaderComponent={
+          <>
+          {spacerEl}
           <View style={{ gap: 12, marginBottom: 4 }}>
             <View style={styles.topo}>
               <Text style={styles.titulo}>Seus bots</Text>
@@ -58,23 +67,31 @@ export function HubScreen() {
               <Card>
                 <Text style={styles.secao}>Rodando agora</Text>
                 {ativos.map((r) => (
-                  <TouchableOpacity key={r.id} style={styles.runLinha}
+                  <TouchableOpacity key={r.id} style={styles.runItem}
                     onPress={() => nav.navigate('Run', { runId: r.id, nome: r.bot })}>
-                    <Text style={styles.runTxt}>{r.bot}</Text>
-                    <Pill texto={r.status} cor={statusCor[r.status] ?? colors.textoFraco} />
+                    <View style={styles.runLinha}>
+                      <Text style={styles.runTxt}>{r.bot}</Text>
+                      <Pulsar>
+                        <Pill texto={r.status} cor={statusCor[r.status] ?? colors.textoFraco} />
+                      </Pulsar>
+                    </View>
+                    {r.progress && r.progress.total > 0 && (
+                      <BarraProgresso done={r.progress.done} total={r.progress.total} label={r.progress.label} />
+                    )}
                   </TouchableOpacity>
                 ))}
               </Card>
             )}
           </View>
+          </>
         }
-        renderItem={({ item: [id, bot] }) => (
-          <TouchableOpacity onPress={() => nav.navigate('Bot', { botId: id, nome: bot.nome })}>
-            <Card>
+        renderItem={({ item: [id, bot], index }) => (
+          <Aparece delay={index * 60}>
+            <CartaoTocavel onPress={() => nav.navigate('Bot', { botId: id, nome: bot.nome })}>
               <Text style={styles.botNome}>{bot.nome}</Text>
               <Text style={styles.botDesc}>{bot.descricao}</Text>
-            </Card>
-          </TouchableOpacity>
+            </CartaoTocavel>
+          </Aparece>
         )}
       />
     </View>
@@ -86,7 +103,8 @@ const styles = StyleSheet.create({
   topo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   titulo: { color: colors.texto, fontSize: 24, fontWeight: '800' },
   secao: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', marginBottom: 8, textTransform: 'uppercase' },
-  runLinha: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
+  runItem: { paddingVertical: 8, gap: 8 },
+  runLinha: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   runTxt: { color: colors.texto, fontSize: 15 },
   botNome: { color: colors.texto, fontSize: 18, fontWeight: '700' },
   botDesc: { color: colors.textoFraco, fontSize: 13, marginTop: 4 },

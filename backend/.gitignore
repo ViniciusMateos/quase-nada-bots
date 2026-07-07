@@ -2,6 +2,9 @@
 .env
 .env.*
 
+# push tokens dos devices (gerado em runtime)
+devices.json
+
 # python
 __pycache__/
 *.pyc

@@ -1,8 +1,8 @@
 """
 Quase Nada Bots — API.
 
-Orquestra os bots (auto-like, dm-followers, brecho-tracker): inicia/para runs,
-faz stream do log ao vivo (WebSocket), e gerencia modos/chats de cada bot.
+Orquestra os bots (auto-like, dm-followers): inicia/para runs, faz stream do
+log ao vivo (WebSocket), e gerencia modos/chats de cada bot.
 
 Rodar local:   uvicorn app:app --reload --port 8010
 Auth:          header `Authorization: Bearer <BOTS_API_TOKEN>` (WS usa ?token=).
@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 
 import bots
+import notify
 import settings
 from run_manager import RunManager
 
@@ -87,6 +88,52 @@ async def del_chat(bot_id: str, nome: str):
     chats = [c for c in bots.ler_chats(bot_id) if c.get("nome", "").lower() != nome.lower()]
     bots.gravar_chats(bot_id, chats)
     return {"ok": True}
+
+
+
+# ─────────────────────────── proxy ───────────────────────────────
+@app.get("/bots/{bot_id}/proxy", dependencies=[Depends(auth)])
+async def get_proxy(bot_id: str):
+    _checar_bot(bot_id)
+    return bots.ler_proxy(bot_id)
+
+
+@app.put("/bots/{bot_id}/proxy", dependencies=[Depends(auth)])
+async def put_proxy(bot_id: str, payload: dict):
+    _checar_bot(bot_id)
+    bots.gravar_proxy(bot_id, payload)
+    return bots.ler_proxy(bot_id)
+
+
+# ───────────────────────── conexão Instagram ─────────────────────
+@app.post("/instagram/session", dependencies=[Depends(auth)])
+async def conectar_instagram(payload: dict):
+    """Recebe os cookies capturados no app (WebView) e importa a sessão em cada bot
+    de IG — cada importação vira uma run (o app acompanha o log). Devolve as runs."""
+    cookies = payload.get("cookies")
+    if not isinstance(cookies, list) or not cookies:
+        raise HTTPException(400, "envie 'cookies' (lista não-vazia)")
+    if not any(str(c.get("name")) == "sessionid" for c in cookies):
+        raise HTTPException(400, "cookies sem 'sessionid' — sessão não está logada")
+    alvo = payload.get("bots") or bots.bots_ig()
+    runs = []
+    for bot_id in alvo:
+        if not bots.existe(bot_id):
+            continue
+        arquivo = bots.salvar_cookies_ig(bot_id, cookies)
+        run = await mgr.start(bot_id, {"import_cookies": arquivo})
+        runs.append({"bot": bot_id, "id": run.id})
+    if not runs:
+        raise HTTPException(400, "nenhum bot de Instagram para conectar")
+    return {"runs": runs}
+
+
+# ─────────────────────── push (devices) ─────────────────────────
+@app.post("/devices", dependencies=[Depends(auth)])
+async def registrar_device(payload: dict):
+    if not notify.registrar(payload.get("token")):
+        raise HTTPException(400, "token vazio")
+    return {"ok": True, "devices": len(notify.listar())}
 
 
 # ───────────────────────────── runs ──────────────────────────────

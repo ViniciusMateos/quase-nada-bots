@@ -9,9 +9,22 @@ import time
 from collections import deque
 
 import bots
+import notify
 import settings
 
 _counter = itertools.count(1)
+
+
+def _parse_progress(linha):
+    """`[progress] <feitos> <total> <label...>` → dict (ou None se malformado)."""
+    try:
+        resto = linha[len("[progress]"):].strip()
+        partes = resto.split(None, 2)
+        done, total = int(partes[0]), int(partes[1])
+        label = partes[2] if len(partes) > 2 else ""
+        return {"done": done, "total": total, "label": label}
+    except Exception:
+        return None
 
 
 class Run:
@@ -23,6 +36,7 @@ class Run:
         self.started_at = time.time()
         self.ended_at = None
         self.returncode = None
+        self.progress = None           # {done, total, label} — última barra reportada
         self.linhas = deque(maxlen=settings.MAX_LOG_LINES)
         self.subs = set()              # set[asyncio.Queue]
         self.proc = None
@@ -32,7 +46,7 @@ class Run:
             "id": self.id, "bot": self.bot, "status": self.status,
             "started_at": self.started_at, "ended_at": self.ended_at,
             "returncode": self.returncode, "params": self.params,
-            "linhas": len(self.linhas),
+            "linhas": len(self.linhas), "progress": self.progress,
         }
 
     async def emitir(self, linha):
@@ -66,7 +80,12 @@ class RunManager:
     async def _pump(self, run):
         try:
             async for raw in run.proc.stdout:
-                await run.emitir(raw.decode("utf-8", "replace").rstrip("\r\n"))
+                linha = raw.decode("utf-8", "replace").rstrip("\r\n")
+                if linha.startswith("[progress]"):
+                    p = _parse_progress(linha)
+                    if p:
+                        run.progress = p
+                await run.emitir(linha)
         except Exception as e:
             await run.emitir(f"[backend] erro lendo saída: {e}")
         run.returncode = await run.proc.wait()
@@ -74,11 +93,31 @@ class RunManager:
         if run.status != "parado":
             run.status = "finalizado" if run.returncode == 0 else "erro"
         await run.emitir(f"[backend] processo terminou (status={run.status}, code={run.returncode})")
+        await self._push_fim(run)
         for q in list(run.subs):       # sinaliza fim (None) aos assinantes
             try:
                 q.put_nowait(None)
             except Exception:
                 pass
+
+    async def _push_fim(self, run):
+        """Notifica o celular quando a run termina (pula runs de import de cookies)."""
+        if run.params.get("import_cookies"):
+            return
+        nome = bots.BOTS.get(run.bot, {}).get("nome", run.bot)
+        if run.status == "erro":
+            titulo, corpo = "❌ Deu ruim", f"{nome} parou com erro."
+        elif run.status == "parado":
+            titulo, corpo = "⏹️ Parado", f"{nome} foi parado."
+        else:
+            corpo = f"{nome} finalizou."
+            if run.progress and run.progress.get("total"):
+                corpo = f"{nome} finalizou — {run.progress['done']}/{run.progress['total']}."
+            titulo = "✅ Terminou"
+        try:
+            await asyncio.to_thread(notify.enviar, titulo, corpo, {"runId": run.id, "bot": run.bot})
+        except Exception:
+            pass
 
     async def stop(self, run_id):
         run = self.runs.get(run_id)

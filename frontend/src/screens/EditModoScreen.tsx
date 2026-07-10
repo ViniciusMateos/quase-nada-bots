@@ -5,6 +5,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api } from '@/lib/api';
 import { colors } from '@/theme';
 import { Aparece, Botao, Card } from '@/ui/components';
+import { TecladoView } from '@/ui/TecladoView';
 import { TelaCarregando } from '@/ui/LoadingDog';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
@@ -44,42 +45,54 @@ function num(t: string): number {
 
 export function EditModoScreen() {
   const nav = useNavigation<Nav>();
-  const { botId, modoNome } = useRoute<Rt>().params;
+  const { botId, modoNome, criar } = useRoute<Rt>().params;
   const [todos, setTodos] = useState<Modos>({});
   const [modo, setModo] = useState<Record<string, unknown>>({});
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
     api.getModos(botId)
-      .then((m) => { setTodos(m); setModo({ ...(m[modoNome] ?? {}) }); })
+      .then((m) => {
+        setTodos(m);
+        // criar do zero: parte do template 'padrao' (ou o 1º modo) só pra ter os campos
+        const base = criar ? (m['padrao'] ?? Object.values(m)[0] ?? {}) : (m[modoNome] ?? {});
+        setModo({ ...base });
+      })
       .catch(() => {})
       .finally(() => setCarregando(false));
-  }, [botId, modoNome]);
+  }, [botId, modoNome, criar]);
 
   const setCampo = (k: string, v: unknown) => setModo((prev) => ({ ...prev, [k]: v }));
 
   async function salvar(nome: string) {
     try {
       await api.putModos(botId, { ...todos, [nome]: modo });
-      Alert.alert('Salvo!', `Modo "${nome}" atualizado. 🤖`);
+      Alert.alert('Salvo!', `Modo "${nome}" salvo.`);
       nav.goBack();
     } catch {
       Alert.alert('Ops', 'Não consegui salvar.');
     }
   }
 
-  function salvarComo() {
-    Alert.prompt(
-      'Salvar como novo modo',
-      'Nome do modo (ex: turbo, seguro):',
-      (nome) => { if (nome && nome.trim()) salvar(nome.trim()); },
-    );
+  function salvarComo(titulo: string) {
+    Alert.prompt(titulo, 'Nome do modo (ex: turbo, seguro):', (nome) => {
+      const n = (nome || '').trim();
+      if (!n) return;
+      if (todos[n] && n !== modoNome) {
+        Alert.alert('Já existe', `Já tem um modo "${n}". Escolha outro nome.`);
+        return;
+      }
+      salvar(n);
+    });
   }
 
   if (carregando) return <TelaCarregando />;
 
   return (
-    <ScrollView style={styles.tela} contentContainerStyle={{ padding: 16, gap: 12 }}>
+    <TecladoView>
+    <ScrollView style={styles.tela} contentContainerStyle={{ padding: 16, gap: 12 }}
+      keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+      {criar && <Text style={styles.info}>Novo modo a partir do "padrao" — ajuste os valores e dê um nome.</Text>}
       <Aparece>
       <Card style={{ gap: 16 }}>
         {Object.entries(modo).map(([k, v]) => (
@@ -87,9 +100,17 @@ export function EditModoScreen() {
         ))}
       </Card>
       </Aparece>
-      <Botao title={`Salvar "${modoNome}"`} onPress={() => salvar(modoNome)} />
-      <Botao title="Salvar como novo modo…" cor={colors.card2} txtCor={colors.texto} onPress={salvarComo} />
+      {criar ? (
+        <Botao title="Criar modo" onPress={() => salvarComo('Criar modo')} />
+      ) : (
+        <>
+          <Botao title={`Salvar "${modoNome}"`} onPress={() => salvar(modoNome)} />
+          <Botao title="Salvar como novo modo…" cor={colors.card2} txtCor={colors.texto}
+            onPress={() => salvarComo('Salvar como novo modo')} />
+        </>
+      )}
     </ScrollView>
+    </TecladoView>
   );
 }
 

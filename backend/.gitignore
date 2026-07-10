@@ -10,3 +10,6 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# histórico das runs (gerado em runtime)
+runs_history.jsonl

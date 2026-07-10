@@ -12,6 +12,17 @@ _FILE = Path(__file__).parent / "devices.json"
 _EXPO_URL = "https://exp.host/--/api/v2/push/send"
 
 
+def barra_progresso(done, total, larg=10):
+    """Progresso pro corpo da notificação — só a porcentagem, sem os quadradinhos feios."""
+    try:
+        if not total or total <= 0:
+            return ""
+        pct = max(0, min(100, round(done / total * 100)))
+        return f"{pct}%"
+    except Exception:
+        return ""
+
+
 def _ler():
     if _FILE.exists():
         try:

@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 
 import bots
+import history
 import notify
 import settings
 from run_manager import RunManager
@@ -68,12 +69,17 @@ async def get_chats(bot_id: str):
 async def add_chat(bot_id: str, payload: dict):
     _checar_bot(bot_id)
     chats = bots.ler_chats(bot_id)
-    nome, tid = payload.get("nome"), str(payload.get("thread_id", ""))
-    if not nome or not tid:
-        raise HTTPException(400, "informe nome e thread_id")
-    for c in chats:
-        if str(c.get("thread_id")) == tid:
-            c["nome"] = nome
+    nome = (payload.get("nome") or "").strip()
+    tid = str(payload.get("thread_id") or "").strip()
+    if not nome and not tid:
+        raise HTTPException(400, "informe o thread_id ou o nome do grupo")
+    if not nome:                          # só thread_id → usa o id como rótulo
+        nome = tid
+    for c in chats:                       # dedup: por thread_id se houver, senão por nome
+        mesmo = (tid and str(c.get("thread_id")) == tid) or \
+                (not tid and c.get("nome", "").strip().lower() == nome.lower())
+        if mesmo:
+            c["nome"], c["thread_id"] = nome, tid
             bots.gravar_chats(bot_id, chats)
             return c
     novo = {"nome": nome, "thread_id": tid}
@@ -148,6 +154,13 @@ async def start_run(payload: dict):
 @app.get("/runs", dependencies=[Depends(auth)])
 async def list_runs():
     return mgr.listar()
+
+
+# precisa vir ANTES de /runs/{run_id} (senão "history" casa como run_id)
+@app.get("/runs/history", dependencies=[Depends(auth)])
+async def runs_history(bot: str = None, status: str = None,
+                       desde: float = None, ate: float = None):
+    return history.listar(bot=bot, status=status, desde=desde, ate=ate)
 
 
 @app.get("/runs/{run_id}", dependencies=[Depends(auth)])

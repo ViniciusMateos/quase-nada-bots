@@ -54,9 +54,14 @@ export function HubScreen() {
           <View style={{ gap: 12, marginBottom: 4 }}>
             <View style={styles.topo}>
               <Text style={styles.titulo}>Seus bots</Text>
-              <TouchableOpacity onPress={() => nav.navigate('Settings')}>
-                <Ionicons name="settings-outline" size={22} color={colors.textoFraco} />
-              </TouchableOpacity>
+              <View style={styles.topoAcoes}>
+                <TouchableOpacity onPress={() => nav.navigate('Historico')} hitSlop={8}>
+                  <Ionicons name="time-outline" size={23} color={colors.textoFraco} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => nav.navigate('Settings')} hitSlop={8}>
+                  <Ionicons name="settings-outline" size={22} color={colors.textoFraco} />
+                </TouchableOpacity>
+              </View>
             </View>
             {erro && (
               <Card style={{ borderColor: colors.erro }}>
@@ -101,6 +106,7 @@ export function HubScreen() {
 const styles = StyleSheet.create({
   tela: { flex: 1, backgroundColor: colors.bg },
   topo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  topoAcoes: { flexDirection: 'row', alignItems: 'center', gap: 18 },
   titulo: { color: colors.texto, fontSize: 24, fontWeight: '800' },
   secao: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', marginBottom: 8, textTransform: 'uppercase' },
   runItem: { paddingVertical: 8, gap: 8 },

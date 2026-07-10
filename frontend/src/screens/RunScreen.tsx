@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Animated, NativeScrollEvent, NativeSyntheticEvent,
+  Animated, NativeScrollEvent, NativeSyntheticEvent, Pressable,
   ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { api, logsWsUrl } from '@/lib/api';
 import { colors, statusCor } from '@/theme';
 import { BarraProgresso, Botao, Pill, Pulsar } from '@/ui/components';
@@ -63,7 +65,7 @@ function parseLinha(raw: string): Parsed {
   return { tipo: 'texto', hora, texto: resto, cor, forte };
 }
 
-function LogLinha({ raw }: { raw: string }) {
+function LogLinha({ raw, onCopiar }: { raw: string; onCopiar: (t: string) => void }) {
   const p = parseLinha(raw);
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -74,28 +76,30 @@ function LogLinha({ raw }: { raw: string }) {
     transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }],
   };
 
+  let el;
   if (p.tipo === 'divisor') {
-    return <Animated.View style={[wrapStyle, styles.divisorWrap]}><View style={styles.divisor} /></Animated.View>;
-  }
-  if (p.tipo === 'titulo') {
-    return <Animated.View style={wrapStyle}><Text style={styles.titulo}>{p.texto}</Text></Animated.View>;
-  }
-  if (p.tipo === 'kv') {
-    return (
+    el = <Animated.View style={[wrapStyle, styles.divisorWrap]}><View style={styles.divisor} /></Animated.View>;
+  } else if (p.tipo === 'titulo') {
+    el = <Animated.View style={wrapStyle}><Text style={styles.titulo}>{p.texto}</Text></Animated.View>;
+  } else if (p.tipo === 'kv') {
+    el = (
       <Animated.View style={[wrapStyle, styles.kvRow]}>
         <Text style={styles.kvLabel}>{p.label}</Text>
         <Text style={styles.kvValor}>{p.valor}</Text>
       </Animated.View>
     );
+  } else {
+    el = (
+      <Animated.View style={wrapStyle}>
+        <Text style={[styles.linha, { color: p.cor }, p.forte && styles.forte]}>
+          {p.hora ? <Text style={styles.hora}>{p.hora}  </Text> : null}
+          {p.texto}
+        </Text>
+      </Animated.View>
+    );
   }
-  return (
-    <Animated.View style={wrapStyle}>
-      <Text style={[styles.linha, { color: p.cor }, p.forte && styles.forte]}>
-        {p.hora ? <Text style={styles.hora}>{p.hora}  </Text> : null}
-        {p.texto}
-      </Text>
-    </Animated.View>
-  );
+  // segurar pra copiar a linha
+  return <Pressable onLongPress={() => onCopiar(raw)} delayLongPress={280}>{el}</Pressable>;
 }
 
 function parseProgresso(txt: string): Progresso | null {
@@ -112,6 +116,8 @@ export function RunScreen() {
   const [conectando, setConectando] = useState(true);
   const [parando, setParando] = useState(false);
   const [progresso, setProgresso] = useState<Progresso | null>(null);
+  const [copiadoMsg, setCopiadoMsg] = useState<string | null>(null);
+  const copiadoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -170,6 +176,13 @@ export function RunScreen() {
     try { await api.stopRun(runId); setStatus('parado'); } catch {} finally { setParando(false); }
   }
 
+  async function copiar(texto: string, msg: string) {
+    try { await Clipboard.setStringAsync(texto); } catch {}
+    setCopiadoMsg(msg);
+    if (copiadoTimer.current) clearTimeout(copiadoTimer.current);
+    copiadoTimer.current = setTimeout(() => setCopiadoMsg(null), 1400);
+  }
+
   const rodando = ['rodando', 'iniciando'].includes(status);
 
   return (
@@ -178,7 +191,16 @@ export function RunScreen() {
         <Pulsar ativo={rodando}>
           <Pill texto={status} cor={statusCor[status] ?? colors.textoFraco} />
         </Pulsar>
-        {rodando && <Botao title="✕ Parar" cor={colors.erro} txtCor="#fff" onPress={parar} loading={parando} />}
+        <View style={styles.topoAcoes}>
+          {linhas.length > 0 && (
+            <TouchableOpacity style={styles.copiarBtn} hitSlop={8}
+              onPress={() => copiar(linhas.join('\n'), 'log copiado')}>
+              <Ionicons name="copy-outline" size={16} color={colors.texto} />
+              <Text style={styles.copiarTxt}>copiar log</Text>
+            </TouchableOpacity>
+          )}
+          {rodando && <Botao title="Parar" cor={colors.erro} txtCor="#fff" onPress={parar} loading={parando} />}
+        </View>
       </View>
       {progresso && progresso.total > 0 && (
         <View style={styles.barraWrap}>
@@ -199,9 +221,15 @@ export function RunScreen() {
           scrollEventThrottle={32}
           onContentSizeChange={() => { if (atBottomRef.current) scrollRef.current?.scrollToEnd({ animated: true }); }}>
           {linhas.map((l, i) => (
-            <LogLinha key={i} raw={l} />
+            <LogLinha key={i} raw={l} onCopiar={(t) => copiar(t, 'linha copiada')} />
           ))}
         </ScrollView>
+      )}
+      {copiadoMsg && (
+        <View style={[styles.copiadoPill, { bottom: insets.bottom + 70 }]} pointerEvents="none">
+          <Ionicons name="checkmark" size={14} color="#0F0F0F" />
+          <Text style={styles.copiadoTxt}>{copiadoMsg}</Text>
+        </View>
       )}
       <Animated.View
         pointerEvents={mostrarVoltar ? 'auto' : 'none'}
@@ -224,6 +252,11 @@ export function RunScreen() {
 const styles = StyleSheet.create({
   tela: { flex: 1, backgroundColor: colors.bg },
   topo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
+  topoAcoes: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  copiarBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
+  copiarTxt: { color: colors.texto, fontSize: 13, fontWeight: '600' },
+  copiadoPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.ok, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
+  copiadoTxt: { color: '#0F0F0F', fontWeight: '700', fontSize: 13 },
   barraWrap: { paddingHorizontal: 16, paddingBottom: 12 },
   logBox: { flex: 1, backgroundColor: '#0A0A0A', marginHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
   loadingBox: { alignItems: 'center', justifyContent: 'center', gap: 12 },

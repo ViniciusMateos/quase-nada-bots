@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { api, Chat } from '@/lib/api';
 import { colors } from '@/theme';
 import { Aparece, Botao, Card, CartaoTocavel } from '@/ui/components';
@@ -59,9 +60,16 @@ export function BotScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          <TouchableOpacity onPress={() => nav.navigate('EditModo', { botId, modoNome: modo })} style={styles.linkBtn}>
-            <Text style={styles.linkTxt}>✎ Editar tempos/limites de "{modo}"</Text>
-          </TouchableOpacity>
+          <View style={styles.linksRow}>
+            <TouchableOpacity onPress={() => nav.navigate('EditModo', { botId, modoNome: modo })} style={styles.link}>
+              <Ionicons name="create-outline" size={15} color={colors.marca} />
+              <Text style={styles.linkTxt}>Editar "{modo}"</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => nav.navigate('EditModo', { botId, modoNome: modo, criar: true })} style={styles.link}>
+              <Ionicons name="add-circle-outline" size={16} color={colors.marca} />
+              <Text style={styles.linkTxt}>Novo modo</Text>
+            </TouchableOpacity>
+          </View>
         </Card>
         </Aparece>
       )}
@@ -84,29 +92,19 @@ export function BotScreen() {
               varrer antes de rodar.
             </Text>
           )}
-          <TouchableOpacity onPress={() => nav.navigate('Chats', { botId })} style={styles.linkBtn}>
-            <Text style={styles.linkTxt}>＋ Gerenciar chats</Text>
+          <TouchableOpacity onPress={() => nav.navigate('Chats', { botId })} style={styles.link}>
+            <Ionicons name="add-circle-outline" size={16} color={colors.marca} />
+            <Text style={styles.linkTxt}>Gerenciar chats</Text>
           </TouchableOpacity>
         </Card>
         </Aparece>
       )}
-      <Aparece delay={160}>
-      <Card>
-        <TouchableOpacity onPress={() => nav.navigate('Proxy', { botId })} style={styles.proxyLinha}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.proxyTxt}>🌐 Proxy</Text>
-            <Text style={styles.proxySub}>Mascarar o IP do servidor (Oracle)</Text>
-          </View>
-          <Text style={styles.linkTxt}>configurar ›</Text>
-        </TouchableOpacity>
-      </Card>
-      </Aparece>
       <View style={{ gap: 10 }}>
         {precisaChat ? (
           <Botao title="Configurar um chat primeiro" onPress={() => nav.navigate('Chats', { botId })} />
         ) : (
           <>
-            <Botao title="▶  Rodar" onPress={() => rodar(false)} loading={iniciando} />
+            <Botao title="Rodar" onPress={() => rodar(false)} loading={iniciando} />
             <Botao title="Simular (dry-run)" cor={colors.card2} txtCor={colors.texto}
               onPress={() => rodar(true)} disabled={iniciando} />
           </>
@@ -123,12 +121,8 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: colors.laranja, borderColor: colors.laranja },
   chipTxt: { color: colors.texto },
   chipTxtOn: { color: '#0F0F0F', fontWeight: '700' },
-  linkBtn: { marginTop: 12 },
-  linkTxt: { color: colors.laranja, fontWeight: '600', fontSize: 14 },
+  linksRow: { flexDirection: 'row', gap: 18 },
+  link: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 12 },
+  linkTxt: { color: colors.marca, fontWeight: '600', fontSize: 14 },
   aviso: { color: colors.textoFraco, fontSize: 13, lineHeight: 19 },
-  proxyLinha: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  proxyTxt: { color: colors.texto, fontSize: 16, fontWeight: '600' },
-  proxySub: { color: colors.textoFraco, fontSize: 12, marginTop: 2 },
-  dashTitulo: { color: colors.texto, fontSize: 17, fontWeight: '700' },
-  dashSub: { color: colors.textoFraco, fontSize: 13, marginTop: 4 },
 });

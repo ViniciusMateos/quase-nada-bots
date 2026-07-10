@@ -6,16 +6,18 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "environment": "development",
       "env": {
         "APP_VARIANT": "development",
-        "EXPO_PUBLIC_API_URL": "http://192.168.0.10:8010"
+        "EXPO_PUBLIC_API_URL": "https://quasenadaserver1.duckdns.org/bots"
       }
     },
     "preview": {
       "distribution": "internal",
+      "environment": "preview",
       "env": {
         "APP_VARIANT": "preview",
-        "EXPO_PUBLIC_API_URL": "http://147.15.7.119:8010"
+        "EXPO_PUBLIC_API_URL": "https://quasenadaserver1.duckdns.org/bots"
       }
     }
   }

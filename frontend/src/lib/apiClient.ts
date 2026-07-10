@@ -1,10 +1,9 @@
 import axios from 'axios';
 import { env } from '@/config/env';
-import { getServerUrl, getToken } from '@/lib/tokenStorage';
 
-// URL efetiva: a salva em Configurações tem prioridade sobre a do build.
+// URL do servidor: vem CRAVADA do build (env). Sem config manual dentro do app.
 export async function baseUrl(): Promise<string> {
-  return (await getServerUrl()) || env.apiBaseUrl;
+  return env.apiBaseUrl;
 }
 
 const instance = axios.create({
@@ -13,10 +12,9 @@ const instance = axios.create({
   headers: { 'Content-Type': 'application/json', 'Bypass-Tunnel-Reminder': '1' },
 });
 
-instance.interceptors.request.use(async (config) => {
-  config.baseURL = await baseUrl();
-  const token = await getToken();
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+instance.interceptors.request.use((config) => {
+  config.baseURL = env.apiBaseUrl;
+  if (env.apiToken) config.headers.Authorization = `Bearer ${env.apiToken}`;
   return config;
 });
 

@@ -23,6 +23,46 @@ export async function configurarCanalAndroid() {
   }
 }
 
+// Progresso pro corpo da notificação — só a porcentagem (sem quadradinhos).
+function barra(pct: number): string {
+  return `${pct}%`;
+}
+
+/**
+ * Harness de teste — funciona no Expo Go, SEM servidor. Simula uma run: dispara
+ * notificações locais com o MESMO identifier (`run-teste`), que SUBSTITUI a anterior
+ * nos dois SOs → vira uma barrinha que atualiza no lugar, e no fim a de "terminou".
+ * Dica: trava o celular / manda o app pro fundo depois de tocar, pra ver atualizando
+ * no lock screen (com o app aberto, cada update aparece como um banner novo).
+ */
+export async function testarProgresso(): Promise<boolean> {
+  try {
+    const perms = await Notifications.getPermissionsAsync();
+    if (perms.status !== 'granted') {
+      const r = await Notifications.requestPermissionsAsync();
+      if (r.status !== 'granted') return false;
+    }
+    await configurarCanalAndroid();
+    const passos = [8, 24, 42, 60, 78, 92];
+    for (const pct of passos) {
+      await Notifications.scheduleNotificationAsync({
+        identifier: 'run-teste',
+        content: { title: 'auto-like (teste)', body: `${barra(pct)}  ·  seguindo ${Math.round(pct * 1.2)}/120`, sound: false },
+        trigger: null,
+      });
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    await Notifications.scheduleNotificationAsync({
+      identifier: 'run-teste',
+      content: { title: 'Terminou (teste)', body: 'auto-like finalizou — 120/120.', sound: 'default' },
+      trigger: null,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Pede permissão, pega o Expo push token e registra no backend. Retorna se deu certo. */
 export async function registrarPush(): Promise<boolean> {
   if (noExpoGo || !Device.isDevice) return false;   // Expo Go / simulador não têm push remoto

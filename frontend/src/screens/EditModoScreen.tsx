@@ -13,7 +13,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Rt = RouteProp<RootStackParamList, 'EditModo'>;
 type Modos = Record<string, Record<string, unknown>>;
 
-// rótulos amigáveis (auto-like + dm); cai no próprio nome se não achar
+// rótulos amigáveis (auto-follow + dm); cai no próprio nome se não achar
 const LABELS: Record<string, string> = {
   aplicar_caps: 'Aplicar limites (caps)',
   max_follows_dia: 'Máx. follows por dia',

@@ -26,13 +26,28 @@ export function HubScreen() {
       setBots(Object.entries(b));
       setRuns(r);
     } catch {
-      setErro('Não consegui conectar no servidor. Confira a URL e o token em Configurações.');
+      // a URL vem cravada do build (não há config manual) — mandar "confira em
+      // Configurações" era mentira: não tem o que configurar lá.
+      setErro('Não consegui conectar no servidor. Puxe pra atualizar; se persistir, o server pode estar fora.');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { carregar(); }, [carregar]));
+  // só as runs (leve) — pra atualizar "Rodando agora" e a barra de progresso sem recarregar
+  // a lista de bots inteira
+  const atualizarRuns = useCallback(async () => {
+    try { setRuns(await api.listRuns()); } catch { /* offline / sem server */ }
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    carregar();
+    // POLL enquanto a Home está aberta: antes só recarregava ao focar, então parado na tela
+    // o "Rodando agora" congelava e o progresso não andava até você sair e voltar. Agora
+    // atualiza sozinho a cada 2,5s, independente de você entrar no log.
+    const id = setInterval(atualizarRuns, 2500);
+    return () => clearInterval(id);
+  }, [carregar, atualizarRuns]));
 
   const { scrollProps, dog, spacerEl } = useDogRefresh(carregar);
 
@@ -80,6 +95,10 @@ export function HubScreen() {
                         <Pill texto={r.status} cor={statusCor[r.status] ?? colors.textoFraco} />
                       </Pulsar>
                     </View>
+                    {/* a LINHA VIVA do log embaixo do nome — o que o bot está fazendo AGORA */}
+                    {r.status_log ? (
+                      <Text style={styles.runLog} numberOfLines={1}>{r.status_log}</Text>
+                    ) : null}
                     {r.progress && r.progress.total > 0 && (
                       <BarraProgresso done={r.progress.done} total={r.progress.total} label={r.progress.label} />
                     )}
@@ -112,6 +131,7 @@ const styles = StyleSheet.create({
   runItem: { paddingVertical: 8, gap: 8 },
   runLinha: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   runTxt: { color: colors.texto, fontSize: 15 },
+  runLog: { color: colors.textoFraco, fontSize: 12, fontFamily: 'monospace', marginTop: -2 },
   botNome: { color: colors.texto, fontSize: 18, fontWeight: '700' },
   botDesc: { color: colors.textoFraco, fontSize: 13, marginTop: 4 },
 });

@@ -47,14 +47,14 @@ export async function testarProgresso(): Promise<boolean> {
     for (const pct of passos) {
       await Notifications.scheduleNotificationAsync({
         identifier: 'run-teste',
-        content: { title: 'auto-like (teste)', body: `${barra(pct)}  ·  seguindo ${Math.round(pct * 1.2)}/120`, sound: false },
+        content: { title: 'auto-follow (teste)', body: `${barra(pct)}  ·  seguindo ${Math.round(pct * 1.2)}/120`, sound: false },
         trigger: null,
       });
       await new Promise((r) => setTimeout(r, 1500));
     }
     await Notifications.scheduleNotificationAsync({
       identifier: 'run-teste',
-      content: { title: 'Terminou (teste)', body: 'auto-like finalizou — 120/120.', sound: 'default' },
+      content: { title: 'Terminou (teste)', body: 'auto-follow finalizou — 120/120.', sound: 'default' },
       trigger: null,
     });
     return true;

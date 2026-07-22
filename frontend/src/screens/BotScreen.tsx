@@ -1,9 +1,10 @@
 import React, { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { api, Chat } from '@/lib/api';
+import { api, Chat, RunInfo } from '@/lib/api';
+import { garantirLA } from '@/lib/la';
 import { colors } from '@/theme';
 import { Aparece, Botao, Card, CartaoTocavel } from '@/ui/components';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
@@ -13,37 +14,62 @@ type Rt = RouteProp<RootStackParamList, 'Bot'>;
 
 export function BotScreen() {
   const nav = useNavigation<Nav>();
-  const { botId } = useRoute<Rt>().params;
+  const { botId, nome } = useRoute<Rt>().params;
   const [modos, setModos] = useState<string[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const [modo, setModo] = useState('padrao');
   const [chat, setChat] = useState<string | null>(null);
   const [iniciando, setIniciando] = useState(false);
+  const [runAtiva, setRunAtiva] = useState<RunInfo | null>(null);
 
-  const temChats = botId === 'auto-like';
+  const temChats = botId === 'auto-follow';
   const precisaChat = temChats && chats.length === 0;
+
+  // checagem leve (só as runs) — usada no polling pra atualizar o botão ao vivo
+  const checarRun = useCallback(() => {
+    api.listRuns().then((rs) => {
+      const a = rs.find((r) => r.bot === botId && ['rodando', 'iniciando'].includes(r.status)
+        && !(r.params as { import_cookies?: unknown })?.import_cookies) ?? null;
+      setRunAtiva(a);
+    }).catch(() => {});
+  }, [botId]);
 
   const carregar = useCallback(() => {
     api.getModos(botId).then((m) => setModos(Object.keys(m))).catch(() => {});
+    checarRun();
     if (temChats) {
       api.getChats(botId).then((c) => {
         setChats(c);
         setChat((atual) => (atual && c.some((x) => x.nome === atual) ? atual : c[0]?.nome ?? null));
       }).catch(() => {});
     }
-  }, [botId, temChats]);
-  useFocusEffect(useCallback(() => { carregar(); }, [carregar]));
+  }, [botId, temChats, checarRun]);
+
+  useFocusEffect(useCallback(() => {
+    carregar();
+    const id = setInterval(checarRun, 2500);   // atualiza o "Já está rodando" ao vivo
+    return () => clearInterval(id);
+  }, [carregar, checarRun]));
 
   async function rodar(dry: boolean) {
+    if (runAtiva) return;
     setIniciando(true);
     try {
       const params: Record<string, unknown> = { dry_run: dry };
       if (modos.length) params.modo = modo;
       if (temChats && chat) params.chat = chat;
       const run = await api.startRun(botId, params);
-      nav.replace('Run', { runId: run.id, nome: botId });
-    } catch {
+      setRunAtiva(run);                       // trava o botão na hora
+      // barra viva no lock screen (no-op no Expo Go). Vale também no dry-run: o dry agora é
+      // uma simulação FIEL (mesma navegação), então dá pra testar a LA sem seguir/mandar DM.
+      garantirLA(nome);
+      nav.navigate('Run', { runId: run.id, nome: botId });
+    } catch (e) {
       setIniciando(false);
+      carregar();   // atualiza o estado (pode já ter começado a rodar)
+      if ((e as { response?: { status?: number } })?.response?.status === 409) {
+        Alert.alert('Já está rodando', 'Esse bot já tem uma execução em andamento. Abre ela pra acompanhar.');
+      }
     }
   }
 
@@ -102,6 +128,12 @@ export function BotScreen() {
       <View style={{ gap: 10 }}>
         {precisaChat ? (
           <Botao title="Configurar um chat primeiro" onPress={() => nav.navigate('Chats', { botId })} />
+        ) : runAtiva ? (
+          <>
+            <Botao title="Já está rodando" disabled onPress={() => {}} />
+            <Botao title="Ver execução" cor={colors.card2} txtCor={colors.texto}
+              onPress={() => nav.navigate('Run', { runId: runAtiva.id, nome: botId })} />
+          </>
         ) : (
           <>
             <Botao title="Rodar" onPress={() => rodar(false)} loading={iniciando} />

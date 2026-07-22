@@ -1,9 +1,12 @@
 import React, { useEffect } from 'react';
+import { View } from 'react-native';
 import { DarkTheme, NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Notifications from 'expo-notifications';
 import { colors } from '@/theme';
 import { registrarPush } from '@/lib/push';
+import { BarraBotsGlobal } from '@/ui/BarraBotsGlobal';
+import { interacaoBus } from '@/ui/interacaoBus';
 import { HubScreen } from '@/screens/HubScreen';
 import { BotScreen } from '@/screens/BotScreen';
 import { RunScreen } from '@/screens/RunScreen';
@@ -61,6 +64,11 @@ export function RootNavigator() {
 
   return (
     <NavigationContainer ref={navigationRef} theme={navTheme}>
+      {/* avisa a barra flutuante que o usuário tocou/scrollou a tela, pra ela se recolher
+          em bolha. Retornar false = NÃO vira responder (não rouba o toque de ninguém). */}
+      <View
+        style={{ flex: 1 }}
+        onStartShouldSetResponderCapture={() => { interacaoBus.emitir(); return false; }}>
       <Stack.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: colors.card },
@@ -78,6 +86,10 @@ export function RootNavigator() {
         <Stack.Screen name="InstagramLogin" component={InstagramLoginScreen}
           options={{ title: 'Conectar Instagram' }} />
       </Stack.Navigator>
+      </View>
+      <BarraBotsGlobal onAbrir={(runId, titulo) => {
+        if (navigationRef.isReady()) navigationRef.navigate('Run', { runId, nome: titulo });
+      }} />
     </NavigationContainer>
   );
 }

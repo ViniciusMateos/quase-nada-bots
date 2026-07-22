@@ -1,11 +1,16 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { api, Bot, RunHistorico } from '@/lib/api';
 import { colors } from '@/theme';
 import { Aparece, Card } from '@/ui/components';
 import { TelaCarregando } from '@/ui/LoadingDog';
+import { useDogRefresh } from '@/ui/DogRefresh';
+import type { RootStackParamList } from '@/navigation/RootNavigator';
+
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 type FiltroBot = 'todos' | string;
 type FiltroRes = 'todos' | 'ok' | 'bloqueio' | 'erro' | 'parado';
@@ -37,7 +42,7 @@ function resultado(r: RunHistorico): { icon: keyof typeof Ionicons.glyphMap; lab
 
 function saldoTxt(r: RunHistorico): string {
   const s = r.saldo || {};
-  if (r.bot === 'auto-like') {
+  if (r.bot === 'auto-follow') {
     return `${s.seguidos ?? 0} seguidos · ${s.pedidos ?? 0} pedidos · ${s.pulados ?? 0} pulados`;
   }
   if (r.bot === 'dm-followers') {
@@ -47,21 +52,27 @@ function saldoTxt(r: RunHistorico): string {
 }
 
 export function HistoricoScreen() {
+  const nav = useNavigation<Nav>();
   const [regs, setRegs] = useState<RunHistorico[] | null>(null);
   const [nomes, setNomes] = useState<Record<string, string>>({});
   const [fBot, setFBot] = useState<FiltroBot>('todos');
   const [fRes, setFRes] = useState<FiltroRes>('todos');
   const [periodo, setPeriodo] = useState<Periodo>('tudo');
 
-  const carregar = useCallback(() => {
-    api.getHistorico().then(setRegs).catch(() => setRegs([]));
-    api.listBots().then((b: Record<string, Bot>) => {
-      const m: Record<string, string> = {};
-      Object.entries(b).forEach(([id, v]) => { m[id] = v.nome; });
-      setNomes(m);
-    }).catch(() => {});
+  const carregar = useCallback(async () => {
+    await Promise.all([
+      api.getHistorico().then(setRegs).catch(() => setRegs([])),
+      api.listBots().then((b: Record<string, Bot>) => {
+        const m: Record<string, string> = {};
+        Object.entries(b).forEach(([id, v]) => { m[id] = v.nome; });
+        setNomes(m);
+      }).catch(() => {}),
+    ]);
   }, []);
   useFocusEffect(useCallback(() => { carregar(); }, [carregar]));
+
+  // puxar-pra-atualizar: o histórico só carregava no mount, sem jeito de forçar refresh
+  const { scrollProps, dog, spacerEl } = useDogRefresh(carregar);
 
   const filtrados = useMemo(() => {
     if (!regs) return [];
@@ -81,7 +92,7 @@ export function HistoricoScreen() {
     let acoes = 0;
     for (const r of filtrados) {
       const s = r.saldo || {};
-      acoes += r.bot === 'auto-like'
+      acoes += r.bot === 'auto-follow'
         ? Number(s.seguidos ?? 0) + Number(s.pedidos ?? 0)
         : Number(s.enviadas ?? 0);
     }
@@ -94,13 +105,17 @@ export function HistoricoScreen() {
   if (!regs) return <TelaCarregando />;
 
   return (
+    <View style={styles.tela}>
+    {dog}
     <FlatList
       style={styles.tela}
       data={filtrados}
       keyExtractor={(r) => r.id}
       contentContainerStyle={{ padding: 16, gap: 8, paddingBottom: 24 }}
+      {...scrollProps}
       ListHeaderComponent={
         <View style={{ gap: 12, marginBottom: 4 }}>
+          {spacerEl}
           <Aparece>
             <Card style={styles.resumo}>
               <View>
@@ -131,6 +146,10 @@ export function HistoricoScreen() {
         const dur = fmtDur(item.duracao_s);
         return (
           <Aparece delay={Math.min(index, 8) * 30}>
+            {/* tocar no card abre o log daquele run (funciona pras runs que o server ainda
+                tem em memória; as importadas antigas mostram só o saldo). */}
+            <TouchableOpacity activeOpacity={0.7} disabled={item.backfill}
+              onPress={() => nav.navigate('Run', { runId: item.id, nome: nomes[item.bot] ?? item.bot })}>
             <Card style={{ gap: 6 }}>
               <View style={styles.topoLinha}>
                 <Text style={styles.botNome}>
@@ -145,13 +164,16 @@ export function HistoricoScreen() {
               <View style={styles.rodape}>
                 <Text style={styles.meta}>{fmtData(item.ended_at)}</Text>
                 {dur ? <Text style={styles.meta}>· {dur}</Text> : null}
-                {item.backfill ? <Text style={styles.metaFraco}>· importada</Text> : null}
+                {item.backfill ? <Text style={styles.metaFraco}>· importada</Text> :
+                  <Ionicons name="chevron-forward" size={14} color={colors.textoFraco} style={{ marginLeft: 'auto' }} />}
               </View>
             </Card>
+            </TouchableOpacity>
           </Aparece>
         );
       }}
     />
+    </View>
   );
 }
 

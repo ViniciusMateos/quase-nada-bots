@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Animated, NativeScrollEvent, NativeSyntheticEvent, Pressable,
+  Animated, AppState, Easing, NativeScrollEvent, NativeSyntheticEvent, Pressable,
   ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { RouteProp, useRoute } from '@react-navigation/native';
@@ -21,6 +21,9 @@ type Parsed =
   | { tipo: 'divisor' }
   | { tipo: 'titulo'; texto: string }
   | { tipo: 'kv'; label: string; valor: string }
+  | { tipo: 'dmhead'; user: string; enviada: boolean }
+  | { tipo: 'mensagem'; texto: string }
+  | { tipo: 'sleep'; texto: string }
   | { tipo: 'texto'; hora: string; texto: string; cor: string; forte: boolean };
 
 function corEvento(nivel: string, low: string): { cor: string; forte: boolean } {
@@ -57,6 +60,21 @@ function parseLinha(raw: string): Parsed {
   const wrap = resto.match(/^[─—]\s*(.+?)\s*[─—]$/);   // — Título —
   if (wrap) return { tipo: 'titulo', texto: wrap[1].trim() };
 
+  // ── DM: organiza o bloco em vez de amontoar ──
+  // cabeçalho "DM → @user": limpa o "│ [dry] DM →", o (pk …) e o rabicho de status.
+  const dm = resto.match(/DM\s*→\s*@?([A-Za-z0-9._]+)/);
+  if (dm) return { tipo: 'dmhead', user: dm[1], enviada: /enviada/i.test(resto) };
+  // corpo da mensagem: linha indentada "│      <texto>" → preview discreto (itálico/cinza,
+  // cortado em 2 linhas) pra não tomar a tela com a mensagem inteira.
+  const msg = resto.match(/^│\s{3,}(.+)$/);
+  if (msg) {
+    const limpa = msg[1].replace(/⏎/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    return { tipo: 'mensagem', texto: limpa };
+  }
+  // pausas humanas ("dormiria/dormindo 3s (abrindo perfil)") = ruído de ritmo → bem discreto
+  const soneca = resto.match(/dormi(?:ria|ndo)\s+(\S+)\s*\(([^)]+)\)/i);
+  if (soneca) return { tipo: 'sleep', texto: `${soneca[2].trim()}  ·  ${soneca[1].trim()}` };
+
   // "label ..... valor" → linha com valor à direita
   const kv = resto.match(/^(.+?)\s*[.·]{2,}\s*(.+)$/);
   if (kv) return { tipo: 'kv', label: kv[1].trim(), valor: kv[2].trim() };
@@ -86,6 +104,26 @@ function LogLinha({ raw, onCopiar }: { raw: string; onCopiar: (t: string) => voi
       <Animated.View style={[wrapStyle, styles.kvRow]}>
         <Text style={styles.kvLabel}>{p.label}</Text>
         <Text style={styles.kvValor}>{p.valor}</Text>
+      </Animated.View>
+    );
+  } else if (p.tipo === 'dmhead') {
+    el = (
+      <Animated.View style={[wrapStyle, styles.dmhead]}>
+        <Ionicons name="paper-plane" size={13} color={colors.amarelo} />
+        <Text style={styles.dmuser}>@{p.user}</Text>
+        {p.enviada && <Ionicons name="checkmark-done" size={14} color={colors.ok} />}
+      </Animated.View>
+    );
+  } else if (p.tipo === 'mensagem') {
+    el = (
+      <Animated.View style={wrapStyle}>
+        <Text style={styles.mensagem} numberOfLines={2}>{p.texto}</Text>
+      </Animated.View>
+    );
+  } else if (p.tipo === 'sleep') {
+    el = (
+      <Animated.View style={wrapStyle}>
+        <Text style={styles.sleep} numberOfLines={1}>{p.texto}</Text>
       </Animated.View>
     );
   } else {
@@ -143,14 +181,32 @@ export function RunScreen() {
 
   useEffect(() => {
     let alive = true;
-    (async () => {
+
+    // Troca de run: zera AGORA. O ws.onopen também zera, mas só quando a conexão abre —
+    // até lá a tela mostraria o log e a barra do bot ANTERIOR, como se fossem deste.
+    // (Na reconexão do AppState isso não roda: o effect só refaz quando o runId muda.)
+    setLinhas([]);
+    setProgresso(null);
+    setConectando(true);
+
+    const conectar = async () => {
+      if (!alive) return;
+      try { wsRef.current?.close(); } catch { /* sem socket antigo */ }
+      setConectando(true);
       try {
         const d = await api.getRun(runId);
-        if (alive) setStatus(d.status);
+        // semeia o log JÁ do getRun: assim o histórico → run FINALIZADA mostra o log na hora,
+        // sem depender do replay do WS (que pode nem abrir pra run que já acabou). Pra run
+        // rodando, o ws.onopen rezera e o server reenvia — sem duplicar.
+        if (alive) { setStatus(d.status); if (d.log && d.log.length) setLinhas(d.log); }
       } catch {}
+      if (!alive) return;
       const url = await logsWsUrl(runId);
       const ws = new WebSocket(url);
       wsRef.current = ws;
+      // o server reenvia TODO o histórico ao conectar → zera as linhas, senão cada volta
+      // do segundo plano duplicaria o log inteiro
+      ws.onopen = () => { if (alive) setLinhas([]); };
       ws.onmessage = (e) => {
         if (!alive) return;
         setConectando(false);
@@ -167,9 +223,29 @@ export function RunScreen() {
         if (alive) setConectando(false);
         try { const d = await api.getRun(runId); if (alive) setStatus(d.status); } catch {}
       };
-    })();
-    return () => { alive = false; wsRef.current?.close(); };
+    };
+
+    conectar();
+    // o iOS MATA o WebSocket quando o app vai pro segundo plano — sem reconectar aqui, o
+    // log congela nas linhas antigas e nunca mais anda
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active' && alive) conectar();
+    });
+    return () => { alive = false; wsRef.current?.close(); sub.remove(); };
   }, [runId]);
+
+  // Trocar de run pelo widget flutuante mantém a MESMA tela: o React Navigation só
+  // atualiza os params. Sem isso o conteúdo trocava seco — o nome mudava e o log pipocava.
+  // Aqui a tela some e volta, então dá pra perceber que virou outro processo.
+  const troca = useRef(new Animated.Value(1)).current;
+  const primeiroRun = useRef(true);
+  useEffect(() => {
+    if (primeiroRun.current) { primeiroRun.current = false; return; }  // não anima ao abrir
+    troca.setValue(0);
+    Animated.timing(troca, {
+      toValue: 1, duration: 260, easing: Easing.out(Easing.quad), useNativeDriver: true,
+    }).start();
+  }, [runId, troca]);
 
   async function parar() {
     setParando(true);
@@ -186,7 +262,10 @@ export function RunScreen() {
   const rodando = ['rodando', 'iniciando'].includes(status);
 
   return (
-    <View style={styles.tela}>
+    <Animated.View style={[styles.tela, {
+      opacity: troca,
+      transform: [{ translateY: troca.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
+    }]}>
       <View style={styles.topo}>
         <Pulsar ativo={rodando}>
           <Pill texto={status} cor={statusCor[status] ?? colors.textoFraco} />
@@ -245,7 +324,7 @@ export function RunScreen() {
           <Text style={styles.voltarTxt}>↓ Ir ao final</Text>
         </TouchableOpacity>
       </Animated.View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -270,6 +349,10 @@ const styles = StyleSheet.create({
   kvRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, paddingVertical: 2 },
   kvLabel: { color: colors.textoFraco, fontSize: 13, flexShrink: 1 },
   kvValor: { color: colors.texto, fontSize: 13, fontWeight: '600' },
+  dmhead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 9, marginBottom: 1 },
+  dmuser: { color: colors.texto, fontSize: 13.5, fontWeight: '700' },
+  mensagem: { fontFamily: 'monospace', fontSize: 11, lineHeight: 16, color: colors.textoFraco, fontStyle: 'italic', paddingLeft: 18, opacity: 0.8 },
+  sleep: { color: '#5A5A5A', fontSize: 10.5, fontStyle: 'italic', paddingLeft: 18, paddingVertical: 1 },
   voltarWrap: { position: 'absolute', right: 22 },
   voltarBtn: {
     backgroundColor: colors.laranja, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 999,

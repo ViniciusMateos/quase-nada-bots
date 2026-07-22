@@ -5,6 +5,7 @@ import { WebView } from 'react-native-webview';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api, IgCookie } from '@/lib/api';
+import { garantirLA } from '@/lib/la';
 import { colors } from '@/theme';
 import { Botao } from '@/ui/components';
 import { LoadingDog } from '@/ui/LoadingDog';
@@ -27,6 +28,9 @@ try {
 } catch {
   CookieManager = null;
 }
+
+// no Expo Go o módulo nativo de cookies não existe → login do IG é impossível ali
+const semNativo = !CookieManager;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -70,6 +74,9 @@ export function InstagramLoginScreen() {
       jaCapturou.current = true;
       const res = await api.connectInstagram(cookies);
       if (!res.runs?.length) throw new Error('sem runs');
+      // conectar dispara uma run POR bot de IG (cada worker tem sua própria sessão) — a
+      // Live Activity é uma só e o server soma as duas dentro dela.
+      await garantirLA('Conectando Instagram');
       nav.replace('Run', { runId: res.runs[0].id, nome: 'Conectar Instagram' });
     } catch {
       jaCapturou.current = false;
@@ -100,7 +107,15 @@ export function InstagramLoginScreen() {
 
       <View style={[styles.rodape, { paddingBottom: insets.bottom + 12 }]}>
         {status === 'erro' && <Text style={styles.erro}>{msg}</Text>}
-        {status === 'capturando' ? (
+        {semNativo ? (
+          // Sem o módulo nativo de cookies o botão não teria como funcionar — e antes
+          // ele simplesmente não fazia nada, calado. Melhor dizer o porquê.
+          <Text style={styles.aviso}>
+            O login do Instagram só funciona no app instalado. No Expo Go o iOS não entrega
+            os cookies da sessão pro app, então não tem como capturar o login daqui.
+            Instala o build de preview e conecta por lá.
+          </Text>
+        ) : status === 'capturando' ? (
           <View style={styles.capturando}>
             <LoadingDog size={30} />
             <Text style={styles.capturandoTxt}>Conectando sua conta…</Text>
@@ -121,6 +136,7 @@ const styles = StyleSheet.create({
   overlayPagina: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   rodape: { padding: 16, gap: 10, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card },
   dica: { color: colors.textoFraco, fontSize: 13, textAlign: 'center' },
+  aviso: { color: colors.alerta, fontSize: 13, textAlign: 'center', lineHeight: 19 },
   erro: { color: colors.erro, fontSize: 13, textAlign: 'center', lineHeight: 18 },
   capturando: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, paddingVertical: 6 },
   capturandoTxt: { color: colors.texto, fontSize: 15, fontWeight: '600' },

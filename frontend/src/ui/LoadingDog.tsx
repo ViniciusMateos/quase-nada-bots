@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, StyleProp, View, ViewStyle } from 'react-native';
 import { colors } from '@/theme';
+import { CACHORRO_URI } from '../assets/imagensBase64';
 
 /**
  * Loader oficial do Quase Nada: o cachorro da marca + anel girando em volta.
@@ -25,7 +26,7 @@ export function LoadingDog({
 
   const rotate = rotation.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   const ring = Math.round(size * 0.82);
-  const imageSize = Math.round(size * 0.82);
+  const imageSize = Math.round(size * 0.72);   // dog um pouco menor que o anel (cabia estourado)
   const stroke = Math.max(1, size * 0.032);
 
   return (
@@ -38,7 +39,7 @@ export function LoadingDog({
         }}
       />
       <Image
-        source={require('../assets/apenas-cachorro.png')}
+        source={{ uri: CACHORRO_URI }}
         style={{ width: imageSize, height: imageSize, resizeMode: 'contain', tintColor: color }}
       />
     </View>

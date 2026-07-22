@@ -9,7 +9,8 @@ import { LoadingDog } from '@/ui/LoadingDog';
 //   - {...scrollProps} vai no FlatList/ScrollView.
 const THRESH = 70;
 
-export function useDogRefresh(onRefresh: () => Promise<unknown>) {
+// topOffset: desce o cachorro abaixo do notch em tela SEM header (ex: passar insets.top)
+export function useDogRefresh(onRefresh: () => Promise<unknown>, topOffset = 10) {
   const pull = useRef(new Animated.Value(0)).current;
   const spacer = useRef(new Animated.Value(0)).current;
   const puxa = useRef(0);
@@ -43,7 +44,7 @@ export function useDogRefresh(onRefresh: () => Promise<unknown>) {
   }, [onRefresh, pull, spacer]);
 
   const dog = (
-    <Animated.View pointerEvents="none" style={[styles.dogWrap, {
+    <Animated.View pointerEvents="none" style={[styles.dogWrap, { top: topOffset }, {
       opacity: pull.interpolate({ inputRange: [0, THRESH * 0.4, THRESH], outputRange: [0, 0.35, 1], extrapolate: 'clamp' }),
       transform: [{ scale: pull.interpolate({ inputRange: [0, THRESH], outputRange: [0.6, 1], extrapolate: 'clamp' }) }],
     }]}>

@@ -37,11 +37,16 @@ BOTS_API_TOKEN=algumtoken uvicorn app:app --host 0.0.0.0 --port 8010
 cd frontend && npm install && npm run start
 ```
 
-No app → **Configurações** → informe a URL do servidor + token.
+O app **já vem conectado** — a URL do servidor e o token ficam **cravados no build**
+(via `EXPO_PUBLIC_API_URL` / `EXPO_PUBLIC_API_TOKEN` no `eas.json` / `.env.local`). Não
+existe tela de configurar servidor: o app abre e fala com a Oracle direto. Pra dev com
+backend local, aponte o `EXPO_PUBLIC_API_URL` pro IP da sua máquina antes de buildar/rodar.
 
 Detalhes: `frontend/README.md` (app) e `backend/README.md` (API).
 
 ## Status
 
-- ✅ Bots modularizados (modos/chats) · ✅ Backend MVP (runs, log ao vivo) · ✅ App MVP (hub, log ao vivo)
-- ⏳ Dashboard do brechó, progresso + push, deploy na Oracle, proxy, cookies via link
+**v1.0.0 — lançado.** Bots (`auto-follow` + `dm-followers`), backend FastAPI (runs,
+execução paralela, log ao vivo via WebSocket), app iOS (hub, histórico, log ao vivo,
+sessão universal do Instagram), **Live Activity** no lock screen / Dynamic Island,
+push de progresso, deploy na Oracle e proxy residencial auto-curável.

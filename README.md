@@ -2,7 +2,7 @@
 
 Hub das automações de Instagram da Quase Nada: um **app** (React Native) que comanda
 os **bots** rodando num **backend** (FastAPI) — com log ao vivo, modos/chats, execução
-paralela e notificações. (A parte de brechó virou um app próprio, o `quase-nada-brecho`.)
+paralela e notificações.
 
 ## Estrutura
 

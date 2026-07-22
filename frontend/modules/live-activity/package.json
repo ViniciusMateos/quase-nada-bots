@@ -1,0 +1,6 @@
+{
+  "name": "live-activity",
+  "version": "1.0.0",
+  "description": "Live Activity dos bots (ActivityKit) — uma por run, com activityId",
+  "main": "index.ts"
+}

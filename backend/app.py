@@ -1,7 +1,7 @@
 """
 Quase Nada Bots — API.
 
-Orquestra os bots (auto-like, dm-followers): inicia/para runs, faz stream do
+Orquestra os bots (auto-follow, dm-followers): inicia/para runs, faz stream do
 log ao vivo (WebSocket), e gerencia modos/chats de cada bot.
 
 Rodar local:   uvicorn app:app --reload --port 8010
@@ -13,6 +13,7 @@ import asyncio
 
 import bots
 import history
+import liveactivity
 import notify
 import settings
 from run_manager import RunManager
@@ -121,17 +122,16 @@ async def conectar_instagram(payload: dict):
         raise HTTPException(400, "envie 'cookies' (lista não-vazia)")
     if not any(str(c.get("name")) == "sessionid" for c in cookies):
         raise HTTPException(400, "cookies sem 'sessionid' — sessão não está logada")
-    alvo = payload.get("bots") or bots.bots_ig()
-    runs = []
-    for bot_id in alvo:
-        if not bots.existe(bot_id):
-            continue
-        arquivo = bots.salvar_cookies_ig(bot_id, cookies)
-        run = await mgr.start(bot_id, {"import_cookies": arquivo})
-        runs.append({"bot": bot_id, "id": run.id})
-    if not runs:
+    alvo = [b for b in (payload.get("bots") or bots.bots_ig()) if bots.existe(b)]
+    if not alvo:
         raise HTTPException(400, "nenhum bot de Instagram para conectar")
-    return {"runs": runs}
+    # A sessão é UNIVERSAL (arquivo central, lido por todos os bots — mesma conta). Então
+    # valida UMA vez só (um browser), gravando direto na sessão central. Não abre um browser
+    # por bot nem "copia pros outros": todos já leem o mesmo session_cookies.json central.
+    principal = alvo[0]
+    arquivo = bots.salvar_cookies_ig(principal, cookies)
+    run = await mgr.start(principal, {"import_cookies": arquivo})
+    return {"runs": [{"bot": principal, "id": run.id}]}
 
 
 # ─────────────────────── push (devices) ─────────────────────────
@@ -147,7 +147,14 @@ async def registrar_device(payload: dict):
 async def start_run(payload: dict):
     bot_id = payload.get("bot")
     _checar_bot(bot_id)
-    run = await mgr.start(bot_id, payload.get("params", {}))
+    params = payload.get("params", {}) or {}
+    # não deixa DOIS do MESMO bot rodando junto (bots diferentes pode; conectar IG não conta)
+    if not params.get("import_cookies") and any(
+        r.bot == bot_id and r.status in ("rodando", "iniciando") and not r.params.get("import_cookies")
+        for r in mgr.runs.values()
+    ):
+        raise HTTPException(409, "esse bot já está rodando — espera terminar")
+    run = await mgr.start(bot_id, params)
     return run.info()
 
 
@@ -168,7 +175,40 @@ async def run_detail(run_id: str):
     r = mgr.get(run_id)
     if not r:
         raise HTTPException(404, "run não encontrado")
-    return {**r.info(), "log": list(r.linhas)[-300:]}
+    # cabeçalho (começo) + cauda recente, sem repetir a sobreposição enquanto o log é curto
+    tail = list(r.linhas)
+    corte = 0
+    while corte < len(tail) and corte < len(r.cabecalho) and tail[corte] is r.cabecalho[corte]:
+        corte += 1
+    return {**r.info(), "log": r.cabecalho + tail[corte:][-300:]}
+
+
+@app.post("/liveactivity", dependencies=[Depends(auth)])
+async def set_liveactivity(payload: dict):
+    """O app manda o push token da Live Activity — UMA por app, não por run. A partir daqui
+    o server empurra a barra viva via APNs, somando todas as runs ativas dentro dela."""
+    # o app manda o bundle do PRÓPRIO build (.dev/.preview) — é ele que vira o tópico do
+    # APNs. Sem isso, dev e preview brigariam pelo APNS_BUNDLE_ID do .env.
+    # registrar_la_token PERSISTE em disco (sobrevive a restart) E, se o activity_id mudou
+    # (LA de sessão nova), encerra a LA antiga órfã antes de assumir — anti-Dynamic-Island-rachada.
+    await mgr.registrar_la_token(
+        payload.get("token"),
+        liveactivity.bundle_valido(payload.get("bundle")),
+        payload.get("activity_id"))
+    print(f"[la] token recebido: "
+          f"{'sim (' + str(len(mgr.la_token)) + ' chars)' if mgr.la_token else 'VAZIO'} "
+          f"| bundle={mgr.la_bundle or '(do .env)'} | configurado={liveactivity.configurado()}",
+          flush=True)
+    await mgr.empurrar_la()   # já reflete o estado atual, sem esperar o próximo [progress]
+    return {"ok": True}
+
+
+@app.post("/liveactivity/test", dependencies=[Depends(auth)])
+async def liveactivity_test(payload: dict):
+    """Aba de Testes do app: empurra um estado FAKE de N bots pra Live Activity, pra ver como
+    renderiza sem esperar bot real. n<=0 encerra a LA. Rode com os bots parados (senão o loop
+    de progresso real sobrescreve o fake em ~3s)."""
+    return await mgr.empurrar_la_teste(payload.get("n"))
 
 
 @app.post("/runs/{run_id}/stop", dependencies=[Depends(auth)])
@@ -189,7 +229,17 @@ async def ws_logs(ws: WebSocket, run_id: str, token: str = ""):
         return
     await ws.accept()
     q = asyncio.Queue()
-    for l in list(r.linhas):              # histórico primeiro
+    # começo do run SEMPRE (Modo/Proxy/Conta não somem nem em log longo), depois o buffer
+    # rolante — sem repetir o que ainda está no cabeçalho (log curto: mesmos objetos).
+    for l in r.cabecalho:
+        await ws.send_text(l)
+    tail = list(r.linhas)
+    corte = 0
+    while corte < len(tail) and corte < len(r.cabecalho) and tail[corte] is r.cabecalho[corte]:
+        corte += 1
+    if corte == 0 and r.cabecalho and getattr(r, "_truncou", False):
+        await ws.send_text("[backend] ····· (log do meio cortado — completo no arquivo da sessão) ·····")
+    for l in tail[corte:]:
         await ws.send_text(l)
     if r.status in ("finalizado", "parado", "erro"):
         await ws.close()

@@ -10,13 +10,13 @@ import json
 from settings import WORKERS_DIR
 
 BOTS = {
-    "auto-like": {
-        "nome": "Auto Likes", "dir": "auto-like-instagram",
+    "auto-follow": {
+        "nome": "Auto Follow", "dir": "auto-follow-instagram",
         "tem_modos": True, "tem_chats": True, "tem_ig": True,
         "descricao": "Segue os curtidores dos posts compartilhados num chat.",
     },
     "dm-followers": {
-        "nome": "DM Followers", "dir": "dm-followers",
+        "nome": "DM Followers", "dir": "dm-followers-instagram",
         "tem_modos": True, "tem_chats": False, "tem_ig": True,
         "descricao": "Manda DM pros novos seguidores.",
     },
@@ -64,7 +64,7 @@ def montar_cmd(bot_id, params):
         args += ["--limite", str(p["limite"])]
     if p.get("start_from"):                       # dm-followers
         args += ["--start-from", str(p["start_from"])]
-    if p.get("start_after"):                      # auto-like
+    if p.get("start_after"):                      # auto-follow
         args += ["--start-after", str(p["start_after"])]
     for x in p.get("extra", []) or []:
         args.append(str(x))

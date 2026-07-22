@@ -16,7 +16,7 @@ _TS = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 
 # substring do label (minúsculo) → chave do saldo, por bot
 _MAP = {
-    "auto-like": {"seguidas": "seguidos", "solicitadas": "pedidos", "puladas": "pulados"},
+    "auto-follow": {"seguidas": "seguidos", "solicitadas": "pedidos", "puladas": "pulados"},
     "dm-followers": {"dms enviadas": "enviadas", "puladas": "puladas"},
 }
 

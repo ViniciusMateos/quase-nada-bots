@@ -1,6 +1,6 @@
 # Quase Nada Bots — Backend (API)
 
-FastAPI que orquestra os bots (`auto-like`, `dm-followers`) como subprocessos, faz
+FastAPI que orquestra os bots (`auto-follow`, `dm-followers`) como subprocessos, faz
 **stream do log ao vivo** via WebSocket e gerencia modos/chats.
 É a ponte entre o app React Native e os bots rodando na Oracle.
 

@@ -10,7 +10,7 @@
 ## 1. Objetivo
 
 Centralizar várias automações pessoais de Instagram num só lugar, controláveis pelo
-celular, reaproveitando a base já feita no [`auto-like-instagram`](../auto-like-instagram/).
+celular, reaproveitando a base já feita no [`auto-follow-instagram`](../auto-follow-instagram/).
 
 ## 2. Automações
 
@@ -51,7 +51,7 @@ ig-automations-hub/            ← REPO PRÓPRIO (desenvolvimento do app)
                state/retomada, ig_client, import de cookies
   backend/     (opcional, p/ rodar 24/7) FastAPI orquestrando os workers
   workers/                     ← GITIGNORED no hub — cada um tem repo próprio
-    auto-like-instagram/       ← repo: ViniciusMateos/auto-like-instagram  ✅ (v1.0.1)
+    auto-follow-instagram/       ← repo: ViniciusMateos/auto-follow-instagram  ✅ (v1.0.1)
     dm_followers/              ← repo próprio (a criar)
     post_story/                ← futuro
 ```

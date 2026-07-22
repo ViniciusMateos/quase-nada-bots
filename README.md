@@ -10,7 +10,7 @@ paralela e notificações. (A parte de brechó virou um app próprio, o `quase-n
 |---|---|
 | `frontend/` | **App** React Native (Expo + TS) — o hub no iPhone. Builds EAS dev/preview. |
 | `backend/` | **API** FastAPI — orquestra os bots como subprocessos, log via WebSocket, CRUD de modos/chats. |
-| `workers/` | Os **bots** (`auto-like-instagram`, `dm-followers`) — cada um com repo próprio no GitHub. |
+| `workers/` | Os **bots** (`auto-follow-instagram`, `dm-followers`) — cada um com repo próprio no GitHub. |
 
 O **backend + workers** rodam juntos na Oracle (uma unidade de deploy). O **app** é
 buildado com EAS e fala com o backend pela API + WebSocket.

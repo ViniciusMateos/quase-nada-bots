@@ -3,6 +3,19 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [1.1.0] — 2026-07-25
+
+### Adicionado
+- feat: tela de modo **reformulada** — campos por categoria (Limites/Ritmo/Horário), cada limite/delay vira **toggle** que abre o campo (0 = sem limite, sem ambiguidade), **apagar modo**, modo novo zerado, criar sem presets e **animação uniforme** (Reanimated)
+- feat: cap de **interações de follow** por run (público + pedido a privado) separado do **follow real** (só público)
+
+### Corrigido
+- fix: LA de 2+ bots volta a mostrar "N bots rodando" — o build instalado não decodifica `LinhaBot` preenchido, então o server manda `linhas` vazio + os nomes na label
+- fix: **parar** um bot pelo app agora é **Ctrl+C** (SIGINT) — mostra o saldo e sai limpo, sem virar erro (escala pra SIGKILL só se travar)
+
+### Modificado
+- update: o "conectar Instagram" aparece como **"Conectando Instagram"** no app, não o id cru "auto-follow"
+
 ## [1.0.0] — 2026-07-22
 
 Primeiro lançamento — hub de automações de Instagram (auto-follow e dm-followers) rodando num server, controlado por um app iOS.

@@ -75,10 +75,11 @@ export function BotScreen() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ padding: 16, gap: 16 }}>
-      {modos.length > 0 && (
-        <Aparece>
-        <Card>
-          <Text style={styles.label}>Modo</Text>
+      <Aparece>
+      <Card>
+        <Text style={styles.label}>Modo</Text>
+        {modos.length > 0 ? (
+          <>
           <View style={styles.chips}>
             {modos.map((m) => (
               <TouchableOpacity key={m} onPress={() => setModo(m)} style={[styles.chip, modo === m && styles.chipOn]}>
@@ -96,9 +97,22 @@ export function BotScreen() {
               <Text style={styles.linkTxt}>Novo modo</Text>
             </TouchableOpacity>
           </View>
-        </Card>
-        </Aparece>
-      )}
+          </>
+        ) : (
+          <>
+          <Text style={{ color: colors.textoFraco, fontSize: 12, lineHeight: 16 }}>
+            Nenhum modo ainda — crie um (começa tudo zerado, você liga só o que quiser).
+          </Text>
+          <View style={styles.linksRow}>
+            <TouchableOpacity onPress={() => nav.navigate('EditModo', { botId, modoNome: '', criar: true })} style={styles.link}>
+              <Ionicons name="add-circle-outline" size={16} color={colors.marca} />
+              <Text style={styles.linkTxt}>Criar modo</Text>
+            </TouchableOpacity>
+          </View>
+          </>
+        )}
+      </Card>
+      </Aparece>
       {temChats && (
         <Aparece delay={80}>
         <Card>

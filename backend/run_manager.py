@@ -243,15 +243,15 @@ class RunManager:
             return {"titulo": r.titulo, "pct": self._pct(r), "medido": medido,
                     "label": label[:60], "quantos": 1, "bot": r.bot, "linhas": []}
 
-        # UMA linha por bot no card. Isto EXIGE o widget que decodifica LinhaBot — presente
-        # a partir do build 2026-07-21 (0f37f278). Builds anteriores tinham o struct divergente
-        # e o iOS IGNORAVA (200 mudo) qualquer push com linhas preenchido, congelando a LA; na
-        # época mandávamos linhas=[] + nomes na label como paliativo. Com o build novo, voltou.
-        linhas = [{"id": r.id, "bot": r.bot, "nome": r.titulo, "pct": self._pct(r)}
-                  for r in ativas]
-        media = round(sum(l["pct"] for l in linhas) / len(linhas))
+        # `linhas` VAZIO de propósito: mesmo o build 0f37f278 NÃO aplica push com linhas
+        # preenchido (o iOS aceita 200 e ignora — a LA congela em "começando"). Testado ao vivo
+        # 2026-07-23. Então o multi-bot mostra "N bots rodando · média%" + os NOMES na label
+        # (texto, imune ao struct). Barrinha por bot fica pra quando o widget nativo for
+        # decifrado/rebuildado — NÃO reativar linhas aqui sem confirmar que o push aplica.
+        media = round(sum(self._pct(r) for r in ativas) / len(ativas))
+        label = " · ".join(r.titulo for r in ativas)
         return {"titulo": f"{len(ativas)} bots rodando", "pct": media, "medido": True,
-                "label": "", "quantos": len(ativas), "bot": "", "linhas": linhas}
+                "label": label[:60], "quantos": len(ativas), "bot": "", "linhas": []}
 
     def _estado_la_fake(self, n):
         """Estado FALSO de N bots pra testar a renderização da Live Activity sem esperar bot
@@ -537,28 +537,33 @@ class RunManager:
                     r.ended_at = agora
 
     def _matar_arvore(self, proc):
-        """Mata o processo E TODA a árvore (xvfb-run → python → chromium → Xvfb). Um
-        terminate() no proc só derrubava o xvfb-run e deixava o resto órfão rodando."""
-        try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)     # o grupo inteiro
-        except Exception:
-            try:
-                proc.terminate()
-            except Exception:
-                pass
+        """Para o processo E TODA a árvore (xvfb-run → python → chromium → Xvfb).
 
-        async def _kill_duro():
-            # se não morreu de leve em 6s (chromium às vezes ignora SIGTERM), SIGKILL no grupo
-            await asyncio.sleep(6)
-            if proc.returncode is None:
+        Manda SIGINT no GRUPO primeiro — é EXATAMENTE o que o Ctrl+C faz num terminal (SIGINT
+        no grupo em foreground). Aí o bot cai no `except KeyboardInterrupt`, imprime o SALDO
+        bonitinho e sai LIMPO (sem stacktrace/erro). Só escala pra SIGTERM e depois SIGKILL se
+        ele teimar (chromium/Xvfb às vezes ignoram sinal). Antes mandava SIGTERM direto — por
+        isso o 'parar' do app virava erro em vez do fim gracioso do Ctrl+C."""
+        def _sinal(sig):
+            try:
+                os.killpg(os.getpgid(proc.pid), sig)      # o grupo inteiro
+            except Exception:
                 try:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    proc.kill() if sig == signal.SIGKILL else proc.send_signal(sig)
                 except Exception:
-                    try:
-                        proc.kill()
-                    except Exception:
-                        pass
-        asyncio.create_task(_kill_duro())
+                    pass
+
+        _sinal(signal.SIGINT)                             # Ctrl+C — saldo + saída limpa
+
+        async def _escalar():
+            # dá tempo do bot rodar o KeyboardInterrupt (imprimir saldo + fechar o browser).
+            await asyncio.sleep(10)
+            if proc.returncode is None:
+                _sinal(signal.SIGTERM)
+                await asyncio.sleep(6)
+                if proc.returncode is None:
+                    _sinal(signal.SIGKILL)                # chromium travado: mata na marra
+        asyncio.create_task(_escalar())
 
     def listar(self):
         self._reap_zumbis()          # detecta runs zumbis (proc morto) antes de responder

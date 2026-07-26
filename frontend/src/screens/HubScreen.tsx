@@ -88,9 +88,11 @@ export function HubScreen() {
                 <Text style={styles.secao}>Rodando agora</Text>
                 {ativos.map((r) => (
                   <TouchableOpacity key={r.id} style={styles.runItem}
-                    onPress={() => nav.navigate('Run', { runId: r.id, nome: r.bot })}>
+                    onPress={() => nav.navigate('Run', { runId: r.id, nome: r.titulo ?? r.bot })}>
                     <View style={styles.runLinha}>
-                      <Text style={styles.runTxt}>{r.bot}</Text>
+                      {/* titulo é universal: "Conectando Instagram" no connect, "Auto Follow"
+                          numa run normal — em vez do id cru "auto-follow" */}
+                      <Text style={styles.runTxt}>{r.titulo ?? r.bot}</Text>
                       <Pulsar>
                         <Pill texto={r.status} cor={statusCor[r.status] ?? colors.textoFraco} />
                       </Pulsar>

@@ -11,6 +11,7 @@ import signal
 import time
 from collections import deque
 
+import accounts
 import bots
 import history
 import liveactivity
@@ -34,11 +35,13 @@ def _proc_info(bot_id, params):
     senão o usuário toca em "Conectar" e não recebe retorno nenhum se deu certo."""
     nome = bots.BOTS.get(bot_id, {}).get("nome", bot_id)
     if (params or {}).get("import_cookies"):
+        # Conectar é UNIVERSAL: a sessão é central (todos os bots leem a mesma). Ele só roda
+        # "através" do 1º bot de IG como veículo, então as mensagens NÃO citam bot nenhum.
         return {
             "titulo": "Conectando Instagram",
-            "fim_ok": ("Instagram conectado", f"Sessão salva no {nome} — já pode rodar."),
-            "fim_erro": ("Deu ruim", f"Não consegui conectar o Instagram no {nome}."),
-            "fim_parado": ("Parado", f"A conexão do Instagram no {nome} foi parada."),
+            "fim_ok": ("Instagram conectado", "Sessão salva — já pode rodar os bots."),
+            "fim_erro": ("Deu ruim", "Não consegui conectar o Instagram."),
+            "fim_parado": ("Parado", "A conexão do Instagram foi parada."),
         }
     return {
         "titulo": nome,
@@ -88,6 +91,7 @@ class Run:
         self.returncode = None
         self.progress = None           # {done, total, label} — última barra reportada
         self.saldo = None              # {seguidos, pedidos, …} — do marcador [saldo]
+        self.conta = None              # @username da conta IG usada (lido do log "Conta: @x")
         self.bloqueio = False          # detectou bloqueio do IG no log?
         self.linhas = deque(maxlen=settings.MAX_LOG_LINES)
         # cabeçalho: as primeiras ~30 linhas do run (Modo/Proxy/Conta/início da varredura)
@@ -95,6 +99,8 @@ class Run:
         # você perde o contexto de abertura — que é justo o que o usuário quer ver sempre.
         self.cabecalho = []
         self._truncou = False          # o buffer rolante já cortou linhas do meio?
+        self._log_path = None          # arquivo .log próprio do backend (persiste p/ o histórico)
+        self._historico_gravado = False  # já foi pro runs_history.jsonl? (idempotência)
         self.ult_linha_t = time.time() # quando saiu a última linha (watchdog de travamento)
         self.subs = set()              # set[asyncio.Queue]
         self.proc = None
@@ -126,6 +132,14 @@ class Run:
         if len(self.linhas) == self.linhas.maxlen:      # o buffer rolante vai evictar o head
             self._truncou = True
         self.linhas.append(linha)
+        # grava TAMBÉM em arquivo próprio do backend: é o que deixa o log visível no histórico
+        # depois que o run sai da memória (ou o backend reinicia) — o buffer em RAM some, o arquivo não.
+        if self._log_path:
+            try:
+                with open(self._log_path, "a", encoding="utf-8") as f:
+                    f.write(linha + "\n")
+            except Exception:
+                pass
         for q in list(self.subs):
             try:
                 q.put_nowait(linha)
@@ -136,9 +150,15 @@ class Run:
 class RunManager:
     # onde o token da Live Activity é persistido (sobrevive a restart do backend)
     _LA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "la_token.json")
+    # logs por run gravados pelo backend (sobrevivem à saída da memória / restart) → o histórico lê daqui
+    _LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "run_logs")
 
     def __init__(self):
         self.runs = {}
+        try:
+            os.makedirs(self._LOG_DIR, exist_ok=True)
+        except Exception:
+            pass
         # ── Live Activity: UMA pro app inteiro (não uma por run). O token e o throttle
         # vivem aqui porque o conjunto é que é exibido — o app cria a activity, o server
         # soma as runs e empurra.
@@ -297,6 +317,9 @@ class RunManager:
             return
         estado = self._estado_la()
         if estado is None:
+            # tem token mas NENHUMA run ativa → LA órfã (a run parou/acabou antes do token
+            # chegar, ou foi parada). Encerra AGORA, senão a barra fica presa pra sempre.
+            await self._encerrar_la_orfa()
             return
         agora = time.time()
         if not forcar:
@@ -314,6 +337,23 @@ class RunManager:
                   + ("" if ok else f" DET={det}"), flush=True)
         except Exception as e:
             print(f"[la] update explodiu: {e}", flush=True)
+
+    async def _encerrar_la_orfa(self):
+        """Encerra uma Live Activity sem nenhuma run ativa (órfã) e limpa o token — a barra
+        não fica presa quando a run para antes de o token chegar (ou o app registra tarde)."""
+        if not self.la_token:
+            return
+        estado = {"titulo": "", "pct": 0, "medido": False, "label": "",
+                  "quantos": 0, "bot": "", "linhas": []}
+        try:
+            ok, det = await asyncio.to_thread(
+                liveactivity.encerrar, self.la_token, estado, self.la_bundle)
+            print(f"[la] encerrei LA órfã (sem run ativa) ok={ok}"
+                  + ("" if ok else f" DET={det}"), flush=True)
+        except Exception as e:
+            print(f"[la] encerrar órfã explodiu: {e}", flush=True)
+        self._limpar_la()
+        self._ult_la_pct = -100
 
     async def _encerrar_la_se_acabou(self, run):
         """Se essa foi a ÚLTIMA run ativa, encerra a Live Activity. Se ainda tem bot
@@ -344,9 +384,19 @@ class RunManager:
         if not bots.existe(bot_id):
             raise ValueError(f"bot desconhecido: {bot_id}")
         run = Run(bot_id, params)
+        run._log_path = os.path.join(self._LOG_DIR, f"{run.id}.log")
         self.runs[run.id] = run
         cmd = [settings.PYTHON_BIN] + bots.montar_cmd(bot_id, params)
         env = {**os.environ, "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1"}
+        # profile POR CONTA (device isolado pro IG): o connect usa a conta que está sendo
+        # conectada (conta_id nos params); a run normal usa a conta ATIVA. Assim conectar/rodar
+        # uma conta não derruba a sessão das outras (o problema do profile compartilhado).
+        try:
+            uid = params.get("conta_id") or accounts.ativa_id()
+            if uid:
+                env["IG_USER_DATA_DIR"] = accounts.profile_dir(uid)
+        except Exception:
+            pass
         # HEADED sob display virtual (Xvfb) em vez de headless. MEDIDO: o Chromium headless
         # toma rate limit do IG (1357005) já na ~4ª página da thread e a run morre; com janela
         # (mesmo virtual) o IG serve o backlog inteiro — 240 msgs numa boa, igual ao PC local.
@@ -404,6 +454,10 @@ class RunManager:
                     await self._maybe_status_la(run, linha)
                 if "⛔" in linha or "BLOQUEIO" in linha:
                     run.bloqueio = True
+                if run.conta is None and "Conta:" in linha:   # "Conta: @quasenadasegue3 (...)"
+                    m = re.search(r"Conta:\s*@?([A-Za-z0-9._]+)", linha)
+                    if m:
+                        run.conta = m.group(1)
                 await run.emitir(linha)
         except Exception as e:
             await run.emitir(f"[backend] erro lendo saída: {e}")
@@ -423,15 +477,20 @@ class RunManager:
                 pass
 
     def _gravar_historico(self, run):
-        """Persiste o saldo da run no histórico (pula import de cookies)."""
+        """Persiste o saldo da run no histórico (pula import de cookies). Idempotente: pode ser
+        chamado tanto pelo fim normal (_pump) quanto pelo reaper de zumbis sem duplicar registro."""
         if run.params.get("import_cookies"):
             return
+        if run._historico_gravado:
+            return
+        run._historico_gravado = True
         history.registrar({
             "id": run.id, "bot": run.bot,
             "dry_run": bool(run.params.get("dry_run")),
             "started_at": run.started_at, "ended_at": run.ended_at,
             "duracao_s": int((run.ended_at or run.started_at) - run.started_at),
             "status": run.status, "bloqueio": run.bloqueio,
+            "conta": run.conta,
             "saldo": run.saldo or {},
         })
 
@@ -444,7 +503,7 @@ class RunManager:
             await asyncio.to_thread(
                 notify.enviar, f"{nome} começou",
                 "Tô nessa… vou te mostrando o progresso.",
-                {"type": "start", "runId": run.id, "bot": run.bot})
+                {"type": "start", "runId": run.id, "bot": run.bot, "titulo": run.titulo})
         except Exception:
             pass
 
@@ -493,7 +552,8 @@ class RunManager:
             if not run.params.get("import_cookies") and run.progress and run.progress.get("total"):
                 corpo = f"{nome} finalizou — {run.progress['done']}/{run.progress['total']}."
         try:
-            await asyncio.to_thread(notify.enviar, titulo, corpo, {"runId": run.id, "bot": run.bot})
+            await asyncio.to_thread(notify.enviar, titulo, corpo,
+                                    {"runId": run.id, "bot": run.bot, "titulo": info["titulo"]})
         except Exception:
             pass
 
@@ -535,6 +595,9 @@ class RunManager:
                 r.status = "erro"
                 if r.ended_at is None:
                     r.ended_at = agora
+                # registra no histórico — senão o run zumbi some de "rodando" e não deixa rastro
+                # (era o "só some do nada"): agora vira um registro de erro visível no histórico.
+                self._gravar_historico(r)
 
     def _matar_arvore(self, proc):
         """Para o processo E TODA a árvore (xvfb-run → python → chromium → Xvfb).
@@ -571,3 +634,71 @@ class RunManager:
 
     def get(self, run_id):
         return self.runs.get(run_id)
+
+    # ───────────────── logs persistidos (histórico) ─────────────────
+    def achar_history(self, run_id):
+        """Registro do run no histórico (runs_history.jsonl) por id, ou None."""
+        for rec in history.listar(limite=1000000):
+            if rec.get("id") == run_id:
+                return rec
+        return None
+
+    def info_de_history(self, rec):
+        """Monta um 'info' no mesmo formato do Run.info() a partir do registro do histórico —
+        pra o app abrir um run que já saiu da memória sem quebrar (sem live, só o log salvo)."""
+        bot = rec.get("bot")
+        return {
+            "id": rec.get("id"), "bot": bot,
+            "titulo": bots.BOTS.get(bot, {}).get("nome", bot),
+            "status": rec.get("status") or "finalizado",
+            "started_at": rec.get("started_at"), "ended_at": rec.get("ended_at"),
+            "returncode": None, "params": {}, "linhas": 0,
+            "progress": None, "status_log": None,
+            "conta": rec.get("conta"),
+            "saldo": rec.get("saldo") or {}, "historico": True,
+        }
+
+    def _log_worker_por_tempo(self, bot_id, started_at):
+        """Fallback pros runs ANTIGOS (sem .log do backend): acha o run_<timestamp>.log do worker
+        cujo horário é o mais próximo do started_at do run (o worker cria o arquivo ~segundos
+        depois que o backend inicia a run). Casa dentro de 10min pra não pegar arquivo errado."""
+        if not bot_id or not started_at:
+            return None
+        try:
+            d = os.path.join(str(bots.bot_dir(bot_id)), "output", "logs")
+        except Exception:
+            return None
+        if not os.path.isdir(d):
+            return None
+        melhor, melhor_dt = None, None
+        for nome in os.listdir(d):
+            m = re.match(r"run_(\d{8}_\d{6})\.log$", nome)
+            if not m:
+                continue
+            try:
+                t = time.mktime(time.strptime(m.group(1), "%Y%m%d_%H%M%S"))
+            except Exception:
+                continue
+            dt = abs(t - started_at)
+            if melhor_dt is None or dt < melhor_dt:
+                melhor, melhor_dt = os.path.join(d, nome), dt
+        if melhor and melhor_dt is not None and melhor_dt <= 600:
+            try:
+                return open(melhor, encoding="utf-8").read().splitlines()
+            except Exception:
+                return None
+        return None
+
+    def ler_log_arquivo(self, run_id):
+        """Log de um run que NÃO está mais na memória: 1º o .log próprio do backend; se não
+        existir (run antigo), casa o log do worker por timestamp. Devolve list[str] ou None."""
+        p = os.path.join(self._LOG_DIR, f"{run_id}.log")
+        if os.path.exists(p):
+            try:
+                return open(p, encoding="utf-8").read().splitlines()
+            except Exception:
+                pass
+        rec = self.achar_history(run_id)
+        if rec:
+            return self._log_worker_por_tempo(rec.get("bot"), rec.get("started_at"))
+        return None

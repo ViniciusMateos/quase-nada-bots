@@ -11,6 +11,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 
+import accounts
 import bots
 import history
 import liveactivity
@@ -125,13 +126,40 @@ async def conectar_instagram(payload: dict):
     alvo = [b for b in (payload.get("bots") or bots.bots_ig()) if bots.existe(b)]
     if not alvo:
         raise HTTPException(400, "nenhum bot de Instagram para conectar")
-    # A sessão é UNIVERSAL (arquivo central, lido por todos os bots — mesma conta). Então
-    # valida UMA vez só (um browser), gravando direto na sessão central. Não abre um browser
-    # por bot nem "copia pros outros": todos já leem o mesmo session_cookies.json central.
+    # Registra/atualiza a CONTA (salva a sessão dela e a deixa ativa = escreve a central).
+    # `label` é o apelido que o usuário dá (ex: "segue5") pra reconhecer a conta na lista.
+    try:
+        conta = accounts.salvar(cookies, payload.get("label"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    # A sessão ativa é UNIVERSAL (arquivo central, lido por todos os bots). Valida UMA vez só
+    # (um browser) — o worker confirma o login e regrava a central. Não abre browser por bot.
     principal = alvo[0]
     arquivo = bots.salvar_cookies_ig(principal, cookies)
-    run = await mgr.start(principal, {"import_cookies": arquivo})
-    return {"runs": [{"bot": principal, "id": run.id}]}
+    # conta_id → o run_manager aponta o profile DESTA conta (device isolado, não mata as outras)
+    run = await mgr.start(principal, {"import_cookies": arquivo, "conta_id": conta["id"]})
+    return {"runs": [{"bot": principal, "id": run.id}], "conta": conta}
+
+
+# ───────────────────────── contas salvas ─────────────────────────
+@app.get("/accounts", dependencies=[Depends(auth)])
+async def listar_contas():
+    return accounts.listar()
+
+
+@app.post("/accounts/{conta_id}/ativar", dependencies=[Depends(auth)])
+async def ativar_conta(conta_id: str):
+    try:
+        return accounts.ativar(conta_id)
+    except KeyError:
+        raise HTTPException(404, "conta não encontrada")
+    except FileNotFoundError as e:
+        raise HTTPException(409, str(e))
+
+
+@app.delete("/accounts/{conta_id}", dependencies=[Depends(auth)])
+async def remover_conta(conta_id: str):
+    return accounts.remover(conta_id)
 
 
 # ─────────────────────── push (devices) ─────────────────────────
@@ -173,14 +201,21 @@ async def runs_history(bot: str = None, status: str = None,
 @app.get("/runs/{run_id}", dependencies=[Depends(auth)])
 async def run_detail(run_id: str):
     r = mgr.get(run_id)
-    if not r:
+    if r:
+        # cabeçalho (começo) + cauda recente, sem repetir a sobreposição enquanto o log é curto
+        tail = list(r.linhas)
+        corte = 0
+        while corte < len(tail) and corte < len(r.cabecalho) and tail[corte] is r.cabecalho[corte]:
+            corte += 1
+        return {**r.info(), "log": r.cabecalho + tail[corte:][-300:]}
+    # saiu da memória → tenta o log salvo em disco (histórico persistente)
+    linhas = mgr.ler_log_arquivo(run_id)
+    rec = mgr.achar_history(run_id)
+    if linhas is None and not rec:
         raise HTTPException(404, "run não encontrado")
-    # cabeçalho (começo) + cauda recente, sem repetir a sobreposição enquanto o log é curto
-    tail = list(r.linhas)
-    corte = 0
-    while corte < len(tail) and corte < len(r.cabecalho) and tail[corte] is r.cabecalho[corte]:
-        corte += 1
-    return {**r.info(), "log": r.cabecalho + tail[corte:][-300:]}
+    base = mgr.info_de_history(rec) if rec else {"id": run_id, "bot": None, "status": "finalizado",
+                                                 "historico": True}
+    return {**base, "log": (linhas or [])[-600:]}
 
 
 @app.post("/liveactivity", dependencies=[Depends(auth)])
@@ -225,7 +260,15 @@ async def ws_logs(ws: WebSocket, run_id: str, token: str = ""):
         return
     r = mgr.get(run_id)
     if not r:
-        await ws.close(code=4404)
+        # run fora da memória → serve o log salvo em disco e encerra (sem stream vivo)
+        linhas = mgr.ler_log_arquivo(run_id)
+        if linhas is None:
+            await ws.close(code=4404)
+            return
+        await ws.accept()
+        for l in linhas[-600:]:
+            await ws.send_text(l)
+        await ws.close()
         return
     await ws.accept()
     q = asyncio.Queue()

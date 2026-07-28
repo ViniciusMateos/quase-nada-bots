@@ -17,7 +17,7 @@ export function BotScreen() {
   const { botId, nome } = useRoute<Rt>().params;
   const [modos, setModos] = useState<string[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
-  const [modo, setModo] = useState('padrao');
+  const [modo, setModo] = useState<string | null>(null);   // nada pré-selecionado: a pessoa escolhe
   const [chat, setChat] = useState<string | null>(null);
   const [iniciando, setIniciando] = useState(false);
   const [runAtiva, setRunAtiva] = useState<RunInfo | null>(null);
@@ -31,6 +31,7 @@ export function BotScreen() {
       const a = rs.find((r) => r.bot === botId && ['rodando', 'iniciando'].includes(r.status)
         && !(r.params as { import_cookies?: unknown })?.import_cookies) ?? null;
       setRunAtiva(a);
+      if (!a) setIniciando(false);   // sem run ativa → destrava o botão (fim do spinner infinito)
     }).catch(() => {});
   }, [botId]);
 
@@ -46,17 +47,26 @@ export function BotScreen() {
   }, [botId, temChats, checarRun]);
 
   useFocusEffect(useCallback(() => {
+    setIniciando(false);   // voltou pra esta tela → não está mais "iniciando" (mata o spinner preso)
     carregar();
     const id = setInterval(checarRun, 2500);   // atualiza o "Já está rodando" ao vivo
     return () => clearInterval(id);
   }, [carregar, checarRun]));
 
-  async function rodar(dry: boolean) {
+  function rodar(dry: boolean) {
     if (runAtiva) return;
+    if (!modo) {   // precisa de um modo selecionado — vale pro Rodar E pro dry-run
+      Alert.alert('Escolha um modo',
+        modos.length ? 'Toque num modo antes de rodar.' : 'Crie um modo pra poder rodar.');
+      return;
+    }
+    iniciarRun(dry);
+  }
+
+  async function iniciarRun(dry: boolean) {
     setIniciando(true);
     try {
-      const params: Record<string, unknown> = { dry_run: dry };
-      if (modos.length) params.modo = modo;
+      const params: Record<string, unknown> = { dry_run: dry, modo };
       if (temChats && chat) params.chat = chat;
       const run = await api.startRun(botId, params);
       setRunAtiva(run);                       // trava o botão na hora
@@ -88,11 +98,13 @@ export function BotScreen() {
             ))}
           </View>
           <View style={styles.linksRow}>
-            <TouchableOpacity onPress={() => nav.navigate('EditModo', { botId, modoNome: modo })} style={styles.link}>
-              <Ionicons name="create-outline" size={15} color={colors.marca} />
-              <Text style={styles.linkTxt}>Editar "{modo}"</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => nav.navigate('EditModo', { botId, modoNome: modo, criar: true })} style={styles.link}>
+            {modo ? (
+              <TouchableOpacity onPress={() => nav.navigate('EditModo', { botId, modoNome: modo })} style={styles.link}>
+                <Ionicons name="create-outline" size={15} color={colors.marca} />
+                <Text style={styles.linkTxt}>Editar "{modo}"</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity onPress={() => nav.navigate('EditModo', { botId, modoNome: '', criar: true })} style={styles.link}>
               <Ionicons name="add-circle-outline" size={16} color={colors.marca} />
               <Text style={styles.linkTxt}>Novo modo</Text>
             </TouchableOpacity>

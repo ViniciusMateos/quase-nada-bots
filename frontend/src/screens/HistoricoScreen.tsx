@@ -1,11 +1,16 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View,
+} from 'react-native';
+import Animated, {
+  FadeIn, FadeInDown, FadeOut, FadeOutUp, LinearTransition, SlideInDown, SlideOutDown,
+} from 'react-native-reanimated';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { api, Bot, RunHistorico } from '@/lib/api';
 import { colors } from '@/theme';
-import { Aparece, Card } from '@/ui/components';
+import { Aparece, Botao, Card } from '@/ui/components';
 import { TelaCarregando } from '@/ui/LoadingDog';
 import { useDogRefresh } from '@/ui/DogRefresh';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
@@ -15,6 +20,12 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 type FiltroBot = 'todos' | string;
 type FiltroRes = 'todos' | 'ok' | 'bloqueio' | 'erro' | 'parado';
 type Periodo = 'tudo' | '7d' | '30d';
+
+const RES_LABEL: Record<string, string> = { ok: 'ok', bloqueio: 'bloqueio', erro: 'erro', parado: 'parado' };
+const PER_LABEL: Record<string, string> = { '7d': '7 dias', '30d': '30 dias' };
+
+// backdrop que faz FADE por trás do sheet (independente do slide do sheet)
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 function fmtData(epoch: number | null) {
@@ -56,8 +67,13 @@ export function HistoricoScreen() {
   const [regs, setRegs] = useState<RunHistorico[] | null>(null);
   const [nomes, setNomes] = useState<Record<string, string>>({});
   const [fBot, setFBot] = useState<FiltroBot>('todos');
+  const [fConta, setFConta] = useState<string>('todos');
   const [fRes, setFRes] = useState<FiltroRes>('todos');
   const [periodo, setPeriodo] = useState<Periodo>('tudo');
+  const [sheetAberto, setSheetAberto] = useState(false);   // controla as animações (fade/slide)
+  const [modalMontado, setModalMontado] = useState(false); // mantém o Modal vivo enquanto o exit roda
+  const abrirSheet = () => { setModalMontado(true); setSheetAberto(true); };
+  const fecharSheet = () => { setSheetAberto(false); setTimeout(() => setModalMontado(false), 240); };
 
   const carregar = useCallback(async () => {
     await Promise.all([
@@ -79,6 +95,7 @@ export function HistoricoScreen() {
     const corte = periodo === 'tudo' ? 0 : Date.now() / 1000 - (periodo === '7d' ? 7 : 30) * 86400;
     return regs.filter((r) => {
       if (fBot !== 'todos' && r.bot !== fBot) return false;
+      if (fConta !== 'todos' && r.conta !== fConta) return false;
       if (periodo !== 'tudo' && (r.ended_at ?? 0) < corte) return false;
       if (fRes === 'ok' && !(r.status === 'finalizado' && !r.bloqueio)) return false;
       if (fRes === 'bloqueio' && !r.bloqueio) return false;
@@ -86,7 +103,7 @@ export function HistoricoScreen() {
       if (fRes === 'parado' && r.status !== 'parado') return false;
       return true;
     });
-  }, [regs, fBot, fRes, periodo]);
+  }, [regs, fBot, fConta, fRes, periodo]);
 
   const resumo = useMemo(() => {
     let acoes = 0;
@@ -101,6 +118,19 @@ export function HistoricoScreen() {
 
   const botsDisponiveis = useMemo(
     () => Array.from(new Set((regs ?? []).map((r) => r.bot))), [regs]);
+  const contasDisponiveis = useMemo(
+    () => Array.from(new Set((regs ?? []).map((r) => r.conta).filter(Boolean))) as string[], [regs]);
+
+  // filtros ATIVOS (fora do padrão) → viram chips removíveis na barra; o resto mora no sheet
+  const chipsAtivos = useMemo(() => {
+    const cs: { key: string; label: string; clear: () => void }[] = [];
+    if (fBot !== 'todos') cs.push({ key: 'bot', label: nomes[fBot] ?? fBot, clear: () => setFBot('todos') });
+    if (fConta !== 'todos') cs.push({ key: 'conta', label: `@${fConta}`, clear: () => setFConta('todos') });
+    if (fRes !== 'todos') cs.push({ key: 'res', label: RES_LABEL[fRes] ?? fRes, clear: () => setFRes('todos') });
+    if (periodo !== 'tudo') cs.push({ key: 'per', label: PER_LABEL[periodo] ?? periodo, clear: () => setPeriodo('tudo') });
+    return cs;
+  }, [fBot, fConta, fRes, periodo, nomes]);
+  const limparTudo = () => { setFBot('todos'); setFConta('todos'); setFRes('todos'); setPeriodo('tudo'); };
 
   if (!regs) return <TelaCarregando />;
 
@@ -119,33 +149,59 @@ export function HistoricoScreen() {
           <Aparece>
             <Card style={styles.resumo}>
               <View>
-                <Text style={styles.resumoNum}>{resumo.runs}</Text>
+                <Animated.Text key={resumo.runs} entering={FadeIn.duration(260)} style={styles.resumoNum}>
+                  {resumo.runs}
+                </Animated.Text>
                 <Text style={styles.resumoLabel}>runs</Text>
               </View>
               <View style={styles.divisor} />
               <View>
-                <Text style={styles.resumoNum}>{resumo.acoes}</Text>
+                <Animated.Text key={resumo.acoes} entering={FadeIn.duration(260)} style={styles.resumoNum}>
+                  {resumo.acoes}
+                </Animated.Text>
                 <Text style={styles.resumoLabel}>ações (seguir + DM)</Text>
               </View>
             </Card>
           </Aparece>
 
-          {botsDisponiveis.length > 1 && (
-            <ChipRow valor={fBot} onSel={setFBot}
-              ops={[['todos', 'Todos'], ...botsDisponiveis.map((b) => [b, nomes[b] ?? b] as [string, string])]} />
-          )}
-          <ChipRow valor={fRes} onSel={(v) => setFRes(v as FiltroRes)}
-            ops={[['todos', 'Todos'], ['ok', 'ok'], ['bloqueio', 'bloqueio'], ['erro', 'erro'], ['parado', 'parado']]} />
-          <ChipRow valor={periodo} onSel={(v) => setPeriodo(v as Periodo)}
-            ops={[['tudo', 'Tudo'], ['7d', '7 dias'], ['30d', '30 dias']]} />
+          {/* barra compacta: botão Filtros (com contador) + os ativos como chips removíveis */}
+          <View style={styles.filtroBar}>
+            <TouchableOpacity activeOpacity={0.7} style={styles.filtroBtn} onPress={abrirSheet}>
+              <Ionicons name="options-outline" size={16} color={colors.texto} />
+              <Text style={styles.filtroBtnTxt}>Filtros</Text>
+              {chipsAtivos.length > 0 && (
+                <View style={styles.filtroBadge}>
+                  <Text style={styles.filtroBadgeTxt}>{chipsAtivos.length}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            {chipsAtivos.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.ativosRow}>
+                {chipsAtivos.map((c) => (
+                  <Animated.View key={c.key} entering={FadeInDown.duration(200)}
+                    exiting={FadeOutUp.duration(160)} layout={LinearTransition.duration(220)}>
+                    <TouchableOpacity activeOpacity={0.7} style={styles.chipAtivo} onPress={c.clear}>
+                      <Text style={styles.chipAtivoTxt}>{c.label}</Text>
+                      <Ionicons name="close" size={12} color={colors.marca} />
+                    </TouchableOpacity>
+                  </Animated.View>
+                ))}
+              </ScrollView>
+            ) : (
+              <Text style={styles.filtroVazio}>mostrando tudo</Text>
+            )}
+          </View>
         </View>
       }
       ListEmptyComponent={<Text style={styles.vazio}>Nenhuma run nesse filtro.</Text>}
-      renderItem={({ item, index }) => {
+      renderItem={({ item }) => {
         const res = resultado(item);
         const dur = fmtDur(item.duracao_s);
         return (
-          <Aparece delay={Math.min(index, 8) * 30}>
+          // transição quando o filtro muda: entra (FadeInDown), sai (FadeOutUp) e reordena (layout)
+          <Animated.View entering={FadeInDown.duration(240)} exiting={FadeOutUp.duration(160)}
+            layout={LinearTransition.duration(240)}>
             {/* tocar no card abre o log daquele run (funciona pras runs que o server ainda
                 tem em memória; as importadas antigas mostram só o saldo). */}
             <TouchableOpacity activeOpacity={0.7} disabled={item.backfill}
@@ -162,6 +218,13 @@ export function HistoricoScreen() {
               </View>
               <Text style={styles.saldo}>{saldoTxt(item)}</Text>
               <View style={styles.rodape}>
+                {item.conta ? (
+                  <>
+                    <Ionicons name="person-circle-outline" size={13} color={colors.marca} />
+                    <Text style={styles.metaConta}>@{item.conta}</Text>
+                    <Text style={styles.meta}>·</Text>
+                  </>
+                ) : null}
                 <Text style={styles.meta}>{fmtData(item.ended_at)}</Text>
                 {dur ? <Text style={styles.meta}>· {dur}</Text> : null}
                 {item.backfill ? <Text style={styles.metaFraco}>· importada</Text> :
@@ -169,10 +232,59 @@ export function HistoricoScreen() {
               </View>
             </Card>
             </TouchableOpacity>
-          </Aparece>
+          </Animated.View>
         );
       }}
     />
+
+    {/* bottom sheet dos filtros — backdrop só FADE (atrás), sheet só SLIDE (sobe). animationType
+        "none" pra o Modal não deslizar tudo junto; cada camada anima sozinha via reanimated. */}
+    <Modal visible={modalMontado} transparent animationType="none" onRequestClose={fecharSheet}>
+      {sheetAberto && (
+      <View style={styles.modalRoot}>
+        <AnimatedPressable entering={FadeIn.duration(220)} exiting={FadeOut.duration(200)}
+          style={styles.backdrop} onPress={fecharSheet} />
+        <Animated.View entering={SlideInDown.duration(280)} exiting={SlideOutDown.duration(240)}
+          style={styles.sheet}>
+        <View style={styles.handle} />
+        <View style={styles.sheetTopo}>
+          <Text style={styles.sheetTitulo}>Filtros</Text>
+          {chipsAtivos.length > 0 && (
+            <TouchableOpacity onPress={limparTudo} hitSlop={8}>
+              <Text style={styles.limparTxt}>Limpar tudo</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <ScrollView contentContainerStyle={{ gap: 18, paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
+          {botsDisponiveis.length > 1 && (
+            <FiltroGrupo titulo="Bot" valor={fBot} onSel={setFBot}
+              ops={[['todos', 'Todos'], ...botsDisponiveis.map((b) => [b, nomes[b] ?? b] as [string, string])]} />
+          )}
+          {contasDisponiveis.length > 1 && (
+            <FiltroGrupo titulo="Conta" valor={fConta} onSel={setFConta}
+              ops={[['todos', 'Todas'], ...contasDisponiveis.map((c) => [c, `@${c}`] as [string, string])]} />
+          )}
+          <FiltroGrupo titulo="Resultado" valor={fRes} onSel={(v) => setFRes(v as FiltroRes)}
+            ops={[['todos', 'Todos'], ['ok', 'ok'], ['bloqueio', 'bloqueio'], ['erro', 'erro'], ['parado', 'parado']]} />
+          <FiltroGrupo titulo="Período" valor={periodo} onSel={(v) => setPeriodo(v as Periodo)}
+            ops={[['tudo', 'Tudo'], ['7d', '7 dias'], ['30d', '30 dias']]} />
+        </ScrollView>
+        <Botao title={`Ver ${resumo.runs} ${resumo.runs === 1 ? 'run' : 'runs'}`}
+          onPress={fecharSheet} />
+        </Animated.View>
+      </View>
+      )}
+    </Modal>
+    </View>
+  );
+}
+
+function FiltroGrupo({ titulo, valor, onSel, ops }:
+  { titulo: string; valor: string; onSel: (v: string) => void; ops: [string, string][] }) {
+  return (
+    <View style={{ gap: 8 }}>
+      <Text style={styles.grupoLabel}>{titulo}</Text>
+      <ChipRow valor={valor} onSel={onSel} ops={ops} />
     </View>
   );
 }
@@ -181,11 +293,14 @@ function ChipRow({ valor, onSel, ops }:
   { valor: string; onSel: (v: string) => void; ops: [string, string][] }) {
   return (
     <View style={styles.chips}>
-      {ops.map(([v, label]) => (
-        <Text key={v} onPress={() => onSel(v)}
-          style={[styles.chip, valor === v && styles.chipOn]}>
-          {label}
-        </Text>
+      {ops.map(([v, label], i) => (
+        // fade de entrada (o "foldzin" da tela de modo) + press normal — sem pulo
+        <Animated.View key={v} entering={FadeInDown.delay(i * 25).duration(220)}
+          layout={LinearTransition.duration(200)}>
+          <TouchableOpacity activeOpacity={0.7} onPress={() => onSel(v)}>
+            <Text style={[styles.chip, valor === v && styles.chipOn]}>{label}</Text>
+          </TouchableOpacity>
+        </Animated.View>
       ))}
     </View>
   );
@@ -197,12 +312,50 @@ const styles = StyleSheet.create({
   resumoNum: { color: colors.texto, fontSize: 26, fontWeight: '800' },
   resumoLabel: { color: colors.textoFraco, fontSize: 12 },
   divisor: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border },
+
+  // barra compacta de filtro
+  filtroBar: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  filtroBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderWidth: 1, borderColor: colors.border, borderRadius: 999,
+    paddingHorizontal: 14, paddingVertical: 9,
+  },
+  filtroBtnTxt: { color: colors.texto, fontSize: 14, fontWeight: '700' },
+  filtroBadge: {
+    minWidth: 18, height: 18, borderRadius: 999, backgroundColor: colors.marca,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5, marginLeft: 2,
+  },
+  filtroBadgeTxt: { color: '#0F0F0F', fontSize: 11, fontWeight: '800' },
+  filtroVazio: { color: colors.textoFraco, fontSize: 13 },
+  ativosRow: { gap: 6, alignItems: 'center', paddingRight: 4 },
+  chipAtivo: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderWidth: 1, borderColor: colors.marca, borderRadius: 999,
+    paddingLeft: 12, paddingRight: 9, paddingVertical: 6,
+  },
+  chipAtivoTxt: { color: colors.marca, fontSize: 13, fontWeight: '700' },
+
+  // bottom sheet
+  modalRoot: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)' },
+  sheet: {
+    backgroundColor: '#171717', borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    borderTopWidth: 1, borderColor: colors.border,
+    paddingHorizontal: 18, paddingTop: 10, paddingBottom: 34, gap: 16, maxHeight: '80%',
+  },
+  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 999, backgroundColor: colors.border },
+  sheetTopo: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sheetTitulo: { color: colors.texto, fontSize: 20, fontWeight: '800' },
+  limparTxt: { color: colors.marca, fontSize: 14, fontWeight: '700' },
+  grupoLabel: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     color: colors.texto, fontSize: 13, overflow: 'hidden',
-    borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6,
+    borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7,
   },
   chipOn: { backgroundColor: colors.marca, borderColor: colors.marca, color: '#0F0F0F', fontWeight: '700' },
+
   topoLinha: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
   badge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3 },
   badgeTxt: { fontSize: 12, fontWeight: '700' },
@@ -210,6 +363,7 @@ const styles = StyleSheet.create({
   saldo: { color: colors.textoFraco, fontSize: 13 },
   rodape: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   meta: { color: colors.textoFraco, fontSize: 12 },
+  metaConta: { color: colors.marca, fontSize: 12, fontWeight: '700' },
   metaFraco: { color: colors.border, fontSize: 12 },
   vazio: { color: colors.textoFraco, textAlign: 'center', marginTop: 24 },
 });

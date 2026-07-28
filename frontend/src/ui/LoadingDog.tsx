@@ -25,7 +25,7 @@ export function LoadingDog({
   }, [rotation]);
 
   const rotate = rotation.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  const ring = Math.round(size * 0.82);
+  const ring = Math.round(size * 0.76);   // anel mais colado no dog (menos folga)
   const imageSize = Math.round(size * 0.72);   // dog um pouco menor que o anel (cabia estourado)
   const stroke = Math.max(1, size * 0.032);
 

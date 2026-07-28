@@ -20,7 +20,7 @@ const IMG = { w: 1242, h: 2688 };
 const INK = { x: 0.5113, y: 0.4859 };   // centro da tinta do cachorro, fração da imagem
 const DOG_S = 0.5032;
 
-const ANEL_F = 0.9;    // meio-termo: 0.82 o dog estourava pra fora, 1.02 o anel ficou longe demais
+const ANEL_F = 0.84;   // colado no dog (0.82 estourava, 0.86/0.9 davam folga, 1.02 longe demais)
 const STROKE_F = 0.032;
 const ANEL_DX = -0.0376;
 const ANEL_DY = -0.0644;

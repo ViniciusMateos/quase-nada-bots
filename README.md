@@ -46,7 +46,9 @@ Detalhes: `frontend/README.md` (app) e `backend/README.md` (API).
 
 ## Status
 
-**v1.0.0 — lançado.** Bots (`auto-follow` + `dm-followers`), backend FastAPI (runs,
-execução paralela, log ao vivo via WebSocket), app iOS (hub, histórico, log ao vivo,
-sessão universal do Instagram), **Live Activity** no lock screen / Dynamic Island,
-push de progresso, deploy na Oracle e proxy residencial auto-curável.
+**Lançado.** Bots (`auto-follow` + `dm-followers`), backend FastAPI (runs, execução
+paralela, log ao vivo via WebSocket, histórico persistente com log em disco), app iOS
+(hub, **histórico com filtros** em bottom sheet, log ao vivo, **gerenciador de contas
+do Instagram** — várias contas salvas com login autofill, uma ativa por vez), **Live
+Activity** no lock screen / Dynamic Island, push de progresso, deploy na Oracle e
+proxy residencial auto-curável.

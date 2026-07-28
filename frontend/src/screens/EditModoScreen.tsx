@@ -112,14 +112,18 @@ export function EditModoScreen() {
     api.getModos(botId)
       .then((m) => {
         setTodos(m);
-        const campos = criar
+        const existente = m[modoNome] as Record<string, Valor> | undefined;
+        // modo que ainda não foi salvo (o "padrão" virtual) usa o template completo — senão
+        // a tela vinha VAZIA (Object.keys de um modo inexistente = [], sem campos pra configurar).
+        const usarTemplate = criar || !existente;
+        const campos = usarTemplate
           ? (CAMPOS_NOVO[botId] ?? Object.keys(Object.values(m)[0] ?? {}))
-          : Object.keys(m[modoNome] ?? {});
+          : Object.keys(existente);
         const base: Record<string, Valor> = {};
         const on = new Set<string>();
         campos.filter((k) => !OCULTOS.has(k)).forEach((k) => {
-          const meta = metaDe(k, (m[modoNome] as Record<string, Valor>)?.[k]);
-          const v = criar ? zerado(meta.tipo) : ((m[modoNome] as Record<string, Valor>)?.[k] ?? zerado(meta.tipo));
+          const meta = metaDe(k, existente?.[k]);
+          const v = usarTemplate ? zerado(meta.tipo) : (existente?.[k] ?? zerado(meta.tipo));
           base[k] = v;
           if (temValor(meta.tipo, v)) on.add(k);   // já vem ligado se tinha valor
         });
@@ -151,7 +155,11 @@ export function EditModoScreen() {
 
   async function gravar(nomeFinal: string) {
     try {
-      await api.putModos(botId, { ...todos, [nomeFinal]: montarFinal() });
+      const proximos = { ...todos };
+      // renomeou (editando e o nome mudou) → remove a chave antiga pra não duplicar
+      if (!criar && nomeFinal !== modoNome) delete proximos[modoNome];
+      proximos[nomeFinal] = montarFinal();
+      await api.putModos(botId, proximos);
       Alert.alert('Salvo!', `Modo "${nomeFinal}" salvo.`);
       nav.goBack();
     } catch {
@@ -162,7 +170,8 @@ export function EditModoScreen() {
   function salvar() {
     const n = nome.trim();
     if (!n) { Alert.alert('Falta o nome', 'Dê um nome pro modo (ex: turbo, seguro).'); return; }
-    if (criar && todos[n]) { Alert.alert('Já existe', `Já tem um modo "${n}".`); return; }
+    // colisão: nome já usado por OUTRO modo (criar, ou renomear pra cima de um existente)
+    if (todos[n] && n !== modoNome) { Alert.alert('Já existe', `Já tem um modo "${n}".`); return; }
     gravar(n);
   }
 
@@ -192,13 +201,12 @@ export function EditModoScreen() {
         <Animated.View entering={FadeInDown.duration(300)} layout={LinearTransition.duration(220)}>
           <Card style={{ gap: 8 }}>
             <Text style={styles.label}>Nome do modo</Text>
-            {criar ? (
-              <TextInput style={styles.input} placeholder="ex: turbo, seguro"
-                placeholderTextColor={colors.textoFraco} value={nome} onChangeText={setNome} autoCapitalize="none" />
-            ) : (
-              <Text style={styles.nomeFixo}>{modoNome}</Text>
-            )}
-            <Text style={styles.dica}>Tudo começa desligado. Ligue só o que quiser e ponha o valor.</Text>
+            <TextInput style={styles.input} placeholder="ex: turbo, seguro"
+              placeholderTextColor={colors.textoFraco} value={nome} onChangeText={setNome} autoCapitalize="none" />
+            <Text style={styles.dica}>
+              {criar ? 'Tudo começa desligado. Ligue só o que quiser e ponha o valor.'
+                     : 'Dá pra renomear aqui — é só mudar o nome e salvar.'}
+            </Text>
           </Card>
         </Animated.View>
 
@@ -223,7 +231,7 @@ export function EditModoScreen() {
           <Botao title="Criar modo" onPress={salvar} />
         ) : (
           <>
-            <Botao title={`Salvar "${modoNome}"`} onPress={salvar} />
+            <Botao title="Salvar modo" onPress={salvar} />
             <Botao title="Apagar modo" cor={colors.card2} txtCor={colors.erro} onPress={apagar} />
           </>
         )}

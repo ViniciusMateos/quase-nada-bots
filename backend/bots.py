@@ -87,7 +87,29 @@ def _gravar_json(bot_id, nome, data):
     f.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _seed_modos(bot_id):
+    """Modos default do worker (padrao/agressivo/calmo). Reusa o `_default_perfis` do próprio
+    worker (sem rodá-lo) pra não duplicar valores nem sair do sincronismo."""
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            f"_perfis_seed_{bot_id}", str(bot_dir(bot_id) / "perfis.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod._default_perfis()
+    except Exception:
+        return {}
+
+
 def ler_modos(bot_id):
+    # 1ª vez (perfis.json não existe): semeia os modos default e persiste — assim o "padrão"
+    # é um modo REAL na lista, editável e apagável. Depois disso o arquivo manda: apagar um
+    # modo é permanente (não volta), mesmo que a lista fique vazia.
+    if not (bot_dir(bot_id) / "perfis.json").exists():
+        seed = _seed_modos(bot_id)
+        if seed:
+            gravar_modos(bot_id, seed)
+            return seed
     return _ler_json(bot_id, "perfis.json", {})
 
 

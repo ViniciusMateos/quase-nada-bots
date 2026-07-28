@@ -21,9 +21,10 @@ instance.interceptors.request.use((config) => {
 // devolve direto o corpo (data), igual ao padrão dos outros apps
 instance.interceptors.response.use((r) => r.data, (e) => Promise.reject(e));
 
+type Cfg = { timeout?: number };
 export const http = {
   get: <T>(url: string) => instance.get(url) as unknown as Promise<T>,
-  post: <T>(url: string, body?: unknown) => instance.post(url, body) as unknown as Promise<T>,
+  post: <T>(url: string, body?: unknown, cfg?: Cfg) => instance.post(url, body, cfg) as unknown as Promise<T>,
   put: <T>(url: string, body?: unknown) => instance.put(url, body) as unknown as Promise<T>,
   del: <T>(url: string) => instance.delete(url) as unknown as Promise<T>,
 };

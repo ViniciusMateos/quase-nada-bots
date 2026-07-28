@@ -21,11 +21,13 @@ export type IgCookie = {
   name: string; value: string; domain?: string; path?: string;
   httpOnly?: boolean; secure?: boolean; sameSite?: string; session?: boolean; expirationDate?: number;
 };
-export type ConnectResult = { runs: { bot: string; id: string }[] };
+export type ConnectResult = { runs: { bot: string; id: string }[]; conta?: Account };
+export type Account = { id: string; label: string; conectada_em: number; ativa: boolean };
 export type RunHistorico = {
   id: string; bot: string; dry_run: boolean;
   started_at: number | null; ended_at: number | null; duracao_s: number | null;
   status: string; bloqueio: boolean; saldo: Record<string, number | string>; backfill?: boolean;
+  conta?: string | null;   // @username da conta IG usada na run
 };
 
 export const api = {
@@ -47,8 +49,11 @@ export const api = {
     http.post('/liveactivity', { token, bundle, activity_id: activityId }),
   testLiveActivity: (n: number) =>
     http.post<{ ok: boolean; erro?: string }>('/liveactivity/test', { n }),
-  connectInstagram: (cookies: IgCookie[], bots?: string[]) =>
-    http.post<ConnectResult>('/instagram/session', { cookies, bots }),
+  connectInstagram: (cookies: IgCookie[], label?: string) =>
+    http.post<ConnectResult>('/instagram/session', { cookies, label }),
+  getAccounts: () => http.get<Account[]>('/accounts'),
+  ativarConta: (id: string) => http.post<{ ativa: string }>(`/accounts/${encodeURIComponent(id)}/ativar`, {}),
+  removerConta: (id: string) => http.del(`/accounts/${encodeURIComponent(id)}`),
   registerDevice: (token: string) => http.post<{ ok: boolean; devices: number }>('/devices', { token }),
 };
 

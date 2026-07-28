@@ -14,6 +14,7 @@ import { SettingsScreen } from '@/screens/SettingsScreen';
 import { ChatsScreen } from '@/screens/ChatsScreen';
 import { EditModoScreen } from '@/screens/EditModoScreen';
 import { InstagramLoginScreen } from '@/screens/InstagramLoginScreen';
+import { ContasIgScreen } from '@/screens/ContasIgScreen';
 import { HistoricoScreen } from '@/screens/HistoricoScreen';
 
 export type RootStackParamList = {
@@ -24,7 +25,8 @@ export type RootStackParamList = {
   Historico: undefined;
   Chats: { botId: string };
   EditModo: { botId: string; modoNome: string; criar?: boolean };
-  InstagramLogin: undefined;
+  ContasIg: undefined;
+  InstagramLogin: { label?: string; senha?: string } | undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -32,9 +34,12 @@ export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 // Abre a tela da Run ao tocar numa notificação que carrega runId.
 function irParaRun(data: unknown) {
-  const d = (data ?? {}) as { runId?: string; bot?: string };
+  const d = (data ?? {}) as { runId?: string; bot?: string; titulo?: string };
   if (d.runId && navigationRef.isReady()) {
-    navigationRef.navigate('Run', { runId: d.runId, nome: d.bot ? `Run — ${d.bot}` : 'Run' });
+    // usa o título do PROCESSO ("Conectando Instagram" no connect, "Auto Follow" na run) —
+    // o id cru do bot deixava "Run — auto-follow" no conectar, que não é universal.
+    const nome = d.titulo || (d.bot ? `Run — ${d.bot}` : 'Run');
+    navigationRef.navigate('Run', { runId: d.runId, nome });
   }
 }
 
@@ -83,6 +88,8 @@ export function RootNavigator() {
         <Stack.Screen name="Chats" component={ChatsScreen} options={{ title: 'Chats salvos' }} />
         <Stack.Screen name="EditModo" component={EditModoScreen}
           options={({ route }) => ({ title: `Modo: ${route.params.modoNome}` })} />
+        <Stack.Screen name="ContasIg" component={ContasIgScreen}
+          options={{ title: 'Contas do Instagram' }} />
         <Stack.Screen name="InstagramLogin" component={InstagramLoginScreen}
           options={{ title: 'Conectar Instagram' }} />
       </Stack.Navigator>

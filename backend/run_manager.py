@@ -93,6 +93,7 @@ class Run:
         self.saldo = None              # {seguidos, pedidos, …} — do marcador [saldo]
         self.conta = None              # @username da conta IG usada (lido do log "Conta: @x")
         self.bloqueio = False          # detectou bloqueio do IG no log?
+        self.proxy_instavel = False    # parou por instabilidade do proxy/túnel (marcador [proxy])
         self.linhas = deque(maxlen=settings.MAX_LOG_LINES)
         # cabeçalho: as primeiras ~30 linhas do run (Modo/Proxy/Conta/início da varredura)
         # preservadas PRA SEMPRE. Sem isso, num run longo o buffer rolante evicta o começo e
@@ -454,6 +455,8 @@ class RunManager:
                     await self._maybe_status_la(run, linha)
                 if "⛔" in linha or "BLOQUEIO" in linha:
                     run.bloqueio = True
+                if "[proxy]" in linha:
+                    run.proxy_instavel = True
                 if run.conta is None and "Conta:" in linha:   # "Conta: @quasenadasegue3 (...)"
                     m = re.search(r"Conta:\s*@?([A-Za-z0-9._]+)", linha)
                     if m:
@@ -542,7 +545,11 @@ class RunManager:
         """
         info = _proc_info(run.bot, run.params)
         nome = bots.BOTS.get(run.bot, {}).get("nome", run.bot)
-        if run.status == "erro":
+        if run.proxy_instavel:
+            # parou por proxy/túnel — deixa CLARO que não é bloqueio/conta e pede pra tentar depois
+            titulo, corpo = ("Proxy instável", f"{nome} parou por instabilidade do proxy/túnel — "
+                             "não é bloqueio. Tenta rodar de novo mais tarde.")
+        elif run.status == "erro":
             titulo, corpo = info["fim_erro"]
         elif run.status == "parado":
             titulo, corpo = info["fim_parado"]

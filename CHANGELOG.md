@@ -3,6 +3,26 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [1.2.0] — 2026-07-29
+
+### Adicionado
+- feat: **gerenciador de contas do Instagram** — várias contas salvas (user + senha no aparelho, Keychain), **login autofill** no webview, ativar/apagar; só **uma conta ativa** por vez
+- feat: **histórico com filtros em bottom sheet** (chips ativos removíveis), animações ao filtrar e a **conta usada** em cada run no card
+- feat: **modos** — exige um modo selecionado pra rodar; o **padrão virou um modo real** (semeado na 1ª vez); editar mostra os campos no padrão e permite **renomear**
+
+### Corrigido
+- fix: histórico **persiste o log em disco** e abre os runs antigos; run que trava/some vira registro no histórico; **Live Activity órfã** encerra sozinha; o **spinner** do botão Rodar não trava mais
+
+### Modificado
+- update: anel do **LoadingDog** e do **splash** mais colado no dog
+- update: conectar o Instagram com mensagem e cabeçalho **universais** (sem citar bot)
+
+### Removido
+- chore: testes de barrinha / Live Activity das configurações
+
+### Documentação
+- docs: README com o gerenciador de contas e o histórico com filtros
+
 ## [1.1.0] — 2026-07-25
 
 ### Adicionado

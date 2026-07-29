@@ -39,7 +39,7 @@ module.exports = {
   expo: {
     name: current.name,
     slug: 'quase-nada-bots',
-    version: '1.2.0',
+    version: '1.2.1',
     // fixo (não segue a versão): mantém o OTA compatível com os builds já instalados;
     // só sobe quando uma mudança NATIVA quebra a compatibilidade com o bundle JS.
     runtimeVersion: '1.0.0',

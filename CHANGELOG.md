@@ -3,6 +3,11 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [1.2.1] — 2026-07-29
+
+### Adicionado
+- feat: a notificação de fim avisa quando a run parou por **instabilidade do proxy/túnel** — deixa claro que não é bloqueio nem conta, é só tentar de novo mais tarde
+
 ## [1.2.0] — 2026-07-29
 
 ### Adicionado

@@ -1,30 +1,45 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { api, Bot, RunInfo } from '@/lib/api';
+import { api, Bot, RunInfo, Account } from '@/lib/api';
+import { Credencial, lerCredenciais } from '@/lib/credenciais';
 import { colors, statusCor } from '@/theme';
 import { Aparece, BarraProgresso, Card, CartaoTocavel, Pill, Pulsar } from '@/ui/components';
+import { Contagem } from '@/ui/Contagem';
 import { TelaCarregando } from '@/ui/LoadingDog';
 import { useDogRefresh } from '@/ui/DogRefresh';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+type AccEntry = { usuario: string; senha?: string; id?: string; ativa?: boolean };
 
 export function HubScreen() {
   const nav = useNavigation<Nav>();
   const [bots, setBots] = useState<[string, Bot][]>([]);
   const [runs, setRuns] = useState<RunInfo[]>([]);
+  const [contas, setContas] = useState<Account[]>([]);
+  const [creds, setCreds] = useState<Credencial[]>([]);
+  const [busyConta, setBusyConta] = useState<string | null>(null);
+  const [sessoes, setSessoes] = useState<Record<string, boolean>>({});   // id → sessão viva?
+  const [verificando, setVerificando] = useState(false);
+  const jaValidou = useRef(false);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     setLoading(true); setErro(null);
     try {
-      const [b, r] = await Promise.all([api.listBots(), api.listRuns()]);
+      const [b, r, cs, cr] = await Promise.all([
+        api.listBots(), api.listRuns(),
+        api.getAccounts().catch(() => [] as Account[]),
+        lerCredenciais().catch(() => [] as Credencial[]),
+      ]);
       setBots(Object.entries(b));
       setRuns(r);
+      setContas(cs);
+      setCreds(cr);
     } catch {
       // a URL vem cravada do build (não há config manual) — mandar "confira em
       // Configurações" era mentira: não tem o que configurar lá.
@@ -40,18 +55,50 @@ export function HubScreen() {
     try { setRuns(await api.listRuns()); } catch { /* offline / sem server */ }
   }, []);
 
+  // checa (via túnel) se a sessão de cada conta ainda está viva — pesado-ish, só no abrir/refresh
+  const validar = useCallback(async () => {
+    setVerificando(true);
+    try {
+      const r = await api.validarContas();
+      const m: Record<string, boolean> = {};
+      for (const a of r) if (a.id) m[a.id] = !!a.sessao_ok;
+      setSessoes(m);
+    } catch { /* offline */ } finally { setVerificando(false); }
+  }, []);
+
   useFocusEffect(useCallback(() => {
     carregar();
+    // valida as sessões UMA vez ao abrir (não a cada foco — é pesado-ish e bate no IG).
+    // pull-to-refresh revalida quando você quiser.
+    if (!jaValidou.current) { jaValidou.current = true; validar(); }
     // POLL enquanto a Home está aberta: antes só recarregava ao focar, então parado na tela
     // o "Rodando agora" congelava e o progresso não andava até você sair e voltar. Agora
     // atualiza sozinho a cada 2,5s, independente de você entrar no log.
     const id = setInterval(atualizarRuns, 2500);
     return () => clearInterval(id);
-  }, [carregar, atualizarRuns]));
+  }, [carregar, atualizarRuns, validar]));
 
-  const { scrollProps, dog, spacerEl } = useDogRefresh(carregar);
+  const { scrollProps, dog, spacerEl } = useDogRefresh(async () => { await carregar(); await validar(); });
 
   const ativos = runs.filter((r) => ['rodando', 'iniciando'].includes(r.status)).reverse();
+
+  // contas (backend + credenciais locais), casadas por @user e em ordem alfabética
+  const entradas = useMemo<AccEntry[]>(() => {
+    const map = new Map<string, AccEntry>();
+    for (const c of creds) map.set(c.usuario.toLowerCase(), { usuario: c.usuario, senha: c.senha });
+    for (const a of contas) {
+      const k = (a.label || '').toLowerCase();
+      const prev = map.get(k);
+      map.set(k, { usuario: prev?.usuario || a.label, senha: prev?.senha, id: a.id, ativa: a.ativa });
+    }
+    return [...map.values()].sort((a, b) => a.usuario.toLowerCase().localeCompare(b.usuario.toLowerCase()));
+  }, [creds, contas]);
+
+  function ativarConta(e: AccEntry) {
+    if (!e.id || e.ativa || busyConta) return;
+    setBusyConta(e.usuario);
+    api.ativarConta(e.id).then(carregar).catch(() => {}).finally(() => setBusyConta(null));
+  }
 
   if (loading && bots.length === 0 && !erro) return <TelaCarregando />;
 
@@ -98,7 +145,9 @@ export function HubScreen() {
                       </Pulsar>
                     </View>
                     {/* a LINHA VIVA do log embaixo do nome — o que o bot está fazendo AGORA */}
-                    {r.status_log ? (
+                    {r.espera ? (
+                      <Contagem espera={r.espera} />
+                    ) : r.status_log ? (
                       <Text style={styles.runLog} numberOfLines={1}>{r.status_log}</Text>
                     ) : null}
                     {r.progress && r.progress.total > 0 && (
@@ -106,6 +155,56 @@ export function HubScreen() {
                     )}
                   </TouchableOpacity>
                 ))}
+              </Card>
+            )}
+            {entradas.length > 0 && (
+              <Card>
+                <View style={styles.contasHead}>
+                  <Text style={styles.secao}>Contas {verificando ? '· verificando…' : ''}</Text>
+                  <View style={styles.contasAcoes}>
+                    <TouchableOpacity onPress={() => { if (!verificando) validar(); }} disabled={verificando}
+                      hitSlop={8} style={styles.contaBtn}>
+                      <Ionicons name="sync" size={14} color={verificando ? colors.textoFraco : colors.marca} />
+                      <Text style={[styles.gerenciar, verificando && { color: colors.textoFraco }]}>sincronizar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => nav.navigate('ContasIg')} hitSlop={8}>
+                      <Text style={styles.gerenciar}>gerenciar</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                {entradas.map((e) => {
+                  const sess = e.id ? sessoes[e.id] : undefined;   // true/false/undefined(=não checou)
+                  const checando = verificando && !!e.id && sess === undefined;
+                  const caiu = !!e.id && sess === false;
+                  let status: string, cor: string;
+                  if (!e.id) { status = 'sem sessão'; cor = colors.erro; }
+                  else if (checando) { status = 'verificando…'; cor = colors.textoFraco; }
+                  else if (caiu) { status = 'sessão caiu'; cor = colors.erro; }
+                  else if (e.ativa) { status = 'ativa · em uso'; cor = colors.ok; }
+                  else { status = 'sessão ok'; cor = colors.ok; }
+                  return (
+                    <View key={e.usuario} style={styles.contaLinha}>
+                      <View style={[styles.contaDot, { backgroundColor: cor }]} />
+                      <Text style={styles.contaNome} numberOfLines={1}>@{e.usuario}</Text>
+                      <Text style={[styles.contaStatus, { color: cor }]}>{status}</Text>
+                      {busyConta === e.usuario ? (
+                        <Text style={styles.contaAcao}>…</Text>
+                      ) : checando ? null
+                        : (!!e.id && !caiu && !e.ativa) ? (
+                          <TouchableOpacity onPress={() => ativarConta(e)} hitSlop={8} style={styles.contaBtn}>
+                            <Ionicons name="power" size={17} color={colors.ok} />
+                            <Text style={[styles.contaAcao, { color: colors.ok }]}>ativar</Text>
+                          </TouchableOpacity>
+                        ) : (!e.id || caiu) ? (
+                          <TouchableOpacity onPress={() => nav.navigate('InstagramLogin', { label: e.usuario, senha: e.senha })}
+                            hitSlop={8} style={styles.contaBtn}>
+                            <Ionicons name="link" size={16} color={colors.marca} />
+                            <Text style={[styles.contaAcao, { color: colors.marca }]}>{caiu ? 'reconectar' : 'conectar'}</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                    </View>
+                  );
+                })}
               </Card>
             )}
           </View>
@@ -136,4 +235,13 @@ const styles = StyleSheet.create({
   runLog: { color: colors.textoFraco, fontSize: 12, fontFamily: 'monospace', marginTop: -2 },
   botNome: { color: colors.texto, fontSize: 18, fontWeight: '700' },
   botDesc: { color: colors.textoFraco, fontSize: 13, marginTop: 4 },
+  contasHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  contasAcoes: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  gerenciar: { color: colors.marca, fontSize: 12, fontWeight: '700' },
+  contaLinha: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 6 },
+  contaDot: { width: 9, height: 9, borderRadius: 999 },
+  contaNome: { color: colors.texto, fontSize: 14, fontWeight: '700', flex: 1 },
+  contaStatus: { fontSize: 11, fontWeight: '600' },
+  contaBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  contaAcao: { fontSize: 12, fontWeight: '700', color: colors.textoFraco },
 });

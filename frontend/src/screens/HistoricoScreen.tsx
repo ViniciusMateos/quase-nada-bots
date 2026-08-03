@@ -19,10 +19,22 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 type FiltroBot = 'todos' | string;
 type FiltroRes = 'todos' | 'ok' | 'bloqueio' | 'erro' | 'parado';
-type Periodo = 'tudo' | '7d' | '30d';
+type Periodo = 'tudo' | 'hoje' | 'ontem' | '7d' | '30d';
 
 const RES_LABEL: Record<string, string> = { ok: 'ok', bloqueio: 'bloqueio', erro: 'erro', parado: 'parado' };
-const PER_LABEL: Record<string, string> = { '7d': '7 dias', '30d': '30 dias' };
+const PER_LABEL: Record<string, string> = { hoje: 'hoje', ontem: 'ontem', '7d': '7 dias', '30d': '30 dias' };
+
+// janela [início, fim) em epoch-segundos pra cada período
+function janelaPeriodo(p: Periodo): [number, number] {
+  const agora = Date.now() / 1000;
+  const d = new Date();
+  const inicioHoje = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 1000;
+  if (p === 'hoje') return [inicioHoje, Infinity];
+  if (p === 'ontem') return [inicioHoje - 86400, inicioHoje];
+  if (p === '7d') return [agora - 7 * 86400, Infinity];
+  if (p === '30d') return [agora - 30 * 86400, Infinity];
+  return [0, Infinity];   // tudo
+}
 
 // backdrop que faz FADE por trás do sheet (independente do slide do sheet)
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -92,11 +104,12 @@ export function HistoricoScreen() {
 
   const filtrados = useMemo(() => {
     if (!regs) return [];
-    const corte = periodo === 'tudo' ? 0 : Date.now() / 1000 - (periodo === '7d' ? 7 : 30) * 86400;
+    const [ini, fim] = janelaPeriodo(periodo);
     return regs.filter((r) => {
       if (fBot !== 'todos' && r.bot !== fBot) return false;
       if (fConta !== 'todos' && r.conta !== fConta) return false;
-      if (periodo !== 'tudo' && (r.ended_at ?? 0) < corte) return false;
+      const t = r.ended_at ?? 0;
+      if (t < ini || t >= fim) return false;
       if (fRes === 'ok' && !(r.status === 'finalizado' && !r.bloqueio)) return false;
       if (fRes === 'bloqueio' && !r.bloqueio) return false;
       if (fRes === 'erro' && !(r.status === 'erro' && !r.bloqueio)) return false;
@@ -255,7 +268,9 @@ export function HistoricoScreen() {
             </TouchableOpacity>
           )}
         </View>
-        <ScrollView contentContainerStyle={{ gap: 18, paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={{ gap: 24, paddingBottom: 8 }} showsVerticalScrollIndicator={false}>
+          <FiltroGrupo titulo="Período" valor={periodo} onSel={(v) => setPeriodo(v as Periodo)}
+            ops={[['tudo', 'Tudo'], ['hoje', 'Hoje'], ['ontem', 'Ontem'], ['7d', '7 dias'], ['30d', '30 dias']]} />
           {botsDisponiveis.length > 1 && (
             <FiltroGrupo titulo="Bot" valor={fBot} onSel={setFBot}
               ops={[['todos', 'Todos'], ...botsDisponiveis.map((b) => [b, nomes[b] ?? b] as [string, string])]} />
@@ -266,8 +281,6 @@ export function HistoricoScreen() {
           )}
           <FiltroGrupo titulo="Resultado" valor={fRes} onSel={(v) => setFRes(v as FiltroRes)}
             ops={[['todos', 'Todos'], ['ok', 'ok'], ['bloqueio', 'bloqueio'], ['erro', 'erro'], ['parado', 'parado']]} />
-          <FiltroGrupo titulo="Período" valor={periodo} onSel={(v) => setPeriodo(v as Periodo)}
-            ops={[['tudo', 'Tudo'], ['7d', '7 dias'], ['30d', '30 dias']]} />
         </ScrollView>
         <Botao title={`Ver ${resumo.runs} ${resumo.runs === 1 ? 'run' : 'runs'}`}
           onPress={fecharSheet} />
@@ -282,7 +295,7 @@ export function HistoricoScreen() {
 function FiltroGrupo({ titulo, valor, onSel, ops }:
   { titulo: string; valor: string; onSel: (v: string) => void; ops: [string, string][] }) {
   return (
-    <View style={{ gap: 8 }}>
+    <View style={{ gap: 12 }}>
       <Text style={styles.grupoLabel}>{titulo}</Text>
       <ChipRow valor={valor} onSel={onSel} ops={ops} />
     </View>
@@ -339,20 +352,20 @@ const styles = StyleSheet.create({
   modalRoot: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)' },
   sheet: {
-    backgroundColor: '#171717', borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    backgroundColor: '#171717', borderTopLeftRadius: 24, borderTopRightRadius: 24,
     borderTopWidth: 1, borderColor: colors.border,
-    paddingHorizontal: 18, paddingTop: 10, paddingBottom: 34, gap: 16, maxHeight: '80%',
+    paddingHorizontal: 20, paddingTop: 12, paddingBottom: 34, gap: 20, maxHeight: '82%',
   },
   handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 999, backgroundColor: colors.border },
   sheetTopo: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sheetTitulo: { color: colors.texto, fontSize: 20, fontWeight: '800' },
   limparTxt: { color: colors.marca, fontSize: 14, fontWeight: '700' },
-  grupoLabel: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  grupoLabel: { color: colors.textoFraco, fontSize: 12.5, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6 },
 
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   chip: {
-    color: colors.texto, fontSize: 13, overflow: 'hidden',
-    borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7,
+    color: colors.texto, fontSize: 14, overflow: 'hidden',
+    borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 15, paddingVertical: 10,
   },
   chipOn: { backgroundColor: colors.marca, borderColor: colors.marca, color: '#0F0F0F', fontWeight: '700' },
 

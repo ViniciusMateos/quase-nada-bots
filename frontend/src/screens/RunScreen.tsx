@@ -10,8 +10,9 @@ import * as Clipboard from 'expo-clipboard';
 import { api, logsWsUrl } from '@/lib/api';
 import { colors, statusCor } from '@/theme';
 import { BarraProgresso, Botao, Pill, Pulsar } from '@/ui/components';
+import { Contagem } from '@/ui/Contagem';
 import { LoadingDog } from '@/ui/LoadingDog';
-import type { Progresso } from '@/lib/api';
+import type { Progresso, Espera } from '@/lib/api';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
 type Rt = RouteProp<RootStackParamList, 'Run'>;
@@ -147,6 +148,14 @@ function parseProgresso(txt: string): Progresso | null {
   return { done: parseInt(m[1], 10), total: parseInt(m[2], 10), label: m[3].trim() };
 }
 
+function parseEspera(txt: string): Espera | null {
+  const resto = txt.slice('[espera]'.length).trim();
+  const m = resto.match(/^(\d+)\s*(.*)$/);
+  if (!m) return null;
+  const restam = parseInt(m[1], 10);
+  return { ate: Date.now() / 1000 + restam, restam, motivo: m[2].trim() };
+}
+
 export function RunScreen() {
   const { runId } = useRoute<Rt>().params;
   const [linhas, setLinhas] = useState<string[]>([]);
@@ -154,6 +163,7 @@ export function RunScreen() {
   const [conectando, setConectando] = useState(true);
   const [parando, setParando] = useState(false);
   const [progresso, setProgresso] = useState<Progresso | null>(null);
+  const [espera, setEspera] = useState<Espera | null>(null);
   const [copiadoMsg, setCopiadoMsg] = useState<string | null>(null);
   const copiadoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const insets = useSafeAreaInsets();
@@ -187,6 +197,7 @@ export function RunScreen() {
     // (Na reconexão do AppState isso não roda: o effect só refaz quando o runId muda.)
     setLinhas([]);
     setProgresso(null);
+    setEspera(null);
     setConectando(true);
 
     const conectar = async () => {
@@ -214,6 +225,13 @@ export function RunScreen() {
         if (txt.startsWith('[progress]')) {          // barra, não vira linha de log
           const p = parseProgresso(txt);
           if (p) setProgresso(p);
+          setEspera(null);                           // andou o progresso → não está mais em pausa
+          return;
+        }
+        if (txt.startsWith('[espera-fim]')) { setEspera(null); return; }
+        if (txt.startsWith('[espera]')) {            // pausa em contagem, não vira linha de log
+          const e2 = parseEspera(txt);
+          if (e2) setEspera(e2);
           return;
         }
         setLinhas((prev) => [...prev, txt]);
@@ -286,6 +304,11 @@ export function RunScreen() {
           <BarraProgresso done={progresso.done} total={progresso.total} label={progresso.label} />
         </View>
       )}
+      {espera && rodando && (
+        <View style={styles.esperaWrap}>
+          <Contagem espera={espera} />
+        </View>
+      )}
       {conectando && linhas.length === 0 ? (
         <View style={[styles.logBox, styles.loadingBox, { marginBottom: insets.bottom + 12 }]}>
           <LoadingDog size={56} />
@@ -337,6 +360,7 @@ const styles = StyleSheet.create({
   copiadoPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.ok, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
   copiadoTxt: { color: '#0F0F0F', fontWeight: '700', fontSize: 13 },
   barraWrap: { paddingHorizontal: 16, paddingBottom: 12 },
+  esperaWrap: { paddingHorizontal: 16, paddingBottom: 12, marginTop: -4 },
   logBox: { flex: 1, backgroundColor: '#0A0A0A', marginHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
   loadingBox: { alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingTxt: { color: colors.textoFraco, fontSize: 13 },

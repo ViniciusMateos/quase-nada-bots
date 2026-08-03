@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { api, RunInfo } from '@/lib/api';
 import { laRunsAcabaram } from '@/lib/la';
 import { colors } from '@/theme';
+import { Contagem } from '@/ui/Contagem';
 import { LoadingDog } from '@/ui/LoadingDog';
 import { interacaoBus } from '@/ui/interacaoBus';
 
@@ -270,13 +271,17 @@ function Linha({ run, soUm, onAbrir }: {
             <View style={[styles.preenchido, { width: `${pct ?? 0}%`, backgroundColor: cor }]} />
           </View>
         ) : null}
-        {/* a LINHA VIVA embaixo do nome: durante o progresso, done/total · label; antes dele
-            (abrindo navegador / paginando a thread), o status_log — nunca fica vazio */}
-        <Text style={styles.sub} numberOfLines={1}>
-          {p && p.total
-            ? `${p.done}/${p.total}${p.label ? `  ·  ${p.label}` : ''}`
-            : (run.status_log || 'começando…')}
-        </Text>
+        {/* a LINHA VIVA embaixo do nome: em pausa mostra a contagem regressiva; durante o
+            progresso, done/total · label; antes dele (abrindo navegador), o status_log */}
+        {run.espera ? (
+          <Contagem espera={run.espera} compact />
+        ) : (
+          <Text style={styles.sub} numberOfLines={1}>
+            {p && p.total
+              ? `${p.done}/${p.total}${p.label ? `  ·  ${p.label}` : ''}`
+              : (run.status_log || 'começando…')}
+          </Text>
+        )}
       </View>
     </Pressable>
   );

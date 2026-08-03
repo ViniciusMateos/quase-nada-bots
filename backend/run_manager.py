@@ -39,15 +39,17 @@ def _proc_info(bot_id, params):
         # "através" do 1º bot de IG como veículo, então as mensagens NÃO citam bot nenhum.
         return {
             "titulo": "Conectando Instagram",
-            "fim_ok": ("Instagram conectado", "Sessão salva — já pode rodar os bots."),
-            "fim_erro": ("Deu ruim", "Não consegui conectar o Instagram."),
-            "fim_parado": ("Parado", "A conexão do Instagram foi parada."),
+            "fim_ok": ("Instagram · conectado", "Sessão salva — já pode rodar os bots."),
+            "fim_erro": ("Instagram · deu ruim", "Não consegui conectar o Instagram."),
+            "fim_parado": ("Instagram · parado", "A conexão do Instagram foi parada."),
         }
+    # título SEMPRE prefixado com o nome do bot → na lista do iPhone dá pra separar por bot
+    # (o iOS junta tudo num monte só do app; o prefixo é o que deixa cada um identificável)
     return {
         "titulo": nome,
-        "fim_ok": ("Terminou", f"{nome} finalizou."),
-        "fim_erro": ("Deu ruim", f"{nome} parou com erro."),
-        "fim_parado": ("Parado", f"{nome} foi parado."),
+        "fim_ok": (f"{nome} · terminou", f"{nome} finalizou."),
+        "fim_erro": (f"{nome} · deu ruim", f"{nome} parou com erro."),
+        "fim_parado": (f"{nome} · parado", f"{nome} foi parado."),
     }
 
 
@@ -61,6 +63,26 @@ def _parse_progress(linha):
         return {"done": done, "total": total, "label": label}
     except Exception:
         return None
+
+
+def _parse_espera(linha):
+    """`[espera] <segundos_restantes> <motivo...>` → (restam, motivo). Marcador de PAUSA:
+    o worker emite durante uma espera longa (entre posts, pausa longa) pra o app/LA
+    mostrarem a contagem regressiva."""
+    try:
+        resto = linha[len("[espera]"):].strip()
+        partes = resto.split(None, 1)
+        restam = int(float(partes[0]))
+        motivo = partes[1] if len(partes) > 1 else ""
+        return restam, motivo
+    except Exception:
+        return None
+
+
+def _fmt_mmss(seg):
+    seg = max(0, int(round(seg)))
+    m, s = divmod(seg, 60)
+    return f"{m}m {s:02d}s" if m else f"{s}s"
 
 
 def _parse_saldo(linha):
@@ -111,6 +133,9 @@ class Run:
         # não sabe o tamanho da fila (~70s abrindo navegador e logando).
         # (NÃO chamar de `status`: já existe, é o estado da run.)
         self.status_log = None
+        # PAUSA em andamento (contagem regressiva): {ate: epoch, restam: s, motivo} ou None.
+        # Vem do marcador [espera] do worker; o app ticka em cima do `ate`, a LA mostra no label.
+        self.espera = None
         # nome do PROCESSO (não do bot): rodar o Auto Follow × conectar o Instagram são
         # coisas diferentes, e o widget flutuante mostra isto
         self.titulo = _proc_info(bot_id, self.params)["titulo"]
@@ -124,6 +149,7 @@ class Run:
             "linhas": len(self.linhas), "progress": self.progress,
             "status_log": self.status_log,     # a LINHA VIVA (o que está logando agora) —
                                                # a home e o widget mostram isto embaixo do nome
+            "espera": self.espera,             # pausa em contagem regressiva (ou None)
         }
 
     async def emitir(self, linha):
@@ -141,6 +167,16 @@ class Run:
                     f.write(linha + "\n")
             except Exception:
                 pass
+        for q in list(self.subs):
+            try:
+                q.put_nowait(linha)
+            except Exception:
+                pass
+
+    def emitir_efemero(self, linha):
+        """Manda só pros assinantes do WS (não vai pro buffer nem pro arquivo). Pra marcadores
+        voláteis tipo [espera]/[espera-fim] que a tela da run mostra ao vivo mas não devem
+        sujar o log persistido."""
         for q in list(self.subs):
             try:
                 q.put_nowait(linha)
@@ -261,6 +297,12 @@ class RunManager:
                     label += f' · {p["label"]}'
             else:
                 label = r.status_log or "começando"
+            # em pausa? mostra a contagem regressiva no lugar (o app ticka; a LA atualiza no push)
+            if r.espera:
+                restam = r.espera["ate"] - time.time()
+                if restam > 0:
+                    mot = r.espera.get("motivo") or ""
+                    label = f"pausa · faltam {_fmt_mmss(restam)}" + (f" ({mot})" if mot else "")
             return {"titulo": r.titulo, "pct": self._pct(r), "medido": medido,
                     "label": label[:60], "quantos": 1, "bot": r.bot, "linhas": []}
 
@@ -441,6 +483,16 @@ class RunManager:
         try:
             async for raw in run.proc.stdout:
                 linha = raw.decode("utf-8", "replace").rstrip("\r\n")
+                if linha.startswith("[espera]"):
+                    e = _parse_espera(linha)
+                    if e:
+                        run.espera = {"ate": time.time() + e[0], "restam": e[0], "motivo": e[1]}
+                        await self._maybe_push_progresso(run)   # atualiza a LA com a contagem
+                        run.emitir_efemero(linha)               # a tela da run vê a contagem (WS)
+                    continue   # marcador de pausa: não vai pro log nem vira status_log
+                if run.espera is not None:
+                    run.espera = None       # qualquer outra linha = a pausa acabou
+                    run.emitir_efemero("[espera-fim]")
                 if linha.startswith("[progress]"):
                     p = _parse_progress(linha)
                     if p:
@@ -504,7 +556,7 @@ class RunManager:
         nome = bots.BOTS.get(run.bot, {}).get("nome", run.bot)
         try:
             await asyncio.to_thread(
-                notify.enviar, f"{nome} começou",
+                notify.enviar, f"{nome} · começou",
                 "Tô nessa… vou te mostrando o progresso.",
                 {"type": "start", "runId": run.id, "bot": run.bot, "titulo": run.titulo})
         except Exception:
@@ -547,7 +599,7 @@ class RunManager:
         nome = bots.BOTS.get(run.bot, {}).get("nome", run.bot)
         if run.proxy_instavel:
             # parou por proxy/túnel — deixa CLARO que não é bloqueio/conta e pede pra tentar depois
-            titulo, corpo = ("Proxy instável", f"{nome} parou por instabilidade do proxy/túnel — "
+            titulo, corpo = (f"{nome} · proxy instável", f"{nome} parou por instabilidade do proxy/túnel — "
                              "não é bloqueio. Tenta rodar de novo mais tarde.")
         elif run.status == "erro":
             titulo, corpo = info["fim_erro"]
@@ -581,10 +633,11 @@ class RunManager:
     def _reap_zumbis(self):
         """Limpa runs quebrados, pra não travar o guard 409 nem pendurar o app. Dois casos:
           • ZUMBI: status rodando/iniciando mas o PROCESSO morreu (morto por fora / _pump falhou).
-          • TRAVADO: processo vivo mas SEM emitir nada há >10min (browser preso num goto que
-            engasgou no proxy — o page.evaluate seguinte pendura pra sempre). Mata a árvore.
-        (10min é folgado de propósito: o auto-follow dorme até 8min 'entre posts' de boa.)
-        Roda barato a cada GET /runs."""
+          • TRAVADO: processo vivo mas SEM emitir nada há >6min (browser preso num goto que
+            engasgou — o page.evaluate seguinte pendura pra sempre). Mata a árvore.
+        (6min agora é seguro: TODA pausa longa — inclusive os 'entre posts' de até 8min do
+        auto-follow — emite [espera] a cada 12s, então só uma trava REAL fica silenciosa tanto.)
+        Roda no loop_reaper (a cada 60s) E a cada GET /runs."""
         agora = time.time()
         for r in self.runs.values():
             if r.status not in ("rodando", "iniciando") or not r.proc:
@@ -595,7 +648,7 @@ class RunManager:
                     os.kill(r.proc.pid, 0)          # não mata; só checa se o pid existe
                 except OSError:
                     vivo = False
-            travado = vivo and (agora - getattr(r, "ult_linha_t", agora)) > 600
+            travado = vivo and (agora - getattr(r, "ult_linha_t", agora)) > 360
             if travado:
                 self._matar_arvore(r.proc)
             if not vivo or travado:
@@ -634,6 +687,19 @@ class RunManager:
                 if proc.returncode is None:
                     _sinal(signal.SIGKILL)                # chromium travado: mata na marra
         asyncio.create_task(_escalar())
+
+    async def loop_reaper(self):
+        """Watchdog em BACKGROUND: mata run travada (>10min sem emitir nada) mesmo com o app
+        FECHADO. Antes o reaper só rodava quando o app chamava /runs — se você fechasse o app
+        no meio de uma trava, ela ficava pendurada pra sempre (foi o 'parou do nada' que ficou
+        27min preso). As pausas legítimas emitem [espera] a cada 12s, então só uma trava REAL
+        (nenhuma saída) fica silenciosa tempo suficiente pra ser morta."""
+        while True:
+            try:
+                self._reap_zumbis()
+            except Exception:
+                pass
+            await asyncio.sleep(60)
 
     def listar(self):
         self._reap_zumbis()          # detecta runs zumbis (proc morto) antes de responder

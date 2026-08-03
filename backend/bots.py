@@ -20,6 +20,11 @@ BOTS = {
         "tem_modos": True, "tem_chats": False, "tem_ig": True,
         "descricao": "Manda DM pros novos seguidores.",
     },
+    "human-warmup": {
+        "nome": "Aquecimento Humano", "dir": "human-warmup-instagram",
+        "tem_modos": True, "tem_chats": False, "tem_ig": True,
+        "descricao": "Navega como gente (feed, story, curtidas) pra aquecer a conta.",
+    },
 }
 
 # arquivo (dentro do dir do worker) onde a sessão importada do IG é gravada

@@ -13,6 +13,7 @@ import asyncio
 
 import accounts
 import bots
+import cronograma
 import history
 import liveactivity
 import notify
@@ -29,6 +30,12 @@ mgr = RunManager()
 def auth(authorization: str = Header(None)):
     if authorization != f"Bearer {settings.API_TOKEN}":
         raise HTTPException(401, "token inválido")
+
+
+@app.on_event("startup")
+async def _iniciar_cronograma():
+    asyncio.create_task(cronograma.loop())
+    asyncio.create_task(mgr.loop_reaper())   # watchdog de trava roda mesmo com o app fechado
 
 
 def _checar_bot(bot_id):
@@ -147,6 +154,14 @@ async def listar_contas():
     return accounts.listar()
 
 
+@app.get("/accounts/validar", dependencies=[Depends(auth)])
+async def validar_contas():
+    """Checa (em paralelo, via túnel) se a sessão de cada conta ainda está viva. Devolve as
+    contas + `sessao_ok`. É pesado-ish (bate no IG por conta) → o app chama no abrir/refresh."""
+    res = await asyncio.to_thread(accounts.validar_todas)
+    return [{**c, "sessao_ok": res.get(c.get("id"), False)} for c in accounts.listar()]
+
+
 @app.post("/accounts/{conta_id}/ativar", dependencies=[Depends(auth)])
 async def ativar_conta(conta_id: str):
     try:
@@ -157,9 +172,30 @@ async def ativar_conta(conta_id: str):
         raise HTTPException(409, str(e))
 
 
+@app.put("/accounts/{conta_id}/tier", dependencies=[Depends(auth)])
+async def definir_tier_conta(conta_id: str, payload: dict):
+    try:
+        return accounts.definir_tier(conta_id, payload.get("tier"))
+    except KeyError:
+        raise HTTPException(404, "conta não encontrada")
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
 @app.delete("/accounts/{conta_id}", dependencies=[Depends(auth)])
 async def remover_conta(conta_id: str):
     return accounts.remover(conta_id)
+
+
+# ─────────────────────────── cronograma ───────────────────────────
+@app.get("/cronograma", dependencies=[Depends(auth)])
+async def cronograma_hoje():
+    return cronograma.preview()
+
+
+@app.put("/cronograma", dependencies=[Depends(auth)])
+async def cronograma_toggle(payload: dict):
+    return cronograma.set_ativo(bool(payload.get("ativo", True)))
 
 
 # ─────────────────────── push (devices) ─────────────────────────

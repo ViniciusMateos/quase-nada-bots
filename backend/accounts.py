@@ -11,15 +11,26 @@ sem captcha — cada conta foi conectada uma vez pelo webview e teve os cookies 
 Índice em `sessions/accounts.json`: {"ativa": <id|null>, "contas": [{id, label, conectada_em}]}.
 """
 import json
+import os
+import subprocess
 import time
 from pathlib import Path
 
 from settings import WORKERS_DIR
 
+# checagem de sessão: sai pelo MESMO túnel/IP dos bots (socks), nunca pelo IP do server
+_VALIDAR_SOCKS = os.environ.get("IG_VALIDAR_SOCKS", "127.0.0.1:1080")
+_VALIDAR_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+               "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36")
+
 _RAIZ = WORKERS_DIR.parent                     # ~/quase_nada_bots
 _SESS_DIR = _RAIZ / "sessions"
 _INDEX = _SESS_DIR / "accounts.json"
 _CENTRAL = _RAIZ / "session_cookies.json"      # o que os bots leem (default do IG_SESSION_FILE)
+
+# Estágio da conta no ciclo de aquecimento. É o que o cronograma usa pra decidir o que
+# rodar em cada uma (regras por tier, não por @ fixo → escala pra N contas sem reprogramar).
+TIERS = ("nova", "aquecendo", "pronta", "descanso", "queimada")
 
 
 def _garantir_dir():
@@ -99,10 +110,71 @@ def _migrar_sessao_existente(idx):
 
 
 def listar():
-    """Lista as contas salvas, marcando qual é a ativa."""
+    """Lista as contas salvas, marcando qual é a ativa. Preenche defaults de contas antigas
+    (criada_em cai pro conectada_em; tier vira 'nova')."""
     idx = _migrar_sessao_existente(_ler_index())
     ativa = idx.get("ativa")
-    return [{**c, "ativa": c.get("id") == ativa} for c in idx.get("contas", [])]
+    return [{
+        **c,
+        "ativa": c.get("id") == ativa,
+        "criada_em": c.get("criada_em") or c.get("conectada_em"),
+        "tier": c.get("tier") if c.get("tier") in TIERS else "nova",
+    } for c in idx.get("contas", [])]
+
+
+def _cookie_header(uid):
+    f = _sess_path(uid)
+    if not f.exists():
+        return None
+    try:
+        cks = json.loads(f.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    hdr = "; ".join(f"{c['name']}={c['value']}" for c in cks
+                    if c.get("name") and c.get("value"))
+    return hdr if "sessionid=" in hdr else None
+
+
+def validar(uid, timeout=12):
+    """True se a sessão do IG dessa conta AINDA está viva. Checa via HTTP leve (sem browser),
+    pelo MESMO túnel/IP dos bots (socks) — checar pelo IP do server faria a sessão 'pular' pra
+    um datacenter e o IG poderia MATÁ-LA. /accounts/edit/ → 200 logado, 302 (login) = caiu."""
+    hdr = _cookie_header(uid)
+    if not hdr:
+        return False
+    cmd = ["curl", "-s", "-o", os.devnull, "-w", "%{http_code}", "--max-time", str(timeout),
+           "--socks5-hostname", _VALIDAR_SOCKS,
+           "-H", f"Cookie: {hdr}", "-H", f"User-Agent: {_VALIDAR_UA}",
+           "https://www.instagram.com/accounts/edit/"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 6)
+        return r.stdout.strip() == "200"
+    except Exception:
+        return False
+
+
+def validar_todas():
+    """Valida TODAS as contas em paralelo (rápido). Retorna {uid: bool}."""
+    from concurrent.futures import ThreadPoolExecutor
+    ids = [c.get("id") for c in listar() if c.get("id")]
+    if not ids:
+        return {}
+    with ThreadPoolExecutor(max_workers=min(8, len(ids))) as ex:
+        return dict(zip(ids, ex.map(validar, ids)))
+
+
+def definir_tier(uid, tier):
+    """Marca o estágio (tier) de uma conta. Persiste no índice; sobrevive a reconexões."""
+    tier = str(tier or "").strip().lower()
+    if tier not in TIERS:
+        raise ValueError(f"tier inválido: {tier}")
+    idx = _ler_index()
+    c = next((c for c in idx.get("contas", []) if c.get("id") == uid), None)
+    if not c:
+        raise KeyError(uid)
+    c["tier"] = tier
+    _gravar_index(idx)
+    return {"id": uid, "tier": tier}
 
 
 def salvar(cookies, label=None):
@@ -117,8 +189,13 @@ def salvar(cookies, label=None):
     antigo = next((c for c in idx.get("contas", []) if c.get("id") == uid), None)
     if not label:
         label = (antigo or {}).get("label") or f"conta {uid}"
+    # criada_em NÃO reseta na reconexão (idade real da conta p/ critério de aquecimento);
+    # conectada_em é sempre a última conexão. tier preservado (default 'nova').
+    criada_em = (antigo or {}).get("criada_em") or int(time.time())
+    tier = (antigo or {}).get("tier") if (antigo or {}).get("tier") in TIERS else "nova"
     contas = [c for c in idx.get("contas", []) if c.get("id") != uid]
-    contas.append({"id": uid, "label": label, "conectada_em": int(time.time())})
+    contas.append({"id": uid, "label": label, "conectada_em": int(time.time()),
+                   "criada_em": criada_em, "tier": tier})
     _gravar_index({"ativa": uid, "contas": contas})
     _escrever_central(uid)
     return {"id": uid, "label": label, "ativa": True}

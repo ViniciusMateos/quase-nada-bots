@@ -58,49 +58,72 @@ export function InstagramLoginScreen() {
     return () => { vivo = false; };
   }, []);
 
-  // JS injetado no webview: preenche @usuário (e senha, se houver) nos campos React-controlados
-  // (setter nativo + evento 'input') e, no modo auto, clica no botão "Entrar" quando os dois
-  // campos estão prontos. NÃO mexe em captcha — se aparecer, é você quem resolve na hora.
-  const injecao = usuario ? `
+  // Preenche user+senha (se houver credencial). Roda só uma vez por documento.
+  const _fill = usuario ? `
+      if (!window.__qnFill) {
+        window.__qnFill = true;
+        var u = ${JSON.stringify(usuario)}, p = ${JSON.stringify(senha)}, auto = ${autoLogin ? 'true' : 'false'};
+        var n = 0, clicou = false;
+        var setv = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        function fill(el, val){
+          if (el && val && el.value !== val) {
+            setv.call(el, val);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }
+        function campos(){
+          var pi = document.querySelector('input[type="password"], input[name="password"]');
+          var ui = document.querySelector('input[name="username"], input[autocomplete="username"], input[type="email"], input[inputmode="email"]');
+          if (!ui) {
+            var todos = Array.prototype.slice.call(document.querySelectorAll('input'));
+            ui = todos.filter(function(x){ var t=(x.type||'text').toLowerCase(); return t!=='password'&&t!=='hidden'&&t!=='checkbox'&&t!=='submit'&&t!=='button'&&t!=='radio'; })[0];
+          }
+          return { ui: ui, pi: pi };
+        }
+        var iv = setInterval(function(){
+          n++;
+          var c = campos();
+          if (n <= 30) { fill(c.ui, u); fill(c.pi, p); }
+          if (auto && !clicou && c.ui && c.pi && c.ui.value && c.pi.value && n > 3) {
+            var cands = Array.prototype.slice.call(document.querySelectorAll('button, div[role="button"], [type="submit"]'));
+            var btn = cands.filter(function(b){
+              var t = (b.textContent || b.innerText || '').trim().toLowerCase();
+              return t==='entrar' || t==='log in' || t==='continuar' || t==='acessar' || t==='iniciar sessão';
+            })[0];
+            if (!btn && c.pi.form) { btn = c.pi.form.querySelector('button[type="submit"]') || c.pi.form.querySelector('button'); }
+            if (btn) { btn.click(); clicou = true; }
+            else if (c.pi.form) { try { (c.pi.form.requestSubmit ? c.pi.form.requestSubmit() : c.pi.form.submit()); clicou = true; } catch (e) {} }
+          }
+          if (n > 60 || clicou) clearInterval(iv);
+        }, 300);
+      }
+  ` : '';
+
+  // JS injetado no webview: (1) DISPENSA os nags pós-login (salvar login, notificações,
+  // adicionar/confirmar email) clicando em "agora não/pular/dispensar" — pra chegar no ponto
+  // de você conectar; (2) preenche o login se tiver credencial. NÃO mexe em captcha/segurança.
+  const injecao = `
     (function(){
-      if (window.__qnFill) return; window.__qnFill = true;
-      var u = ${JSON.stringify(usuario)}, p = ${JSON.stringify(senha)}, auto = ${autoLogin ? 'true' : 'false'};
-      var n = 0, clicou = false;
-      var set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-      function fill(el, val){
-        if (el && val && el.value !== val) {
-          set.call(el, val);
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-          el.dispatchEvent(new Event('change', { bubbles: true }));
-        }
+      if (!window.__qnDismiss) {
+        window.__qnDismiss = true;
+        var skip = ['agora não','agora nao','não agora','nao agora','not now','pular','skip','dispensar','dismiss'];
+        setInterval(function(){
+          var body = ((document.body && document.body.innerText) || '').toLowerCase();
+          // NUNCA dispensa tela de EMAIL / VERIFICAÇÃO / CÓDIGO — pular isso LIMITA a conta
+          // (o IG exige resolver; foi o que travava a leitura com erro 1357031). Deixa pra você.
+          if (body.indexOf('e-mail') >= 0 || body.indexOf('email') >= 0 || body.indexOf('confirm') >= 0
+              || body.indexOf('verifi') >= 0 || body.indexOf('código') >= 0 || body.indexOf('codigo') >= 0) return;
+          var els = document.querySelectorAll('button, div[role="button"], a[role="button"], a[role="link"]');
+          for (var i = 0; i < els.length; i++){
+            var t = (els[i].textContent || '').trim().toLowerCase();
+            if (t && t.length <= 14 && skip.indexOf(t) >= 0) { els[i].click(); return; }
+          }
+        }, 1200);
       }
-      function campos(){
-        var pi = document.querySelector('input[type="password"], input[name="password"]');
-        var ui = document.querySelector('input[name="username"], input[autocomplete="username"], input[type="email"], input[inputmode="email"]');
-        if (!ui) {
-          var todos = Array.prototype.slice.call(document.querySelectorAll('input'));
-          ui = todos.filter(function(x){ var t=(x.type||'text').toLowerCase(); return t!=='password'&&t!=='hidden'&&t!=='checkbox'&&t!=='submit'&&t!=='button'&&t!=='radio'; })[0];
-        }
-        return { ui: ui, pi: pi };
-      }
-      var iv = setInterval(function(){
-        n++;
-        var c = campos();
-        if (n <= 30) { fill(c.ui, u); fill(c.pi, p); }
-        if (auto && !clicou && c.ui && c.pi && c.ui.value && c.pi.value && n > 3) {
-          var cands = Array.prototype.slice.call(document.querySelectorAll('button, div[role="button"], [type="submit"]'));
-          var btn = cands.filter(function(b){
-            var t = (b.textContent || b.innerText || '').trim().toLowerCase();
-            return t==='entrar' || t==='log in' || t==='continuar' || t==='acessar' || t==='iniciar sessão';
-          })[0];
-          if (!btn && c.pi.form) { btn = c.pi.form.querySelector('button[type="submit"]') || c.pi.form.querySelector('button'); }
-          if (btn) { btn.click(); clicou = true; }
-          else if (c.pi.form) { try { (c.pi.form.requestSubmit ? c.pi.form.requestSubmit() : c.pi.form.submit()); clicou = true; } catch (e) {} }
-        }
-        if (n > 60 || clicou) clearInterval(iv);
-      }, 300);
+      ${_fill}
     })(); true;
-  ` : undefined;
+  `;
 
   async function capturar() {
     if (jaCapturou.current || status === 'capturando' || !CookieManager) return;
@@ -142,21 +165,6 @@ export function InstagramLoginScreen() {
     }
   }
 
-  // Auto-captura: assim que o sessionid aparecer (login OK — na hora, ou depois de você resolver
-  // um captcha), captura sozinho. Só no modo auto (tem credencial). Manual continua no botão.
-  useEffect(() => {
-    if (!CookieManager || !autoLogin || !limpo) return;   // só depois de zerar os cookies antigos
-    const iv = setInterval(async () => {
-      if (jaCapturou.current) { clearInterval(iv); return; }
-      try {
-        const c = await CookieManager!.get('https://www.instagram.com', true);
-        if (c && c.sessionid && c.sessionid.value) { clearInterval(iv); capturar(); }
-      } catch { /* segue tentando */ }
-    }, 2000);
-    return () => clearInterval(iv);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoLogin, limpo]);
-
   return (
     <View style={styles.tela}>
       <View style={{ flex: 1 }}>
@@ -196,8 +204,8 @@ export function InstagramLoginScreen() {
         ) : autoLogin ? (
           <>
             <Text style={styles.dica}>
-              Preenchi o login de @{usuario}. Se pedir captcha, resolve aí que eu capturo a sessão
-              sozinho. Se travar, toca em Conectar.
+              Preenchi o login de @{usuario}. Faz o login (resolve o captcha se pedir) e, quando
+              estiver dentro da conta, toque em <Text style={{ fontWeight: '700' }}>Conectar sessão</Text>.
             </Text>
             <Botao title="Conectar sessão" onPress={() => capturar()} />
           </>

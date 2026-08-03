@@ -15,6 +15,7 @@ import { ChatsScreen } from '@/screens/ChatsScreen';
 import { EditModoScreen } from '@/screens/EditModoScreen';
 import { InstagramLoginScreen } from '@/screens/InstagramLoginScreen';
 import { ContasIgScreen } from '@/screens/ContasIgScreen';
+import { CronogramaScreen } from '@/screens/CronogramaScreen';
 import { HistoricoScreen } from '@/screens/HistoricoScreen';
 
 export type RootStackParamList = {
@@ -26,16 +27,27 @@ export type RootStackParamList = {
   Chats: { botId: string };
   EditModo: { botId: string; modoNome: string; criar?: boolean };
   ContasIg: undefined;
+  Cronograma: undefined;
   InstagramLogin: { label?: string; senha?: string } | undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
-// Abre a tela da Run ao tocar numa notificação que carrega runId.
-function irParaRun(data: unknown) {
-  const d = (data ?? {}) as { runId?: string; bot?: string; titulo?: string };
-  if (d.runId && navigationRef.isReady()) {
+// Roteia o tap numa notificação: lembrete do cronograma → tela do Bot (pra rodar);
+// push de run em andamento (runId) → tela da Run.
+function aoTocarNotif(data: unknown) {
+  const d = (data ?? {}) as {
+    runId?: string; bot?: string; titulo?: string; tipo?: string; botId?: string; nome?: string;
+  };
+  if (!navigationRef.isReady()) return;
+  if (d.tipo === 'cronograma') {
+    // lembrete do cronograma → abre as Contas pra conectar/ativar a conta que vai rodar
+    // (provavelmente não está conectada). Depois é só rodar o bot.
+    navigationRef.navigate('ContasIg');
+    return;
+  }
+  if (d.runId) {
     // usa o título do PROCESSO ("Conectando Instagram" no connect, "Auto Follow" na run) —
     // o id cru do bot deixava "Run — auto-follow" no conectar, que não é universal.
     const nome = d.titulo || (d.bot ? `Run — ${d.bot}` : 'Run');
@@ -58,11 +70,11 @@ export function RootNavigator() {
     registrarPush();
     // tocou numa notificação → abre a Run correspondente
     const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
-      irParaRun(resp.notification.request.content.data);
+      aoTocarNotif(resp.notification.request.content.data);
     });
     // app aberto por uma notificação (estava fechado)
     Notifications.getLastNotificationResponseAsync().then((resp) => {
-      if (resp) irParaRun(resp.notification.request.content.data);
+      if (resp) aoTocarNotif(resp.notification.request.content.data);
     });
     return () => sub.remove();
   }, []);
@@ -90,6 +102,8 @@ export function RootNavigator() {
           options={({ route }) => ({ title: `Modo: ${route.params.modoNome}` })} />
         <Stack.Screen name="ContasIg" component={ContasIgScreen}
           options={{ title: 'Contas do Instagram' }} />
+        <Stack.Screen name="Cronograma" component={CronogramaScreen}
+          options={{ title: 'Cronograma' }} />
         <Stack.Screen name="InstagramLogin" component={InstagramLoginScreen}
           options={{ title: 'Conectar Instagram' }} />
       </Stack.Navigator>

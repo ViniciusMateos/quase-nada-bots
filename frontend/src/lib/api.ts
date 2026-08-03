@@ -5,6 +5,8 @@ export type Bot = {
   nome: string; dir: string; tem_modos: boolean; tem_chats: boolean; descricao: string;
 };
 export type Progresso = { done: number; total: number; label: string };
+// pausa em contagem regressiva: `ate` = epoch (segundos) em que a pausa acaba → o app ticka
+export type Espera = { ate: number; restam: number; motivo: string };
 export type RunInfo = {
   id: string; bot: string; status: string; started_at: number;
   // nome do PROCESSO, não do bot: "Auto Follow" ao rodar, "Conectando Instagram" ao
@@ -14,6 +16,7 @@ export type RunInfo = {
   linhas: number; progress?: Progresso | null;
   status_log?: string | null;   // a LINHA VIVA do log (o que está logando agora) — mostrada
                                  // embaixo do nome na home e no widget flutuante
+  espera?: Espera | null;        // se em pausa, a contagem regressiva (o app ticka em cima)
 };
 export type RunDetail = RunInfo & { log: string[] };
 export type Chat = { nome: string; thread_id: string };
@@ -22,13 +25,25 @@ export type IgCookie = {
   httpOnly?: boolean; secure?: boolean; sameSite?: string; session?: boolean; expirationDate?: number;
 };
 export type ConnectResult = { runs: { bot: string; id: string }[]; conta?: Account };
-export type Account = { id: string; label: string; conectada_em: number; ativa: boolean };
+export type Tier = 'nova' | 'aquecendo' | 'pronta' | 'descanso' | 'queimada';
+export type Account = {
+  id: string; label: string; conectada_em: number; ativa: boolean;
+  criada_em?: number;   // 1ª conexão — NÃO reseta ao reconectar (idade real da conta)
+  tier?: Tier;          // estágio no ciclo de aquecimento (o cronograma decide por aqui)
+  sessao_ok?: boolean;  // só no /accounts/validar: sessão do IG ainda viva?
+};
 export type RunHistorico = {
   id: string; bot: string; dry_run: boolean;
   started_at: number | null; ended_at: number | null; duracao_s: number | null;
   status: string; bloqueio: boolean; saldo: Record<string, number | string>; backfill?: boolean;
   conta?: string | null;   // @username da conta IG usada na run
 };
+
+export type CronTarefa = {
+  conta_id?: string; conta: string; bot: string; modo: string; desc: string;
+  hora: number; min: number; enviado: boolean;
+};
+export type Cronograma = { ativo: boolean; data: string; tipo: 'drop' | 'descanso'; tarefas: CronTarefa[] };
 
 export const api = {
   listBots: () => http.get<Record<string, Bot>>('/bots'),
@@ -52,9 +67,13 @@ export const api = {
   connectInstagram: (cookies: IgCookie[], label?: string) =>
     http.post<ConnectResult>('/instagram/session', { cookies, label }),
   getAccounts: () => http.get<Account[]>('/accounts'),
+  validarContas: () => http.get<Account[]>('/accounts/validar'),
   ativarConta: (id: string) => http.post<{ ativa: string }>(`/accounts/${encodeURIComponent(id)}/ativar`, {}),
+  definirTier: (id: string, tier: Tier) => http.put<{ id: string; tier: Tier }>(`/accounts/${encodeURIComponent(id)}/tier`, { tier }),
   removerConta: (id: string) => http.del(`/accounts/${encodeURIComponent(id)}`),
   registerDevice: (token: string) => http.post<{ ok: boolean; devices: number }>('/devices', { token }),
+  getCronograma: () => http.get<Cronograma>('/cronograma'),
+  setCronograma: (ativo: boolean) => http.put<{ ativo: boolean }>('/cronograma', { ativo }),
 };
 
 // URL do WebSocket de log (http→ws, com o token na query).

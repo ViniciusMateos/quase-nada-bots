@@ -1,32 +1,16 @@
-import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
+import React from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors } from '@/theme';
 import { Aparece, Botao, Card } from '@/ui/components';
-import { env } from '@/config/env';
-import { registrarPush } from '@/lib/push';
+import { OTA_VERSION, rodandoDeUpdate } from '@/constants/otaVersion';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export function SettingsScreen() {
   const nav = useNavigation<Nav>();
-  const [ativando, setAtivando] = useState(false);
-
-  async function ativarNotificacoes() {
-    setAtivando(true);
-    try {
-      const ok = await registrarPush();   // pede permissão + registra o device (só em build)
-      Alert.alert(ok ? 'Notificações ligadas' : 'Ops', ok
-        ? 'Você vai receber um push quando uma run terminar.'
-        : 'Não consegui registrar (precisa de dev build e permissão).');
-    } catch {
-      Alert.alert('Ops', 'Não consegui ativar as notificações.');
-    } finally {
-      setAtivando(false);
-    }
-  }
 
   return (
     <ScrollView style={styles.tela} contentContainerStyle={styles.conteudo}
@@ -40,19 +24,22 @@ export function SettingsScreen() {
         </Card>
       </Aparece>
 
-      <Aparece delay={80}>
+      <Aparece delay={60}>
         <Card style={{ gap: 12 }}>
-          <Text style={styles.label}>Notificações</Text>
-          <Text style={styles.dica}>Push com a barrinha de progresso enquanto a run roda, e um aviso quando termina.</Text>
-          <Botao title="Ativar notificações" onPress={ativarNotificacoes} loading={ativando} />
+          <Text style={styles.label}>Cronograma</Text>
+          <Text style={styles.dica}>Lembretes na hora certa de rodar cada bot, seguindo o ciclo de drops. Toca pra ver o plano de hoje e ligar/desligar.</Text>
+          <Botao title="Ver cronograma" onPress={() => nav.navigate('Cronograma')} />
         </Card>
       </Aparece>
 
-      <Aparece delay={160}>
-        <Card style={{ gap: 6 }}>
-          <Text style={styles.label}>Servidor</Text>
-          <Text style={styles.dica}>Conectado em {env.apiBaseUrl}</Text>
-        </Card>
+      {/* rodapé: nº do OTA (sobe a cada eas update → prova de que o bundle novo baixou)
+          + se está rodando de OTA ou do build embutido */}
+      <Aparece delay={80}>
+        <View style={styles.rodape}>
+          <Text style={styles.rodapeVersao}>
+            OTA #{OTA_VERSION}{'  ·  '}{rodandoDeUpdate() ? 'atualizado' : 'build'}
+          </Text>
+        </View>
       </Aparece>
     </ScrollView>
   );
@@ -63,4 +50,6 @@ const styles = StyleSheet.create({
   conteudo: { padding: 16, gap: 12, paddingBottom: 48 },
   label: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase' },
   dica: { color: colors.textoFraco, fontSize: 12, lineHeight: 17 },
+  rodape: { alignItems: 'center', marginTop: 18 },
+  rodapeVersao: { color: colors.textoFraco, fontSize: 12, opacity: 0.8 },
 });

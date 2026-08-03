@@ -19,6 +19,7 @@ type Tipo = 'bool' | 'cap' | 'range';
 // ── categorias (ordem de exibição) ──────────────────────────────────────────
 const CATS: { key: string; titulo: string }[] = [
   { key: 'limites', titulo: 'Limites de segurança' },
+  { key: 'aquecimento', titulo: 'Aquecimento humano' },
   { key: 'ritmo', titulo: 'Ritmo e delays' },
   { key: 'horario', titulo: 'Horário' },
   { key: 'outros', titulo: 'Outros' },
@@ -50,7 +51,18 @@ const META: Record<string, MetaF> = {
   pausa_longa: { label: 'Duração da pausa longa (s)', cat: 'ritmo', tipo: 'range', sug: [5, 15] },
   delay_entre_chats: { label: 'Delay entre chats (s)', cat: 'ritmo', tipo: 'range', sug: [120, 300] },
   usar_delay_entre_chats: { label: 'Esperar entre chats', cat: 'ritmo', tipo: 'bool' },
+  delay_scroll: { label: 'Delay entre rolagens (s)', cat: 'ritmo', tipo: 'range', sug: [2, 6] },
   active_hours: { label: 'Janela de horário (0–23)', cat: 'horario', tipo: 'range', sug: [9, 23] },
+  // ── aquecimento humano ──
+  duracao_min: { label: 'Duração da navegação (min)', cat: 'aquecimento', tipo: 'range', sug: [3, 7] },
+  max_curtidas: { label: 'Máx. curtidas por run', cat: 'aquecimento', tipo: 'cap', sug: 5 },
+  prob_curtir: { label: 'Chance de curtir por rolagem (%)', cat: 'aquecimento', tipo: 'cap', sug: 30,
+    dica: 'De 0 a 100. Ex: 30 = 30% de chance de curtir a cada rolagem (até o máximo acima).' },
+  ver_stories: { label: 'Ver stories', cat: 'aquecimento', tipo: 'bool' },
+  max_stories: { label: 'Máx. stories por run', cat: 'aquecimento', tipo: 'cap', sug: 5 },
+  prob_story: { label: 'Chance de ver stories (%)', cat: 'aquecimento', tipo: 'cap', sug: 25,
+    dica: 'De 0 a 100. Chance de ir dar uma olhada nos stories durante a navegação.' },
+  ver_explore: { label: 'Passar no explorar', cat: 'aquecimento', tipo: 'bool' },
 };
 
 // campos ESCONDIDOS do editor (o bot já cuida deles; não faz sentido mexer)
@@ -78,6 +90,10 @@ const CAMPOS_NOVO: Record<string, string[]> = {
   'dm-followers': [
     'aplicar_caps', 'max_dms_dia', 'max_dms_hora', 'max_dms_por_run', 'pausa_longa_cada',
     'delay_dm', 'delay_acao_ui', 'pausa_longa', 'active_hours',
+  ],
+  'human-warmup': [
+    'aplicar_caps', 'duracao_min', 'max_curtidas', 'prob_curtir', 'ver_stories', 'max_stories',
+    'prob_story', 'ver_explore', 'delay_scroll', 'delay_acao_ui', 'active_hours',
   ],
 };
 
@@ -107,6 +123,9 @@ export function EditModoScreen() {
   const [ligados, setLigados] = useState<Set<string>>(new Set());   // toggles ON (separado do valor!)
   const [nome, setNome] = useState(criar ? '' : modoNome);
   const [carregando, setCarregando] = useState(true);
+  // campos de TEXTO (string) não são editáveis aqui: o editor trata tudo como número e
+  // zerava eles ao salvar. Guardo à parte e devolvo intactos no montarFinal.
+  const [passthrough, setPassthrough] = useState<Record<string, unknown>>({});
 
   useEffect(() => {
     api.getModos(botId)
@@ -121,14 +140,19 @@ export function EditModoScreen() {
           : Object.keys(existente);
         const base: Record<string, Valor> = {};
         const on = new Set<string>();
+        const passa: Record<string, unknown> = {};
         campos.filter((k) => !OCULTOS.has(k)).forEach((k) => {
-          const meta = metaDe(k, existente?.[k]);
-          const v = usarTemplate ? zerado(meta.tipo) : (existente?.[k] ?? zerado(meta.tipo));
+          const orig = existente?.[k];
+          // texto (ex: "alvo") não é editável aqui → preserva e não renderiza (senão zerava)
+          if (!usarTemplate && typeof orig === 'string') { passa[k] = orig; return; }
+          const meta = metaDe(k, orig);
+          const v = usarTemplate ? zerado(meta.tipo) : (orig ?? zerado(meta.tipo));
           base[k] = v;
           if (temValor(meta.tipo, v)) on.add(k);   // já vem ligado se tinha valor
         });
         setModo(base);
         setLigados(on);
+        setPassthrough(passa);
       })
       .catch(() => {})
       .finally(() => setCarregando(false));
@@ -144,7 +168,9 @@ export function EditModoScreen() {
 
   // monta o modo final: campo ligado usa o valor; desligado vira 0 / [0,0]
   function montarFinal(): Record<string, Valor> {
-    const out: Record<string, Valor> = { ...(OCULTOS_DEFAULT[botId] ?? {}) };
+    const out: Record<string, Valor> = {
+      ...(OCULTOS_DEFAULT[botId] ?? {}), ...(passthrough as Record<string, Valor>),
+    };
     Object.keys(modo).forEach((k) => {
       const tipo = metaDe(k, modo[k]).tipo;
       if (tipo === 'bool') out[k] = Boolean(modo[k]);

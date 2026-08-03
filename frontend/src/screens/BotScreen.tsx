@@ -73,7 +73,7 @@ export function BotScreen() {
       // barra viva no lock screen (no-op no Expo Go). Vale também no dry-run: o dry agora é
       // uma simulação FIEL (mesma navegação), então dá pra testar a LA sem seguir/mandar DM.
       garantirLA(nome);
-      nav.navigate('Run', { runId: run.id, nome: botId });
+      nav.navigate('Run', { runId: run.id, nome });
     } catch (e) {
       setIniciando(false);
       carregar();   // atualiza o estado (pode já ter começado a rodar)
@@ -158,7 +158,7 @@ export function BotScreen() {
           <>
             <Botao title="Já está rodando" disabled onPress={() => {}} />
             <Botao title="Ver execução" cor={colors.card2} txtCor={colors.texto}
-              onPress={() => nav.navigate('Run', { runId: runAtiva.id, nome: botId })} />
+              onPress={() => nav.navigate('Run', { runId: runAtiva.id, nome })} />
           </>
         ) : (
           <>

@@ -176,7 +176,10 @@ class Run:
     def emitir_efemero(self, linha):
         """Manda só pros assinantes do WS (não vai pro buffer nem pro arquivo). Pra marcadores
         voláteis tipo [espera]/[espera-fim] que a tela da run mostra ao vivo mas não devem
-        sujar o log persistido."""
+        sujar o log persistido. CONTA como sinal de vida (ult_linha_t): senão o [espera] das
+        pausas longas não segurava o watchdog e ele matava a run no meio de uma pausa legítima
+        (era o 'para do nada' — a pausa 'entre posts' do auto-follow passa de 6min)."""
+        self.ult_linha_t = time.time()
         for q in list(self.subs):
             try:
                 q.put_nowait(linha)

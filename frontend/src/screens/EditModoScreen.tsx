@@ -52,6 +52,10 @@ const META: Record<string, MetaF> = {
   delay_entre_chats: { label: 'Delay entre chats (s)', cat: 'ritmo', tipo: 'range', sug: [120, 300] },
   usar_delay_entre_chats: { label: 'Esperar entre chats', cat: 'ritmo', tipo: 'bool' },
   delay_scroll: { label: 'Delay entre rolagens (s)', cat: 'ritmo', tipo: 'range', sug: [2, 6] },
+  humanizar: { label: 'Humanizar (pausas navegando)', cat: 'ritmo', tipo: 'bool',
+    dica: 'No meio de seguir/mandar DM, sai e navega (feed, story, curtir) e volta — quebra o padrão de rajada, que é o que o IG mais pega.' },
+  pausa_cada: { label: 'Pausa humana a cada N ações', cat: 'ritmo', tipo: 'cap', sug: 10,
+    dica: 'A cada quantos follows/DMs ele dá a paradinha pra navegar.' },
   active_hours: { label: 'Janela de horário (0–23)', cat: 'horario', tipo: 'range', sug: [9, 23] },
   // ── aquecimento humano ──
   duracao_min: { label: 'Duração da navegação (min)', cat: 'aquecimento', tipo: 'range', sug: [3, 7] },
@@ -85,11 +89,11 @@ const CAMPOS_NOVO: Record<string, string[]> = {
   'auto-follow': [
     'aplicar_caps', 'max_follows_dia', 'max_follows_hora', 'max_posts_por_run',
     'limite_follows_run', 'limite_interacoes_run', 'pausa_longa_cada', 'delay_follow', 'delay_post', 'delay_acao_ui',
-    'pausa_longa', 'usar_delay_entre_chats', 'delay_entre_chats', 'active_hours',
+    'pausa_longa', 'usar_delay_entre_chats', 'delay_entre_chats', 'humanizar', 'pausa_cada', 'active_hours',
   ],
   'dm-followers': [
     'aplicar_caps', 'max_dms_dia', 'max_dms_hora', 'max_dms_por_run', 'pausa_longa_cada',
-    'delay_dm', 'delay_acao_ui', 'pausa_longa', 'active_hours',
+    'delay_dm', 'delay_acao_ui', 'pausa_longa', 'humanizar', 'pausa_cada', 'active_hours',
   ],
   'human-warmup': [
     'aplicar_caps', 'duracao_min', 'max_curtidas', 'prob_curtir', 'ver_stories', 'max_stories',

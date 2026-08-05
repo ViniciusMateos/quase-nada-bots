@@ -9,6 +9,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { api, Bot, RunHistorico } from '@/lib/api';
+import { cmpTexto } from '@/lib/ordenar';
 import { colors } from '@/theme';
 import { Aparece, Botao, Card } from '@/ui/components';
 import { TelaCarregando } from '@/ui/LoadingDog';
@@ -129,10 +130,14 @@ export function HistoricoScreen() {
     return { runs: filtrados.length, acoes };
   }, [filtrados]);
 
+  // listagens SEMPRE ordenadas: bots pelo nome de exibição, contas em ordem natural
+  // (@segue2 antes de @segue10) — antes vinham na ordem de aparição nas runs (aleatória).
   const botsDisponiveis = useMemo(
-    () => Array.from(new Set((regs ?? []).map((r) => r.bot))), [regs]);
+    () => Array.from(new Set((regs ?? []).map((r) => r.bot)))
+      .sort((a, b) => cmpTexto(nomes[a] ?? a, nomes[b] ?? b)), [regs, nomes]);
   const contasDisponiveis = useMemo(
-    () => Array.from(new Set((regs ?? []).map((r) => r.conta).filter(Boolean))) as string[], [regs]);
+    () => (Array.from(new Set((regs ?? []).map((r) => r.conta).filter(Boolean))) as string[])
+      .sort(cmpTexto), [regs]);
 
   // filtros ATIVOS (fora do padrão) → viram chips removíveis na barra; o resto mora no sheet
   const chipsAtivos = useMemo(() => {

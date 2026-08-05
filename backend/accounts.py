@@ -71,6 +71,14 @@ def profile_dir(uid):
     return str(_SESS_DIR / f"profile_{uid}")
 
 
+def sessao_path(uid):
+    """Caminho do arquivo de sessão DESTA conta (str) se existir, senão None. É o que o
+    run_manager aponta em IG_SESSION_FILE pra rodar uma conta específica (lote) sem precisar
+    trocar a ativa — cada run lê a sessão da SUA conta, sem corrida no arquivo central."""
+    f = _sess_path(uid)
+    return str(f) if f.exists() else None
+
+
 def ativa_id():
     """Id (ds_user_id) da conta ativa, ou None."""
     return _migrar_sessao_existente(_ler_index()).get("ativa")

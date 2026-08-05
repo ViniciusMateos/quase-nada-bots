@@ -19,6 +19,7 @@ export type RunInfo = {
   espera?: Espera | null;        // se em pausa, a contagem regressiva (o app ticka em cima)
 };
 export type RunDetail = RunInfo & { log: string[] };
+export type LoteInfo = { lote: true; bot: string; total: number; contas: string[]; run_id?: string };
 export type Chat = { nome: string; thread_id: string };
 export type IgCookie = {
   name: string; value: string; domain?: string; path?: string;
@@ -53,6 +54,9 @@ export const api = {
   addChat: (bot: string, nome: string, thread_id: string) => http.post<Chat>(`/bots/${bot}/chats`, { nome, thread_id }),
   delChat: (bot: string, nome: string) => http.del(`/bots/${bot}/chats/${encodeURIComponent(nome)}`),
   startRun: (bot: string, params: Record<string, unknown>) => http.post<RunInfo>('/runs', { bot, params }),
+  // roda o bot em VÁRIAS contas, uma atrás da outra. contas = ids; vazio = todas as ativas.
+  runLote: (bot: string, params: Record<string, unknown>, contas: string[]) =>
+    http.post<LoteInfo>(`/bots/${bot}/run-lote`, { params, contas }),
   listRuns: () => http.get<RunInfo[]>('/runs'),
   getHistorico: () => http.get<RunHistorico[]>('/runs/history'),
   getRun: (id: string) => http.get<RunDetail>(`/runs/${id}`),

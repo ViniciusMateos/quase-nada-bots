@@ -222,6 +222,28 @@ async def start_run(payload: dict):
     return run.info()
 
 
+@app.post("/bots/{bot_id}/run-lote", dependencies=[Depends(auth)])
+async def start_run_lote(bot_id: str, payload: dict):
+    """Roda o bot em VÁRIAS contas, uma atrás da outra. `contas` = lista de ids; se vier vazia,
+    usa TODAS as contas com sessão ativa (valida na hora). `params` = os mesmos de um run normal
+    (modo, dry_run, start_from)."""
+    _checar_bot(bot_id)
+    if any(r.bot == bot_id and r.status in ("rodando", "iniciando") and not r.params.get("import_cookies")
+           for r in mgr.runs.values()):
+        raise HTTPException(409, "esse bot já está rodando — espera terminar")
+    base = payload.get("params", {}) or {}
+    contas = payload.get("contas") or []
+    if not contas:                                   # sem lista → todas as ativas
+        res = await asyncio.to_thread(accounts.validar_todas)
+        contas = [uid for uid, ok in res.items() if ok]
+    if not contas:
+        raise HTTPException(400, "nenhuma conta com sessão ativa")
+    try:
+        return await mgr.start_lote(bot_id, base, contas)
+    except ValueError as e:
+        raise HTTPException(400, str(e))   # sem contas / sem sessão salva
+
+
 @app.get("/runs", dependencies=[Depends(auth)])
 async def list_runs():
     return mgr.listar()

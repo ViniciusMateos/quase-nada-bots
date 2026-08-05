@@ -25,6 +25,11 @@ BOTS = {
         "tem_modos": True, "tem_chats": False, "tem_ig": True,
         "descricao": "Navega como gente (feed, story, curtidas) pra aquecer a conta.",
     },
+    "like-repost": {
+        "nome": "Like + Repost", "dir": "like-repost-instagram",
+        "tem_modos": True, "tem_chats": False, "tem_ig": True,
+        "descricao": "Curte (e reposta) os posts de uma conta-alvo — ex: o drop do brechó.",
+    },
 }
 
 # arquivo (dentro do dir do worker) onde a sessão importada do IG é gravada

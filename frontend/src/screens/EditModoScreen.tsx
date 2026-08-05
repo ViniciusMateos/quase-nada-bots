@@ -13,11 +13,12 @@ import type { RootStackParamList } from '@/navigation/RootNavigator';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Rt = RouteProp<RootStackParamList, 'EditModo'>;
 type Modos = Record<string, Record<string, unknown>>;
-type Valor = number | boolean | number[];
-type Tipo = 'bool' | 'cap' | 'range';
+type Valor = number | boolean | number[] | string;
+type Tipo = 'bool' | 'cap' | 'range' | 'text';
 
 // ── categorias (ordem de exibição) ──────────────────────────────────────────
 const CATS: { key: string; titulo: string }[] = [
+  { key: 'alvo', titulo: 'Alvo e ações' },
   { key: 'limites', titulo: 'Limites de segurança' },
   { key: 'aquecimento', titulo: 'Aquecimento humano' },
   { key: 'ritmo', titulo: 'Ritmo e delays' },
@@ -67,6 +68,16 @@ const META: Record<string, MetaF> = {
   prob_story: { label: 'Chance de ver stories (%)', cat: 'aquecimento', tipo: 'cap', sug: 25,
     dica: 'De 0 a 100. Chance de ir dar uma olhada nos stories durante a navegação.' },
   ver_explore: { label: 'Passar no explorar', cat: 'aquecimento', tipo: 'bool' },
+  // ── like + repost ──
+  alvo: { label: 'Conta-alvo', cat: 'alvo', tipo: 'text', sug: 'brechoquasenadaa',
+    dica: 'De quem curtir/repostar os posts (sem o @). Ex: brechoquasenadaa.' },
+  curtir: { label: 'Curtir os posts', cat: 'alvo', tipo: 'bool' },
+  repostar: { label: 'Repostar os posts', cat: 'alvo', tipo: 'bool',
+    dica: 'Repost nativo do IG (via web). Se o botão não existir no web, ele avisa e segue só curtindo.' },
+  primeira_vez_ultimos: { label: 'Na 1ª vez, pegar os N mais recentes', cat: 'alvo', tipo: 'cap', sug: 10,
+    dica: 'Quantos posts do alvo pegar na 1ª run (o drop). Depois pega só os novos, sozinho.' },
+  max_por_run: { label: 'Máx. posts por run', cat: 'limites', tipo: 'cap', sug: 15,
+    dica: 'Teto de posts por execução. Desligado = processa todos os pendentes.' },
 };
 
 // campos ESCONDIDOS do editor (o bot já cuida deles; não faz sentido mexer)
@@ -99,18 +110,25 @@ const CAMPOS_NOVO: Record<string, string[]> = {
     'aplicar_caps', 'duracao_min', 'max_curtidas', 'prob_curtir', 'ver_stories', 'max_stories',
     'prob_story', 'ver_explore', 'delay_scroll', 'delay_acao_ui', 'active_hours',
   ],
+  'like-repost': [
+    'alvo', 'curtir', 'repostar', 'primeira_vez_ultimos', 'aplicar_caps', 'max_por_run',
+    'delay_post', 'delay_acao_ui', 'humanizar', 'pausa_cada', 'active_hours',
+  ],
 };
 
 function metaDe(k: string, v: unknown): MetaF {
   if (META[k]) return META[k];
-  const tipo: Tipo = typeof v === 'boolean' ? 'bool' : Array.isArray(v) ? 'range' : 'cap';
+  const tipo: Tipo = typeof v === 'boolean' ? 'bool' : typeof v === 'string' ? 'text'
+    : Array.isArray(v) ? 'range' : 'cap';
   return { label: k, cat: 'outros', tipo };
 }
 
-const zerado = (tipo: Tipo): Valor => (tipo === 'bool' ? false : tipo === 'range' ? [0, 0] : 0);
+const zerado = (tipo: Tipo): Valor =>
+  (tipo === 'bool' ? false : tipo === 'text' ? '' : tipo === 'range' ? [0, 0] : 0);
 
 function temValor(tipo: Tipo, v: Valor): boolean {
   if (tipo === 'bool') return Boolean(v);
+  if (tipo === 'text') return Boolean(String(v ?? '').trim());
   if (tipo === 'range') { const a = v as number[]; return (a?.[0] || 0) > 0 || (a?.[1] || 0) > 0; }
   return (v as number) > 0;
 }
@@ -147,12 +165,14 @@ export function EditModoScreen() {
         const passa: Record<string, unknown> = {};
         campos.filter((k) => !OCULTOS.has(k)).forEach((k) => {
           const orig = existente?.[k];
-          // texto (ex: "alvo") não é editável aqui → preserva e não renderiza (senão zerava)
-          if (!usarTemplate && typeof orig === 'string') { passa[k] = orig; return; }
           const meta = metaDe(k, orig);
-          const v = usarTemplate ? zerado(meta.tipo) : (orig ?? zerado(meta.tipo));
+          // string SEM meta 'text' (não editável) → passthrough: preserva e não renderiza
+          if (!usarTemplate && typeof orig === 'string' && meta.tipo !== 'text') { passa[k] = orig; return; }
+          const v = usarTemplate
+            ? (meta.tipo === 'text' ? ((meta.sug as string) ?? '') : zerado(meta.tipo))
+            : (orig ?? zerado(meta.tipo));
           base[k] = v;
-          if (temValor(meta.tipo, v)) on.add(k);   // já vem ligado se tinha valor
+          if (meta.tipo !== 'text' && temValor(meta.tipo, v)) on.add(k);   // já vem ligado se tinha valor
         });
         setModo(base);
         setLigados(on);
@@ -178,6 +198,7 @@ export function EditModoScreen() {
     Object.keys(modo).forEach((k) => {
       const tipo = metaDe(k, modo[k]).tipo;
       if (tipo === 'bool') out[k] = Boolean(modo[k]);
+      else if (tipo === 'text') out[k] = String(modo[k] ?? '').replace(/^@+/, '').trim();
       else out[k] = ligados.has(k) ? modo[k] : zerado(tipo);
     });
     return out;
@@ -273,15 +294,23 @@ export function EditModoScreen() {
 function Campo({ meta, valor, on, onToggle, onChange }: {
   meta: MetaF; valor: Valor; on: boolean; onToggle: (on: boolean) => void; onChange: (v: Valor) => void;
 }) {
+  const isText = meta.tipo === 'text';
   return (
     <Animated.View style={styles.campo} layout={LinearTransition.duration(220)}>
       <View style={styles.linhaTop}>
         <Text style={styles.campoLabel}>{meta.label}</Text>
-        <Switch value={on} onValueChange={onToggle}
-          trackColor={{ true: colors.marca, false: colors.border }} thumbColor="#fff" />
+        {!isText && (
+          <Switch value={on} onValueChange={onToggle}
+            trackColor={{ true: colors.marca, false: colors.border }} thumbColor="#fff" />
+        )}
       </View>
       {meta.dica ? <Text style={styles.campoDica}>{meta.dica}</Text> : null}
 
+      {isText && (
+        <TextInput style={styles.input} autoCapitalize="none" autoCorrect={false}
+          placeholder="brechoquasenadaa" placeholderTextColor={colors.textoFraco}
+          value={String(valor ?? '')} onChangeText={(t) => onChange(t.replace(/^@+/, ''))} />
+      )}
       {meta.tipo === 'cap' && on && (
         <Animated.View entering={FadeInDown.duration(200)} exiting={FadeOutUp.duration(160)}>
           <TextInput style={styles.input} keyboardType="numeric" placeholder="0"

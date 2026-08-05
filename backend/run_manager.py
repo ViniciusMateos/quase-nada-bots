@@ -45,6 +45,9 @@ def _proc_info(bot_id, params):
         }
     # título SEMPRE prefixado com o nome do bot → na lista do iPhone dá pra separar por bot
     # (o iOS junta tudo num monte só do app; o prefixo é o que deixa cada um identificável)
+    if (params or {}).get("lote"):
+        n = (params or {}).get("lote_total") or ""
+        nome = f"{nome} · lote{f' ({n} contas)' if n else ''}"
     return {
         "titulo": nome,
         "fim_ok": (f"{nome} · terminou", f"{nome} finalizou."),
@@ -438,9 +441,20 @@ class RunManager:
         # conectada (conta_id nos params); a run normal usa a conta ATIVA. Assim conectar/rodar
         # uma conta não derruba a sessão das outras (o problema do profile compartilhado).
         try:
-            uid = params.get("conta_id") or accounts.ativa_id()
-            if uid:
-                env["IG_USER_DATA_DIR"] = accounts.profile_dir(uid)
+            if params.get("lote_contas"):
+                # LOTE = UM processo rodando várias contas: passa a lista (sessão+perfil+rótulo);
+                # o worker aponta config.SESSION_FILE/USER_DATA_DIR por conta no loop interno.
+                env["IG_LOTE_CONTAS"] = json.dumps(params["lote_contas"])
+            else:
+                uid = params.get("conta_id") or accounts.ativa_id()
+                if uid:
+                    env["IG_USER_DATA_DIR"] = accounts.profile_dir(uid)
+                    # sessão POR conta (não a central): roda a conta certa sem trocar a ativa.
+                    # No import a sessão vai pra central (fluxo de conectar), então não mexe aí.
+                    if not params.get("import_cookies"):
+                        sp = accounts.sessao_path(uid)
+                        if sp:
+                            env["IG_SESSION_FILE"] = sp
         except Exception:
             pass
         # HEADED sob display virtual (Xvfb) em vez de headless. MEDIDO: o Chromium headless
@@ -481,6 +495,33 @@ class RunManager:
         # bot novo entrou → o card muda de forma (ganha linha, a média recalcula)
         asyncio.create_task(self.empurrar_la(forcar=True))
         return run
+
+    # ───────────────────────────── LOTE (várias contas) ─────────────────────────────
+    async def start_lote(self, bot_id, base_params, uids):
+        """LOTE = UMA run só (UM processo) rodando todas as contas em sequência DENTRO do worker.
+        Antes era 1 run por conta (vários terminais, e o parar não parava). Agora o app vê 1 run:
+        mostra qual conta está (conta i/N), um log, um balão. Parar mata o processo → para tudo.
+        A lista de contas (sessão+perfil+rótulo) vai por env pro worker (IG_LOTE_CONTAS)."""
+        if not bots.existe(bot_id):
+            raise ValueError(f"bot desconhecido: {bot_id}")
+        uids = [u for u in (uids or []) if u]
+        if not uids:
+            raise ValueError("sem contas pro lote")
+        infos = {c.get("id"): c for c in accounts.listar()}
+        contas = []
+        for u in uids:
+            sp = accounts.sessao_path(u)
+            if not sp:
+                continue   # sem arquivo de sessão salvo → não dá pra logar, pula
+            contas.append({"id": u, "label": (infos.get(u) or {}).get("label") or u,
+                           "session": sp, "profile": accounts.profile_dir(u)})
+        if not contas:
+            raise ValueError("nenhuma das contas escolhidas tem sessão salva")
+        params = {**dict(base_params or {}), "lote": True,
+                  "lote_contas": contas, "lote_total": len(contas)}
+        run = await self.start(bot_id, params)
+        return {"lote": True, "bot": bot_id, "total": len(contas),
+                "contas": [c["label"] for c in contas], "run_id": run.id}
 
     async def _pump(self, run):
         try:
@@ -553,7 +594,8 @@ class RunManager:
         })
 
     async def _push_inicio(self, run):
-        """Avisa o celular que a run começou (pula import de cookies)."""
+        """Avisa o celular que a run começou (pula import de cookies). O lote é UMA run só, então
+        notifica normal (começou/terminou) — não é mais N runs pra virar spam."""
         if run.params.get("import_cookies"):
             return
         nome = bots.BOTS.get(run.bot, {}).get("nome", run.bot)
@@ -623,6 +665,8 @@ class RunManager:
         run = self.runs.get(run_id)
         if not run or not run.proc:
             return False
+        # o lote agora é 1 processo só rodando todas as contas → matar esse processo (abaixo)
+        # já para o lote inteiro. Nada de coordenador pra cancelar.
         # marca PARADO sempre que estava ativo — MESMO se o processo já morreu por fora. É isso
         # que libera o guard 409 e destrava o app quando o run virou zumbi (rodando + proc morto).
         if run.status in ("rodando", "iniciando"):

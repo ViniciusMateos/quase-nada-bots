@@ -3,6 +3,20 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [1.3.0] — 2026-08-05
+
+### Adicionado
+- feat: **bot like-repost** — curte e reposta os posts de uma conta-alvo (ex: o drop do brechó) a partir das contas auxiliares, pelas **mutations GraphQL do próprio IG web** (registra de verdade); alvo configurável por modo e fluxo resumável (marco por conta e alvo)
+- feat: **modo lote** — roda o like-repost em **várias contas numa run só**, uma de cada vez, mostrando qual conta está e o progresso por post (parar aborta o lote inteiro)
+- feat: **listagens em ordem natural** — filtros do histórico, contas e modos agora ordenam com número na ordem certa (segue2 antes de segue10)
+- feat: **rotação de mensagens no DM** — 5 variações mais suaves (sem apelo de desconto, sem emoji), pra cortar o flag de "mesma mensagem em massa"
+
+### Modificado
+- update: o **Hub revalida a sessão sozinho** quando termina de conectar uma conta — não precisa mais tocar em "sincronizar"
+
+### Corrigido
+- fix: **sessão por conta** no lote (cada run usa a sessão da sua conta, sem corromper as outras); o worker só age se a sessão logar de verdade (não finge "curti") e não salva sessão deslogada por cima da boa
+
 ## [1.2.1] — 2026-07-29
 
 ### Adicionado

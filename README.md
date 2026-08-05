@@ -10,7 +10,7 @@ paralela e notificações.
 |---|---|
 | `frontend/` | **App** React Native (Expo + TS) — o hub no iPhone. Builds EAS dev/preview. |
 | `backend/` | **API** FastAPI — orquestra os bots como subprocessos, log via WebSocket, CRUD de modos/chats. |
-| `workers/` | Os **bots** (`auto-follow-instagram`, `dm-followers`) — cada um com repo próprio no GitHub. |
+| `workers/` | Os **bots** (`auto-follow-instagram`, `dm-followers-instagram`, `human-warmup-instagram`, `like-repost-instagram`) — cada um com repo próprio no GitHub. |
 
 O **backend + workers** rodam juntos na Oracle (uma unidade de deploy). O **app** é
 buildado com EAS e fala com o backend pela API + WebSocket.
@@ -46,9 +46,11 @@ Detalhes: `frontend/README.md` (app) e `backend/README.md` (API).
 
 ## Status
 
-**Lançado.** Bots (`auto-follow` + `dm-followers`), backend FastAPI (runs, execução
-paralela, log ao vivo via WebSocket, histórico persistente com log em disco), app iOS
-(hub, **histórico com filtros** em bottom sheet, log ao vivo, **gerenciador de contas
-do Instagram** — várias contas salvas com login autofill, uma ativa por vez), **Live
-Activity** no lock screen / Dynamic Island, push de progresso, deploy na Oracle e
-proxy residencial auto-curável.
+**Lançado.** Bots (`auto-follow`, `dm-followers`, `human-warmup` e `like-repost` —
+este curte + reposta o drop de uma conta-alvo, em **lote** de várias contas numa run
+só), backend FastAPI (runs, execução paralela, log ao vivo via WebSocket, histórico
+persistente com log em disco), app iOS (hub, **histórico com filtros** em bottom sheet,
+log ao vivo, **gerenciador de contas do Instagram** — várias contas salvas com login
+autofill, uma ativa por vez, revalidação automática ao conectar), **Live Activity** no
+lock screen / Dynamic Island, push de progresso, deploy na Oracle e proxy residencial
+auto-curável.

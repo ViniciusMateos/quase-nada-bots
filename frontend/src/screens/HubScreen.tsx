@@ -1,9 +1,10 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { api, Bot, RunInfo, Account } from '@/lib/api';
+import { cmpTexto } from '@/lib/ordenar';
 import { Credencial, lerCredenciais } from '@/lib/credenciais';
 import { colors, statusCor } from '@/theme';
 import { Aparece, BarraProgresso, Card, CartaoTocavel, Pill, Pulsar } from '@/ui/components';
@@ -27,6 +28,21 @@ export function HubScreen() {
   const jaValidou = useRef(false);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // revalidação automática ao terminar uma conexão (import de cookies): sem isto, depois de
+  // conectar/reconectar pelo Hub a conta ficava com status velho até tocar "sincronizar" na mão.
+  const validarRef = useRef<() => void>(() => {});
+  const importVistos = useRef<Set<string>>(new Set());
+  const primeiraCargaRuns = useRef(true);
+  const checarConexaoNova = useCallback((rs: RunInfo[]) => {
+    // conexões (import) que JÁ terminaram e ainda não tratei → revalida as sessões sozinho
+    const novas = rs.filter((r) =>
+      (r.params as { import_cookies?: unknown })?.import_cookies &&
+      ['finalizado', 'parado', 'erro'].includes(r.status) &&
+      !importVistos.current.has(r.id));
+    novas.forEach((r) => importVistos.current.add(r.id));
+    if (primeiraCargaRuns.current) { primeiraCargaRuns.current = false; return; } // 1ª carga: só marca
+    if (novas.length) validarRef.current();   // uma conexão acabou desde a última vez → sincroniza
+  }, []);
 
   const carregar = useCallback(async () => {
     setLoading(true); setErro(null);
@@ -38,6 +54,7 @@ export function HubScreen() {
       ]);
       setBots(Object.entries(b));
       setRuns(r);
+      checarConexaoNova(r);
       setContas(cs);
       setCreds(cr);
     } catch {
@@ -47,13 +64,13 @@ export function HubScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [checarConexaoNova]);
 
   // só as runs (leve) — pra atualizar "Rodando agora" e a barra de progresso sem recarregar
-  // a lista de bots inteira
+  // a lista de bots inteira. Também detecta conexão que acabou → revalida sozinho.
   const atualizarRuns = useCallback(async () => {
-    try { setRuns(await api.listRuns()); } catch { /* offline / sem server */ }
-  }, []);
+    try { const rs = await api.listRuns(); setRuns(rs); checarConexaoNova(rs); } catch { /* offline */ }
+  }, [checarConexaoNova]);
 
   // checa (via túnel) se a sessão de cada conta ainda está viva — pesado-ish, só no abrir/refresh
   const validar = useCallback(async () => {
@@ -65,6 +82,7 @@ export function HubScreen() {
       setSessoes(m);
     } catch { /* offline */ } finally { setVerificando(false); }
   }, []);
+  useEffect(() => { validarRef.current = validar; }, [validar]);
 
   useFocusEffect(useCallback(() => {
     carregar();
@@ -91,7 +109,7 @@ export function HubScreen() {
       const prev = map.get(k);
       map.set(k, { usuario: prev?.usuario || a.label, senha: prev?.senha, id: a.id, ativa: a.ativa });
     }
-    return [...map.values()].sort((a, b) => a.usuario.toLowerCase().localeCompare(b.usuario.toLowerCase()));
+    return [...map.values()].sort((a, b) => cmpTexto(a.usuario, b.usuario));
   }, [creds, contas]);
 
   function ativarConta(e: AccEntry) {

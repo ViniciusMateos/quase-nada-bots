@@ -37,6 +37,20 @@ function janelaPeriodo(p: Periodo): [number, number] {
   return [0, Infinity];   // tudo
 }
 
+// rótulo do cabeçalho de data: Hoje / Ontem / N dias atrás (até 6) / Semana 2, 3… (por semana)
+function bucketData(epoch: number | null): string {
+  if (!epoch) return 'Sem data';
+  const h = new Date();
+  const inicioHoje = new Date(h.getFullYear(), h.getMonth(), h.getDate()).getTime();
+  const d = new Date(epoch * 1000);
+  const inicioDia = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const dias = Math.round((inicioHoje - inicioDia) / 86400000);
+  if (dias <= 0) return 'Hoje';
+  if (dias === 1) return 'Ontem';
+  if (dias <= 6) return `${dias} dias atrás`;
+  return `Semana ${Math.floor(dias / 7) + 1}`;
+}
+
 // backdrop que faz FADE por trás do sheet (independente do slide do sheet)
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -139,6 +153,20 @@ export function HistoricoScreen() {
     () => (Array.from(new Set((regs ?? []).map((r) => r.conta).filter(Boolean))) as string[])
       .sort(cmpTexto), [regs]);
 
+  // runs (mais novas primeiro) com CABEÇALHOS de data intercalados (Hoje/Ontem/N dias/Semana X).
+  // Vale com qualquer filtro ativo — o agrupamento é sobre o conjunto já filtrado.
+  const listaComCabecalhos = useMemo<(RunHistorico | { _header: string })[]>(() => {
+    const ord = [...filtrados].sort((a, b) => (b.ended_at ?? 0) - (a.ended_at ?? 0));
+    const out: (RunHistorico | { _header: string })[] = [];
+    let atual: string | null = null;
+    for (const r of ord) {
+      const b = bucketData(r.ended_at);
+      if (b !== atual) { out.push({ _header: b }); atual = b; }
+      out.push(r);
+    }
+    return out;
+  }, [filtrados]);
+
   // filtros ATIVOS (fora do padrão) → viram chips removíveis na barra; o resto mora no sheet
   const chipsAtivos = useMemo(() => {
     const cs: { key: string; label: string; clear: () => void }[] = [];
@@ -157,8 +185,8 @@ export function HistoricoScreen() {
     {dog}
     <FlatList
       style={styles.tela}
-      data={filtrados}
-      keyExtractor={(r) => r.id}
+      data={listaComCabecalhos}
+      keyExtractor={(item) => ('_header' in item ? `h:${item._header}` : item.id)}
       contentContainerStyle={{ padding: 16, gap: 8, paddingBottom: 24 }}
       {...scrollProps}
       ListHeaderComponent={
@@ -214,6 +242,13 @@ export function HistoricoScreen() {
       }
       ListEmptyComponent={<Text style={styles.vazio}>Nenhuma run nesse filtro.</Text>}
       renderItem={({ item }) => {
+        if ('_header' in item) {
+          return (
+            <Animated.View entering={FadeIn.duration(220)} layout={LinearTransition.duration(220)}>
+              <Text style={styles.dataHeader}>{item._header}</Text>
+            </Animated.View>
+          );
+        }
         const res = resultado(item);
         const dur = fmtDur(item.duracao_s);
         return (
@@ -384,4 +419,8 @@ const styles = StyleSheet.create({
   metaConta: { color: colors.marca, fontSize: 12, fontWeight: '700' },
   metaFraco: { color: colors.border, fontSize: 12 },
   vazio: { color: colors.textoFraco, textAlign: 'center', marginTop: 24 },
+  dataHeader: {
+    color: colors.texto, fontSize: 13, fontWeight: '800', textTransform: 'uppercase',
+    letterSpacing: 0.6, marginTop: 10, marginBottom: 2,
+  },
 });

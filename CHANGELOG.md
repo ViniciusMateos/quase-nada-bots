@@ -3,6 +3,11 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [1.3.1] — 2026-08-06
+
+### Adicionado
+- feat: **cabeçalhos de data no histórico** — as runs ficam agrupadas por **Hoje / Ontem / N dias atrás** (até 6) e depois por **Semana 2, 3…**; vale com qualquer filtro ativo
+
 ## [1.3.0] — 2026-08-05
 
 ### Adicionado

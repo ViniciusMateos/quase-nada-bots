@@ -3,6 +3,24 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [1.4.0] — 2026-08-18
+
+### Adicionado
+- feat: **notificações separadas em montes** — cada push carrega um `threadId` (iOS), então os avisos ficam agrupados por **bot**, por **cronograma** e por **conexão de conta**, em vez de tudo embolado no lock screen
+- feat: **seletor de conta na tela de rodar** — o botão vira "Rodar com @conta" (mostra a ativa) e um botão "trocar" abre o popup com todas as contas e o status de sessão; sem sessão viva, cai direto no reconectar
+- feat: **tela "Verificando conta"** ao tocar o lembrete do cronograma — mostra o cachorro + "verificando @conta" e avisa se está disponível (abre o bot) ou se a sessão caiu (leva pro reconectar), em vez da tela parada
+- feat: **status de sessão na tela de Contas** (igual o Hub) e botão **"Adicionar conta" no topo**
+- feat: **aviso de OTA desatualizada** no Settings — checa se há versão nova e mostra "desatualizado" + botão "Atualizar agora"
+
+### Modificado
+- update: **cronograma só aquecimento humano** — 2x por dia em cada conta (uma de manhã, uma de tarde/noite), horários sorteados e separados; sai a lógica de tier/drop/descanso e os bots de dinheiro; escala pra qualquer número de contas
+- update: **cores do Hub** — verde só na conta ativa/em uso; "sessão ok" e "ativar" ficam neutros
+- update: **logo do Live Activity maior** — a logo passa a preencher o anel (igual o brechó); a imagem tinha 44% de margem transparente
+- refactor: **remove o estágio (tier) das contas** — some do backend, da API e das telas
+
+### Corrigido
+- fix: **locks órfãos do Chromium** — remove `SingletonLock/Cookie/Socket` de um Chromium morto antes de subir o próximo run no mesmo profile (destravava o auto-follow depois de uma run morta)
+
 ## [1.3.1] — 2026-08-06
 
 ### Adicionado

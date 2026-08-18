@@ -46,9 +46,6 @@ export function CronogramaScreen() {
 
   if (!cron) return <TelaCarregando />;
 
-  const drop = cron.tipo === 'drop';
-  const corSemana = drop ? colors.marca : colors.textoFraco;
-
   return (
     <View style={styles.tela}>
       {dog}
@@ -60,7 +57,7 @@ export function CronogramaScreen() {
             <View style={styles.linha}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.titulo}>Lembretes de rodar</Text>
-                <Text style={styles.sub}>Um push na hora certa te avisa qual bot rodar em qual conta.</Text>
+                <Text style={styles.sub}>Um push te lembra de rodar o aquecimento humano em cada conta, 2x por dia.</Text>
               </View>
               <Switch value={cron.ativo} onValueChange={toggle} disabled={salvando}
                 trackColor={{ true: colors.marca, false: colors.border }} thumbColor="#fff" />
@@ -71,19 +68,14 @@ export function CronogramaScreen() {
         <Aparece delay={60}>
           <View style={styles.hojeRow}>
             <Text style={styles.hoje}>{fmtData(cron.data)}</Text>
-            <View style={[styles.badge, { borderColor: corSemana }]}>
-              <View style={[styles.badgeDot, { backgroundColor: corSemana }]} />
-              <Text style={[styles.badgeTxt, { color: corSemana }]}>
-                {drop ? 'SEMANA DE DROP' : 'SEMANA DE DESCANSO'}
-              </Text>
-            </View>
+            <Text style={styles.hojeSub}>aquecimento · 2x por conta</Text>
           </View>
         </Aparece>
 
         {!cron.ativo ? (
           <Text style={styles.vazio}>Lembretes desligados. Liga aí em cima pra receber os pushes.</Text>
         ) : cron.tarefas.length === 0 ? (
-          <Text style={styles.vazio}>Nada agendado pra hoje. Aproveita e descansa as contas.</Text>
+          <Text style={styles.vazio}>Nenhuma conta cadastrada. Adicione uma conta pra agendar o aquecimento.</Text>
         ) : cron.tarefas.map((t, i) => (
           <Aparece key={`${t.conta}-${t.hora}-${t.min}-${i}`} delay={Math.min(i, 8) * 40}>
             <TouchableOpacity activeOpacity={0.7}
@@ -96,7 +88,7 @@ export function CronogramaScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.tarefaBot}>{NOME_BOT[t.bot] || t.bot} · @{t.conta}</Text>
-                  <Text style={styles.tarefaSub}>modo "{t.modo}" — {t.desc}</Text>
+                  <Text style={styles.tarefaSub}>hora de rodar o aquecimento</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={colors.textoFraco} />
               </Card>
@@ -120,9 +112,7 @@ const styles = StyleSheet.create({
   sub: { color: colors.textoFraco, fontSize: 12, lineHeight: 17, marginTop: 3 },
   hojeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   hoje: { color: colors.texto, fontSize: 15, fontWeight: '700', textTransform: 'capitalize' },
-  badge: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  badgeDot: { width: 7, height: 7, borderRadius: 999 },
-  badgeTxt: { fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
+  hojeSub: { color: colors.textoFraco, fontSize: 12, fontWeight: '600' },
   vazio: { color: colors.textoFraco, textAlign: 'center', marginVertical: 24, lineHeight: 20 },
   tarefa: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   hora: { alignItems: 'center', gap: 3, width: 52 },

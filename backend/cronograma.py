@@ -1,14 +1,12 @@
 """
 Cronograma de lembretes.
 
-Manda push notifications lembrando de RODAR os bots (o login/run é manual), em
-horários ALEATÓRIOS dentro de janelas do dia, seguindo o ciclo quinzenal de drops:
-  - drop cai sempre na TERÇA, "uma semana sim, uma não" (âncora: terça 04/08/2026 é drop);
-  - semana de DROP  → forte nas contas Prontas (money follow + DM) + aquece 1 conta/dia;
-  - semana de DESCANSO → Prontas leves + foco em aquecer as contas novas/aquecendo.
+Manda push notifications lembrando de RODAR o AQUECIMENTO HUMANO (o login/run é
+manual), em horários ALEATÓRIOS dentro de janelas do dia.
 
 Regras de ouro:
-  - decide o que rodar por TIER da conta (não por @ fixo) → escala pra N contas sozinho;
+  - só aquecimento humano, em TODAS as contas, TODO dia, 2x por conta;
+  - as 2 vezes caem em faixas separadas (1 de manhã, 1 de tarde/noite) → nunca coladas;
   - 1 conta por janela (só temos 1 IP → nunca duas contas na mesma faixa de horário);
   - horário sorteado por dia (estável no dia → restart-safe) pra não virar padrão.
 
@@ -19,7 +17,7 @@ Persistência:
 import asyncio
 import json
 import random
-from datetime import date, datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 try:
@@ -35,87 +33,64 @@ _DIR = Path(__file__).parent
 _PLANO = _DIR / "cronograma_plano.json"
 _CFG = _DIR / "cronograma_config.json"
 
-# Uma terça de DROP conhecida. Os drops caem em ANCHOR + 14*k dias (terças alternadas).
-_ANCHOR_DROP = date(2026, 8, 4)
+# Duas metades do dia (minutos do dia, hora local BR) pra garantir 2x/dia SEPARADOS:
+# manhã/tarde (10h-15h) e tarde/noite (15h-22h). Cada metade é fatiada em N sub-slots (um
+# por conta) → escala pra QUALQUER número de contas, sempre uma conta por sub-slot (1 IP →
+# duas contas nunca caem no mesmo horário).
+_MANHA = (10 * 60, 15 * 60)   # 10:00–15:00
+_TARDE = (15 * 60, 22 * 60)   # 15:00–22:00
 
-# Janelas do dia (hora local BR): 10h às 22h, uma por hora. Cada tarefa cai numa janela
-# distinta → 1 conta por janela (1 IP → nunca duas contas no mesmo horário).
-_JANELAS = [(h, h + 1) for h in range(10, 22)]
-_MAX_TAREFAS_DIA = 12   # teto diário (bate com o nº de janelas 10h-22h)
+_NOME_BOT = {"human-warmup": "Aquecimento Humano"}
 
-_NOME_BOT = {"auto-follow": "Auto Follow", "dm-followers": "DM Followers",
-             "human-warmup": "Aquecimento Humano"}
+
+def _horarios(n, faixa, rnd):
+    """n horários (hora, min) sorteados dentro da faixa [ini,fim) em minutos — um por sub-slot,
+    então nunca colam. Folga de 1min nas bordas do slot."""
+    ini, fim = faixa
+    if n <= 0:
+        return []
+    passo = (fim - ini) / n
+    out = []
+    for i in range(n):
+        s0 = ini + passo * i
+        s1 = ini + passo * (i + 1)
+        m = int(rnd.uniform(s0, max(s0, s1 - 1)))
+        out.append((m // 60, m % 60))
+    return out
 
 
 def _agora():
     return datetime.now(_TZ) if _TZ else datetime.now()
 
 
-def semana_tipo(d):
-    """'drop' ou 'descanso' pra semana da data d (terça da semana vs âncora)."""
-    terca = d - timedelta(days=d.weekday() - 1)          # terça da semana (seg=0..dom=6)
-    semanas = (terca - _ANCHOR_DROP).days // 7
-    return "drop" if semanas % 2 == 0 else "descanso"
-
-
-def _por_tier():
-    res = {}
-    for a in accounts.listar():
-        if not a.get("id"):
-            continue
-        res.setdefault(a.get("tier") or "nova", []).append(a)
-    return res
-
-
-def _tarefas_base(d, tipo, por_tier):
-    """Tarefas do dia (conta, bot, modo, desc), antes de sortear horário.
-
-    BASE: aquecimento humano em TODAS as contas, TODO dia (independe do tier — é só navegar
-    como gente, e o IG gosta de ver atividade real). DINHEIRO (follow/DM): só nas Prontas,
-    forte na semana de drop. Contas 'queimada' ficam de fora de tudo."""
-    dia = d.toordinal()
-    tasks = []
-    # 1) aquecimento humano em todas as contas (nova/aquecendo = leve; pronta/descanso = medio)
-    for tier in ("pronta", "descanso", "aquecendo", "nova"):
-        modo = "medio" if tier in ("pronta", "descanso") else "leve"
-        for a in por_tier.get(tier, []):
-            tasks.append((a, "human-warmup", modo, "aquecimento humano"))
-    # 2) dinheiro: só nas Prontas
-    prontas = por_tier.get("pronta", [])
-    if tipo == "drop":
-        for a in prontas:
-            tasks.append((a, "auto-follow", "money-drop", "follow do drop"))
-        if prontas:                        # DM: 1 pronta por dia, rotativo
-            a = prontas[dia % len(prontas)]
-            tasks.append((a, "dm-followers", "dm-drop", "DM do drop"))
-    elif d.weekday() % 2 == 0:             # descanso: prontas seguem leve, dia sim / dia não
-        for a in prontas:
-            tasks.append((a, "auto-follow", "descanso", "follow leve"))
-    return tasks[:_MAX_TAREFAS_DIA]
+def _contas():
+    """Todas as contas cadastradas (o aquecimento vale pra todas — o tap da notificação
+    resolve reconectar se a sessão tiver caído)."""
+    return [a for a in accounts.listar() if a.get("id")]
 
 
 def _gerar_plano(d):
-    tipo = semana_tipo(d)
-    base = _tarefas_base(d, tipo, _por_tier())
+    """Plano do dia: aquecimento humano 2x por conta (uma de manhã, uma de tarde/noite),
+    minuto sorteado — horários estáveis no dia (semente por data) e sem padrão entre dias."""
+    contas = _contas()
+    n = len(contas)
     rnd = random.Random(d.toordinal() * 7919)     # semente por dia → horários estáveis no dia
-    janelas = _JANELAS[:]
-    rnd.shuffle(janelas)
+    manha = _horarios(n, _MANHA, rnd); rnd.shuffle(manha)   # 1 slot/conta, embaralha quem pega qual
+    tarde = _horarios(n, _TARDE, rnd); rnd.shuffle(tarde)
     tarefas = []
-    for i, (a, bot, modo, desc) in enumerate(base):
-        h0, h1 = janelas[i % len(janelas)]
-        minutos = rnd.randint(0, (h1 - h0) * 60 - 1)
-        hora, mm = h0 + minutos // 60, minutos % 60
+    for i, a in enumerate(contas):
         label = a.get("label")
-        nome_bot = _NOME_BOT.get(bot, bot)
-        tarefas.append({
-            "conta_id": a.get("id"), "conta": label, "bot": bot, "modo": modo, "desc": desc,
-            "hora": hora, "min": mm,
-            "titulo": "Cronograma · hora de rodar",
-            "corpo": f'{nome_bot} na @{label} — modo "{modo}" ({desc})',
-            "enviado": False,
-        })
+        for (hora, mm) in (manha[i], tarde[i]):   # 1x de manhã + 1x de tarde/noite = 2x/dia
+            tarefas.append({
+                "conta_id": a.get("id"), "conta": label, "bot": "human-warmup",
+                "modo": "medio", "desc": "aquecimento humano",
+                "hora": hora, "min": mm,
+                "titulo": "Cronograma · hora de rodar",
+                "corpo": f"Hora de rodar o Aquecimento Humano na @{label}",
+                "enviado": False,
+            })
     tarefas.sort(key=lambda t: (t["hora"], t["min"]))
-    return {"data": d.isoformat(), "tipo": tipo, "tarefas": tarefas}
+    return {"data": d.isoformat(), "tarefas": tarefas}
 
 
 def _carregar_plano(d):
@@ -173,7 +148,7 @@ async def _tick():
             await asyncio.to_thread(notify.enviar, t["titulo"], t["corpo"], {
                 "tipo": "cronograma", "botId": t["bot"], "nome": _NOME_BOT.get(t["bot"], t["bot"]),
                 "conta": t.get("conta"), "conta_id": t.get("conta_id"), "modo": t.get("modo"),
-            })
+            }, grupo="cronograma")   # todo o cronograma num monte só
             t["enviado"] = True
             mudou = True
     if mudou:

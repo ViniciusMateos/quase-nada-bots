@@ -26,11 +26,9 @@ export type IgCookie = {
   httpOnly?: boolean; secure?: boolean; sameSite?: string; session?: boolean; expirationDate?: number;
 };
 export type ConnectResult = { runs: { bot: string; id: string }[]; conta?: Account };
-export type Tier = 'nova' | 'aquecendo' | 'pronta' | 'descanso' | 'queimada';
 export type Account = {
   id: string; label: string; conectada_em: number; ativa: boolean;
   criada_em?: number;   // 1ª conexão — NÃO reseta ao reconectar (idade real da conta)
-  tier?: Tier;          // estágio no ciclo de aquecimento (o cronograma decide por aqui)
   sessao_ok?: boolean;  // só no /accounts/validar: sessão do IG ainda viva?
 };
 export type RunHistorico = {
@@ -44,7 +42,7 @@ export type CronTarefa = {
   conta_id?: string; conta: string; bot: string; modo: string; desc: string;
   hora: number; min: number; enviado: boolean;
 };
-export type Cronograma = { ativo: boolean; data: string; tipo: 'drop' | 'descanso'; tarefas: CronTarefa[] };
+export type Cronograma = { ativo: boolean; data: string; tarefas: CronTarefa[] };
 
 export const api = {
   listBots: () => http.get<Record<string, Bot>>('/bots'),
@@ -73,7 +71,6 @@ export const api = {
   getAccounts: () => http.get<Account[]>('/accounts'),
   validarContas: () => http.get<Account[]>('/accounts/validar'),
   ativarConta: (id: string) => http.post<{ ativa: string }>(`/accounts/${encodeURIComponent(id)}/ativar`, {}),
-  definirTier: (id: string, tier: Tier) => http.put<{ id: string; tier: Tier }>(`/accounts/${encodeURIComponent(id)}/tier`, { tier }),
   removerConta: (id: string) => http.del(`/accounts/${encodeURIComponent(id)}`),
   registerDevice: (token: string) => http.post<{ ok: boolean; devices: number }>('/devices', { token }),
   getCronograma: () => http.get<Cronograma>('/cronograma'),

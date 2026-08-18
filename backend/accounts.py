@@ -28,10 +28,6 @@ _SESS_DIR = _RAIZ / "sessions"
 _INDEX = _SESS_DIR / "accounts.json"
 _CENTRAL = _RAIZ / "session_cookies.json"      # o que os bots leem (default do IG_SESSION_FILE)
 
-# Estágio da conta no ciclo de aquecimento. É o que o cronograma usa pra decidir o que
-# rodar em cada uma (regras por tier, não por @ fixo → escala pra N contas sem reprogramar).
-TIERS = ("nova", "aquecendo", "pronta", "descanso", "queimada")
-
 
 def _garantir_dir():
     _SESS_DIR.mkdir(parents=True, exist_ok=True)
@@ -119,15 +115,17 @@ def _migrar_sessao_existente(idx):
 
 def listar():
     """Lista as contas salvas, marcando qual é a ativa. Preenche defaults de contas antigas
-    (criada_em cai pro conectada_em; tier vira 'nova')."""
+    (criada_em cai pro conectada_em). `tier` foi removido do produto → nunca sai na resposta,
+    mesmo que ainda exista no arquivo de contas antigo."""
     idx = _migrar_sessao_existente(_ler_index())
     ativa = idx.get("ativa")
-    return [{
-        **c,
-        "ativa": c.get("id") == ativa,
-        "criada_em": c.get("criada_em") or c.get("conectada_em"),
-        "tier": c.get("tier") if c.get("tier") in TIERS else "nova",
-    } for c in idx.get("contas", [])]
+    out = []
+    for c in idx.get("contas", []):
+        item = {k: v for k, v in c.items() if k != "tier"}
+        item["ativa"] = c.get("id") == ativa
+        item["criada_em"] = c.get("criada_em") or c.get("conectada_em")
+        out.append(item)
+    return out
 
 
 def _cookie_header(uid):
@@ -171,20 +169,6 @@ def validar_todas():
         return dict(zip(ids, ex.map(validar, ids)))
 
 
-def definir_tier(uid, tier):
-    """Marca o estágio (tier) de uma conta. Persiste no índice; sobrevive a reconexões."""
-    tier = str(tier or "").strip().lower()
-    if tier not in TIERS:
-        raise ValueError(f"tier inválido: {tier}")
-    idx = _ler_index()
-    c = next((c for c in idx.get("contas", []) if c.get("id") == uid), None)
-    if not c:
-        raise KeyError(uid)
-    c["tier"] = tier
-    _gravar_index(idx)
-    return {"id": uid, "tier": tier}
-
-
 def salvar(cookies, label=None):
     """Registra/atualiza uma conta a partir dos cookies capturados e a deixa ATIVA."""
     uid = _ds_user_id(cookies)
@@ -197,13 +181,11 @@ def salvar(cookies, label=None):
     antigo = next((c for c in idx.get("contas", []) if c.get("id") == uid), None)
     if not label:
         label = (antigo or {}).get("label") or f"conta {uid}"
-    # criada_em NÃO reseta na reconexão (idade real da conta p/ critério de aquecimento);
-    # conectada_em é sempre a última conexão. tier preservado (default 'nova').
+    # criada_em NÃO reseta na reconexão (idade real da conta); conectada_em é a última conexão.
     criada_em = (antigo or {}).get("criada_em") or int(time.time())
-    tier = (antigo or {}).get("tier") if (antigo or {}).get("tier") in TIERS else "nova"
     contas = [c for c in idx.get("contas", []) if c.get("id") != uid]
     contas.append({"id": uid, "label": label, "conectada_em": int(time.time()),
-                   "criada_em": criada_em, "tier": tier})
+                   "criada_em": criada_em})
     _gravar_index({"ativa": uid, "contas": contas})
     _escrever_central(uid)
     return {"id": uid, "label": label, "ativa": True}

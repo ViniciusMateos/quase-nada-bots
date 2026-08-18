@@ -172,16 +172,6 @@ async def ativar_conta(conta_id: str):
         raise HTTPException(409, str(e))
 
 
-@app.put("/accounts/{conta_id}/tier", dependencies=[Depends(auth)])
-async def definir_tier_conta(conta_id: str, payload: dict):
-    try:
-        return accounts.definir_tier(conta_id, payload.get("tier"))
-    except KeyError:
-        raise HTTPException(404, "conta não encontrada")
-    except ValueError as e:
-        raise HTTPException(422, str(e))
-
-
 @app.delete("/accounts/{conta_id}", dependencies=[Depends(auth)])
 async def remover_conta(conta_id: str):
     return accounts.remover(conta_id)

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView,
   StyleSheet, Text, TextInput, TouchableOpacity, View,
@@ -7,7 +7,8 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { api, Account, Tier } from '@/lib/api';
+import { api, Account } from '@/lib/api';
+import { cmpTexto } from '@/lib/ordenar';
 import { Credencial, lerCredenciais, salvarCredencial, removerCredencial } from '@/lib/credenciais';
 import { colors } from '@/theme';
 import { Botao, Card } from '@/ui/components';
@@ -18,17 +19,7 @@ import type { RootStackParamList } from '@/navigation/RootNavigator';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 // uma linha da tela = credencial salva (user+senha) e/ou conta conectada (backend), casadas por @user
-type Entry = { usuario: string; senha?: string; id?: string; ativa?: boolean; tier?: Tier; criadaEm?: number };
-
-// estágios da conta no ciclo de aquecimento (o cronograma vai decidir o que rodar por aqui)
-const TIER_ORDER: Tier[] = ['nova', 'aquecendo', 'pronta', 'descanso', 'queimada'];
-const TIER_META: Record<Tier, { label: string; cor: string; desc: string }> = {
-  nova:      { label: 'Nova',      cor: colors.textoFraco, desc: 'recém-criada, ainda não rodou nada' },
-  aquecendo: { label: 'Aquecendo', cor: colors.alerta,     desc: 'em aquecimento, volume baixo' },
-  pronta:    { label: 'Pronta',    cor: colors.ok,         desc: 'aquecida, pode puxar volume (money)' },
-  descanso:  { label: 'Descanso',  cor: colors.roxo,       desc: 'de molho, sem rodar por uns dias' },
-  queimada:  { label: 'Queimada',  cor: colors.erro,       desc: 'tomou bloqueio/validação, evitar' },
-};
+type Entry = { usuario: string; senha?: string; id?: string; ativa?: boolean; criadaEm?: number };
 
 function idadeTxt(criadaEm?: number): string | null {
   if (!criadaEm) return null;
@@ -45,7 +36,10 @@ export function ContasIgScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [modal, setModal] = useState({ aberto: false, editando: false, usuario: '', senha: '' });
   const [verSenha, setVerSenha] = useState(false);
-  const [tierPara, setTierPara] = useState<Entry | null>(null);
+  // status de sessão igual o Hub: id → sessão viva? (true/false/undefined=não checou ainda)
+  const [sessoes, setSessoes] = useState<Record<string, boolean>>({});
+  const [verificando, setVerificando] = useState(false);
+  const jaValidou = useRef(false);
 
   const carregar = useCallback(async () => {
     const [cs, cr] = await Promise.all([
@@ -55,8 +49,23 @@ export function ContasIgScreen() {
     setContas(cs);
     setCreds(cr);
   }, []);
-  useFocusEffect(useCallback(() => { carregar(); }, [carregar]));
-  const { scrollProps, dog, spacerEl } = useDogRefresh(carregar);
+
+  // checa (via túnel) se a sessão de cada conta ainda está viva — pesado-ish, só no abrir/refresh
+  const validar = useCallback(async () => {
+    setVerificando(true);
+    try {
+      const r = await api.validarContas();
+      const m: Record<string, boolean> = {};
+      for (const a of r) if (a.id) m[a.id] = !!a.sessao_ok;
+      setSessoes(m);
+    } catch { /* offline */ } finally { setVerificando(false); }
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    carregar();
+    if (!jaValidou.current) { jaValidou.current = true; validar(); }
+  }, [carregar, validar]));
+  const { scrollProps, dog, spacerEl } = useDogRefresh(async () => { await carregar(); await validar(); });
 
   const entries = useMemo<Entry[]>(() => {
     const map = new Map<string, Entry>();
@@ -66,10 +75,10 @@ export function ContasIgScreen() {
       const prev = map.get(k);
       map.set(k, {
         usuario: prev?.usuario || a.label, senha: prev?.senha,
-        id: a.id, ativa: a.ativa, tier: a.tier, criadaEm: a.criada_em,
+        id: a.id, ativa: a.ativa, criadaEm: a.criada_em,
       });
     }
-    return [...map.values()].sort((a, b) => a.usuario.toLowerCase().localeCompare(b.usuario.toLowerCase()));
+    return [...map.values()].sort((a, b) => cmpTexto(a.usuario, b.usuario));
   }, [creds, contas]);
 
   function conectar(e: Entry) {
@@ -81,16 +90,6 @@ export function ContasIgScreen() {
     setBusy(e.usuario);
     api.ativarConta(e.id).then(carregar).catch(() => Alert.alert('Ops', 'Não consegui ativar essa conta.'))
       .finally(() => setBusy(null));
-  }
-
-  async function escolherTier(t: Tier) {
-    const e = tierPara;
-    setTierPara(null);
-    if (!e?.id) return;
-    setBusy(e.usuario);
-    try { await api.definirTier(e.id, t); await carregar(); }
-    catch { Alert.alert('Ops', 'Não consegui mudar o estágio.'); }
-    finally { setBusy(null); }
   }
 
   function apagar(e: Entry) {
@@ -133,48 +132,52 @@ export function ContasIgScreen() {
           Só <Text style={styles.forte}>uma</Text> fica ativa por vez (a que os bots usam).
         </Text>
 
+        {/* botão de adicionar no TOPO (primeiro), não no fim da lista */}
+        <Botao title="Adicionar conta" cor={colors.marca} txtCor="#fff" onPress={abrirAdd} />
+
         {entries.length === 0 ? (
-          <Text style={styles.vazio}>Nenhuma conta ainda. Adicione uma embaixo.</Text>
+          <Text style={styles.vazio}>Nenhuma conta ainda. Adicione uma aí em cima.</Text>
         ) : entries.map((e, i) => {
-          const tier = e.tier || 'nova';
-          const m = TIER_META[tier];
+          const sess = e.id ? sessoes[e.id] : undefined;      // true/false/undefined(=não checou)
+          const checando = verificando && !!e.id && sess === undefined;
+          const caiu = !!e.id && sess === false;
+          // mesmo esquema de cor do Hub: verde SÓ na conta ativa; sessão ok = branco;
+          // problema = vermelho; verificando = cinza.
+          let status: string, cor: string;
+          if (!e.id) { status = 'sem sessão'; cor = colors.erro; }
+          else if (checando) { status = 'verificando…'; cor = colors.textoFraco; }
+          else if (caiu) { status = 'sessão caiu'; cor = colors.erro; }
+          else if (e.ativa) { status = 'ativa · em uso'; cor = colors.ok; }
+          else { status = 'sessão ok'; cor = colors.texto; }
           const idade = e.id ? idadeTxt(e.criadaEm) : null;
-          const status = e.ativa ? 'ativa · os bots usam ela' : e.id ? 'conectada' : (e.senha ? 'credencial salva' : 'sem credencial');
-          const sub = idade ? `${status} · ${idade}` : status;
           return (
           <Animated.View key={e.usuario}
             entering={FadeInDown.delay(Math.min(i, 8) * 40).duration(280)}
             layout={LinearTransition.duration(260)}>
             <Card style={{ gap: 10 }}>
               <View style={styles.topo}>
-                <View style={[styles.dot, { backgroundColor: e.ativa ? colors.ok : colors.border }]} />
+                <View style={[styles.dot, { backgroundColor: cor }]} />
                 <View style={{ flex: 1 }}>
-                  <View style={styles.nomeRow}>
-                    <Text style={styles.label}>@{e.usuario}</Text>
-                    {e.id ? (
-                      <TouchableOpacity onPress={() => setTierPara(e)} hitSlop={6}
-                        style={[styles.tierChip, { borderColor: m.cor }]}>
-                        <View style={[styles.tierDot, { backgroundColor: m.cor }]} />
-                        <Text style={[styles.tierTxt, { color: m.cor }]}>{m.label}</Text>
-                      </TouchableOpacity>
-                    ) : null}
+                  <Text style={styles.label}>@{e.usuario}</Text>
+                  <View style={styles.subRow}>
+                    <Text style={[styles.sub, { color: cor, fontWeight: '700' }]}>{status}</Text>
+                    {idade ? <Text style={styles.sub}> · {idade}</Text> : null}
                   </View>
-                  <Text style={styles.sub}>{sub}</Text>
                 </View>
                 {e.ativa ? <View style={styles.badge}><Text style={styles.badgeTxt}>ATIVA</Text></View> : null}
               </View>
 
               <View style={styles.acoesRow}>
                 <View style={{ flex: 1 }}>
-                  <Botao title="Conectar" onPress={() => conectar(e)} />
+                  <Botao title={caiu ? 'Reconectar' : 'Conectar'} onPress={() => conectar(e)} />
                 </View>
                 {busy === e.usuario ? (
                   <View style={styles.spin}><LoadingDog size={22} /></View>
                 ) : (
                   <>
-                    {e.id && !e.ativa ? (
+                    {e.id && !e.ativa && !caiu ? (
                       <TouchableOpacity onPress={() => ativar(e)} style={styles.icon} hitSlop={6}>
-                        <Ionicons name="power" size={20} color={colors.ok} />
+                        <Ionicons name="power" size={20} color={colors.texto} />
                       </TouchableOpacity>
                     ) : null}
                     <TouchableOpacity onPress={() => abrirEdit(e)} style={styles.icon} hitSlop={6}>
@@ -190,8 +193,6 @@ export function ContasIgScreen() {
           </Animated.View>
           );
         })}
-
-        <Botao title="Adicionar conta" cor={colors.marca} txtCor="#fff" onPress={abrirAdd} />
       </ScrollView>
 
       <Modal visible={modal.aberto} transparent animationType="fade" onRequestClose={fecharModal}>
@@ -218,30 +219,6 @@ export function ContasIgScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-
-      <Modal visible={!!tierPara} transparent animationType="fade" onRequestClose={() => setTierPara(null)}>
-        <Pressable style={styles.modalWrap} onPress={() => setTierPara(null)}>
-          <Pressable style={styles.modalCard} onPress={() => {}}>
-            <Text style={styles.modalTitulo}>Estágio de @{tierPara?.usuario}</Text>
-            <Text style={styles.modalDica}>Define o que o cronograma vai rodar nessa conta.</Text>
-            {TIER_ORDER.map((t) => {
-              const m = TIER_META[t];
-              const sel = (tierPara?.tier || 'nova') === t;
-              return (
-                <TouchableOpacity key={t} onPress={() => escolherTier(t)}
-                  style={[styles.tierOpt, sel && { borderColor: m.cor, backgroundColor: colors.card2 }]}>
-                  <View style={[styles.tierDot, { backgroundColor: m.cor }]} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.tierOptLabel}>{m.label}</Text>
-                    <Text style={styles.tierOptDesc}>{m.desc}</Text>
-                  </View>
-                  {sel ? <Ionicons name="checkmark" size={18} color={m.cor} /> : null}
-                </TouchableOpacity>
-              );
-            })}
-          </Pressable>
-        </Pressable>
-      </Modal>
     </View>
   );
 }
@@ -253,14 +230,11 @@ const styles = StyleSheet.create({
   vazio: { color: colors.textoFraco, textAlign: 'center', marginVertical: 20 },
   topo: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   dot: { width: 10, height: 10, borderRadius: 999 },
-  nomeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   label: { color: colors.texto, fontSize: 16, fontWeight: '700' },
-  sub: { color: colors.textoFraco, fontSize: 12, marginTop: 2 },
+  subRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2, flexWrap: 'wrap' },
+  sub: { color: colors.textoFraco, fontSize: 12 },
   badge: { borderWidth: 1, borderColor: colors.ok, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3 },
   badgeTxt: { color: colors.ok, fontSize: 11, fontWeight: '800' },
-  tierChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
-  tierDot: { width: 8, height: 8, borderRadius: 999 },
-  tierTxt: { fontSize: 11, fontWeight: '700' },
   acoesRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   icon: { padding: 6 },
   spin: { paddingHorizontal: 8 },
@@ -272,7 +246,4 @@ const styles = StyleSheet.create({
   olho: { padding: 8 },
   modalDica: { color: colors.textoFraco, fontSize: 11, lineHeight: 15 },
   modalBtns: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  tierOpt: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12 },
-  tierOptLabel: { color: colors.texto, fontSize: 15, fontWeight: '700' },
-  tierOptDesc: { color: colors.textoFraco, fontSize: 12, marginTop: 1 },
 });

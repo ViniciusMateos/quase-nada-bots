@@ -194,12 +194,15 @@ export function HubScreen() {
                   const sess = e.id ? sessoes[e.id] : undefined;   // true/false/undefined(=não checou)
                   const checando = verificando && !!e.id && sess === undefined;
                   const caiu = !!e.id && sess === false;
+                  // verde SÓ na conta ativa (a que os bots usam) — é o único estado "pertinente"
+                  // pra destacar. Sessão ok (mas não ativa) fica branca/neutra; problema fica
+                  // vermelho; verificando cinza.
                   let status: string, cor: string;
                   if (!e.id) { status = 'sem sessão'; cor = colors.erro; }
                   else if (checando) { status = 'verificando…'; cor = colors.textoFraco; }
                   else if (caiu) { status = 'sessão caiu'; cor = colors.erro; }
                   else if (e.ativa) { status = 'ativa · em uso'; cor = colors.ok; }
-                  else { status = 'sessão ok'; cor = colors.ok; }
+                  else { status = 'sessão ok'; cor = colors.texto; }
                   return (
                     <View key={e.usuario} style={styles.contaLinha}>
                       <View style={[styles.contaDot, { backgroundColor: cor }]} />
@@ -210,8 +213,8 @@ export function HubScreen() {
                       ) : checando ? null
                         : (!!e.id && !caiu && !e.ativa) ? (
                           <TouchableOpacity onPress={() => ativarConta(e)} hitSlop={8} style={styles.contaBtn}>
-                            <Ionicons name="power" size={17} color={colors.ok} />
-                            <Text style={[styles.contaAcao, { color: colors.ok }]}>ativar</Text>
+                            <Ionicons name="power" size={17} color={colors.texto} />
+                            <Text style={[styles.contaAcao, { color: colors.texto }]}>ativar</Text>
                           </TouchableOpacity>
                         ) : (!e.id || caiu) ? (
                           <TouchableOpacity onPress={() => nav.navigate('InstagramLogin', { label: e.usuario, senha: e.senha })}

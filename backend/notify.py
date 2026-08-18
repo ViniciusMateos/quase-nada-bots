@@ -51,13 +51,20 @@ def listar():
     return _ler()
 
 
-def enviar(titulo, corpo, data=None):
-    """Manda push pra todos os devices (síncrono/bloqueante — chame via to_thread)."""
+def enviar(titulo, corpo, data=None, grupo=None):
+    """Manda push pra todos os devices (síncrono/bloqueante — chame via to_thread).
+
+    grupo = `threadId` do iOS: notificações com o mesmo grupo viram UM monte só no lock
+    screen (um por bot, um pro cronograma, um pra conexão…) em vez de tudo embolado.
+    (funciona com o agrupamento em "Automático" nos ajustes de notificação do app.)
+    """
     tokens = _ler()
     if not tokens:
         return
-    msgs = [{"to": t, "title": titulo, "body": corpo, "sound": "default",
-             "data": data or {}} for t in tokens]
+    base = {"title": titulo, "body": corpo, "sound": "default", "data": data or {}}
+    if grupo:
+        base["threadId"] = str(grupo)
+    msgs = [{"to": t, **base} for t in tokens]
     req = urllib.request.Request(
         _EXPO_URL, data=json.dumps(msgs).encode("utf-8"),
         headers={"Content-Type": "application/json", "Accept": "application/json"})

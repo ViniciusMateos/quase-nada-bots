@@ -619,7 +619,8 @@ class RunManager:
             await asyncio.to_thread(
                 notify.enviar, f"{nome} · começou",
                 "Tô nessa… vou te mostrando o progresso.",
-                {"type": "start", "runId": run.id, "bot": run.bot, "titulo": run.titulo})
+                {"type": "start", "runId": run.id, "bot": run.bot, "titulo": run.titulo},
+                grupo=f"bot:{run.bot}")   # um monte por bot no lock screen
         except Exception:
             pass
 
@@ -671,9 +672,12 @@ class RunManager:
             # rodada normal com barra: mostra o placar no corpo
             if not run.params.get("import_cookies") and run.progress and run.progress.get("total"):
                 corpo = f"{nome} finalizou — {run.progress['done']}/{run.progress['total']}."
+        # conectar conta vai pro monte "conexão"; o resto agrupa por bot
+        grupo = "conexao" if run.params.get("import_cookies") else f"bot:{run.bot}"
         try:
             await asyncio.to_thread(notify.enviar, titulo, corpo,
-                                    {"runId": run.id, "bot": run.bot, "titulo": info["titulo"]})
+                                    {"runId": run.id, "bot": run.bot, "titulo": info["titulo"]},
+                                    grupo=grupo)
         except Exception:
             pass
 

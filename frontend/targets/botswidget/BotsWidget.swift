@@ -2,12 +2,12 @@ import ActivityKit
 import WidgetKit
 import SwiftUI
 
-// ── identidade Quase Nada Bots (o gradiente do ícone) ──────────────────────
+// ── identidade Quase Nada Bots ─────────────────────────────────────────────
 let rosa = Color(red: 0.965, green: 0.247, blue: 0.576)      // #F63F93
 let amarelo = Color(red: 0.969, green: 1.000, blue: 0.235)   // #F7FF3C
 let roxo = Color(red: 0.506, green: 0.078, blue: 0.690)      // #8114B0
 
-// Cor por bot — usada nas linhas da lista e na barra quando só um está rodando.
+// Cor por bot — usada na barra/anel quando só um está rodando.
 func corDoBot(_ bot: String) -> Color {
   switch bot {
   case "auto-follow": return rosa
@@ -16,17 +16,20 @@ func corDoBot(_ bot: String) -> Color {
   }
 }
 
-// Gradiente da marca: a barra do CONJUNTO não é de nenhum bot, então usa a identidade.
-let gradienteMarca = LinearGradient(
-  gradient: Gradient(colors: [roxo, rosa]),
-  startPoint: .leading, endPoint: .trailing
-)
+// A cor do destaque: do bot quando é um só, rosa da marca quando é o conjunto.
+func corDestaque(_ s: BotActivityAttributes.ContentState) -> Color {
+  s.quantos == 1 ? corDoBot(s.bot) : rosa
+}
 
-// Logo da marca (cachorro dentro do círculo), BRANCA — igual ao Brechó. É o logo, não o
-// ícone do app: sem o quadrado do gradiente, que num card escuro vira um adesivo colado.
+// Logo NÍTIDA, IDÊNTICA à do brechó: template branco que PREENCHE o frame (usa só o alpha).
+// A logo.png é branca; renderizar com .fit deixava sobra de borda e a marca parecia menor que
+// a do brechó nos mesmos tamanhos — .renderingMode(.template) enche o anel igual lá.
+// .interpolation(.high) mata o serrilhado do downscale (256px → ~10-54pt).
 func logoQN(_ lado: CGFloat) -> some View {
   Image("qnlogo")
     .resizable()
+    .interpolation(.high)
+    .antialiased(true)
     .renderingMode(.template)
     .aspectRatio(contentMode: .fit)
     .foregroundColor(.white)
@@ -35,39 +38,76 @@ func logoQN(_ lado: CGFloat) -> some View {
 
 func pctFrac(_ p: Int) -> Double { Double(max(0, min(100, p))) / 100.0 }
 
-// A cor do destaque: de um bot quando é um só, da marca quando é o conjunto.
-func corDestaque(_ s: BotActivityAttributes.ContentState) -> Color {
-  s.quantos == 1 ? corDoBot(s.bot) : rosa
-}
-
-/// Texto do trailing da ilha: "82%" com um bot, "3 · 62%" com vários.
-/// Antes de medir vai reticência — deixar vazio faria a ilha ficar torta (logo de um lado,
-/// buraco do outro) durante os ~70s em que o bot abre o navegador e loga.
+/// Texto do trailing da ilha: "82%" com um bot, "3 · 62%" com vários (contagem + % junta).
+/// Antes de medir vai reticência (deixar vazio deixava a ilha torta nos ~70s de abrir o navegador).
 func compacto(_ s: BotActivityAttributes.ContentState) -> String {
   if !s.medido { return "···" }
   return s.quantos > 1 ? "\(s.quantos) · \(s.pct)%" : "\(s.pct)%"
 }
 
-/// Barra fina de um bot dentro da lista (só aparece quando há 2+ rodando).
-struct LinhaView: View {
-  let linha: LinhaBot
+// ── Anel de progresso (mesmo do brechó) — recebe a cor ─────────────────────
+struct AnelProgresso<Conteudo: View>: View {
+  let frac: Double          // 0…1 — 0 = ainda "começando" (total não medido)
+  let cor: Color
+  let lado: CGFloat
+  let traco: CGFloat
+  @ViewBuilder let dentro: () -> Conteudo
 
   var body: some View {
-    HStack(spacing: 8) {
-      Text(linha.nome)
-        .font(.system(size: 11, weight: .semibold))
-        .foregroundColor(Color.white.opacity(0.78))
-        .lineLimit(1)
-        .frame(width: 82, alignment: .leading)
-      ProgressView(value: pctFrac(linha.pct))
-        .tint(corDoBot(linha.bot))
-        .scaleEffect(x: 1, y: 0.6, anchor: .center)
-      Text("\(linha.pct)%")
-        .font(.system(size: 10, weight: .bold))
-        .foregroundColor(Color.white.opacity(0.78))
-        .monospacedDigit()
-        .frame(width: 30, alignment: .trailing)
+    ZStack {
+      // trilho — inset(by: traco/2) mantém o traço DENTRO do frame (senão a ilha corta na direita)
+      Circle().inset(by: traco / 2)
+        .stroke(Color.white.opacity(0.16), lineWidth: traco)
+
+      if frac >= 1 {
+        // 100%: círculo FECHADO (sem ponta) — a ponta arredondada do fim "comia" o traço no topo
+        Circle().inset(by: traco / 2).stroke(cor, lineWidth: traco)
+      } else if frac > 0 {
+        Circle().inset(by: traco / 2)
+          .trim(from: 0, to: frac)
+          .stroke(cor, style: StrokeStyle(lineWidth: traco, lineCap: .round))
+          .rotationEffect(.degrees(-90))   // começa no topo, enche horário
+      }
+
+      dentro()
     }
+    .frame(width: lado, height: lado)
+    .animation(.easeOut(duration: 0.4), value: frac)   // enche animado a cada update
+  }
+}
+
+// ── Lock screen ── anel grande com a % no miolo + título e sublabel do lado.
+// 1 bot  → "Auto Follow" / "57/70 · seguindo".
+// N bots → "3 bots rodando" / "Auto Follow · DM Followers" (os nomes), a % é a MÉDIA.
+struct BotsLockView: View {
+  let s: BotActivityAttributes.ContentState
+  var frac: Double { s.medido ? pctFrac(s.pct) : 0 }
+  var cor: Color { corDestaque(s) }
+
+  var body: some View {
+    HStack(spacing: 14) {
+      AnelProgresso(frac: frac, cor: cor, lado: 54, traco: 5) {
+        if s.medido {
+          Text("\(s.pct)%")
+            .font(.system(size: 15, weight: .heavy)).foregroundColor(.white).monospacedDigit()
+        } else {
+          logoQN(20)
+        }
+      }
+      VStack(alignment: .leading, spacing: 3) {
+        HStack(spacing: 7) {
+          logoQN(16)
+          Text(s.titulo).font(.headline).foregroundColor(.white).lineLimit(1)
+        }
+        if !s.label.isEmpty {
+          Text(s.label).font(.caption).foregroundColor(.gray).lineLimit(1)
+        }
+      }
+      Spacer()
+    }
+    .padding()
+    .activityBackgroundTint(Color.black.opacity(0.9))
+    .activitySystemActionForegroundColor(.white)
   }
 }
 
@@ -81,90 +121,50 @@ struct BotsWidgetBundle: WidgetBundle {
 struct BotsLiveActivity: Widget {
   var body: some WidgetConfiguration {
     ActivityConfiguration(for: BotActivityAttributes.self) { context in
-      // ── Lock screen ──
-      // Um card só, mesmo com N bots: cabeçalho com o resumo e uma linha por bot embaixo.
-      // Mesma cara da barrinha flutuante dentro do app.
-      VStack(alignment: .leading, spacing: 9) {
-        HStack(spacing: 9) {
-          logoQN(24)
-          Text(context.state.titulo)
-            .font(.headline).foregroundColor(.white).lineLimit(1)
-          Spacer()
-          if context.state.medido {
-            Text("\(context.state.pct)%")
-              .font(.headline.bold()).foregroundColor(corDestaque(context.state))
-          }
-        }
-        // barra ZERADA enquanto não mediu (evita barra "meio cheia" falsa)
-        GeometryReader { geo in
-          ZStack(alignment: .leading) {
-            Capsule().fill(Color.white.opacity(0.16))
-            Capsule()
-              .fill(context.state.quantos > 1
-                    ? AnyShapeStyle(gradienteMarca)
-                    : AnyShapeStyle(corDoBot(context.state.bot)))
-              .frame(width: geo.size.width * (context.state.medido ? pctFrac(context.state.pct) : 0))
-          }
-        }
-        .frame(height: 6)
-
-        if context.state.linhas.isEmpty {
-          Text(context.state.label).font(.caption).foregroundColor(.gray).lineLimit(1)
-        } else {
-          VStack(spacing: 5) {
-            ForEach(context.state.linhas, id: \.id) { linha in
-              LinhaView(linha: linha)
+      BotsLockView(s: context.state)
+    } dynamicIsland: { context in
+      let f = context.state.medido ? pctFrac(context.state.pct) : 0
+      let c = corDestaque(context.state)
+      return DynamicIsland {
+        DynamicIslandExpandedRegion(.leading) {
+          AnelProgresso(frac: f, cor: c, lado: 40, traco: 4) {
+            if context.state.medido {
+              Text("\(context.state.pct)%")
+                .font(.system(size: 12, weight: .heavy)).foregroundColor(.white).monospacedDigit()
+            } else {
+              logoQN(18)
             }
           }
         }
-      }
-      .padding()
-      .activityBackgroundTint(Color.black.opacity(0.9))
-      .activitySystemActionForegroundColor(.white)
-    } dynamicIsland: { context in
-      DynamicIsland {
-        DynamicIslandExpandedRegion(.leading) {
-          logoQN(28)
-        }
         DynamicIslandExpandedRegion(.trailing) {
-          if context.state.medido {
-            Text(compacto(context.state))
-              .font(.title3.bold()).foregroundColor(corDestaque(context.state))
+          // contagem de bots quando é o conjunto (o número + "bots"); vazio com um só
+          if context.state.quantos > 1 {
+            Text("\(context.state.quantos) bots")
+              .font(.caption.bold()).foregroundColor(c)
           }
         }
         DynamicIslandExpandedRegion(.bottom) {
-          VStack(alignment: .leading, spacing: 5) {
+          VStack(alignment: .leading, spacing: 3) {
             Text(context.state.titulo)
               .font(.caption.bold()).foregroundColor(.white).lineLimit(1)
-            ProgressView(value: context.state.medido ? pctFrac(context.state.pct) : 0)
-              .tint(corDestaque(context.state))
-            if context.state.linhas.isEmpty {
+            if !context.state.label.isEmpty {
               Text(context.state.label).font(.caption).foregroundColor(.gray).lineLimit(1)
-            } else {
-              ForEach(context.state.linhas, id: \.id) { linha in
-                LinhaView(linha: linha)
-              }
             }
           }
+          .frame(maxWidth: .infinity, alignment: .leading)
+          // respiro nas laterais: a curvatura do Dynamic Island expandido cortava o sublabel
+          // colado na borda esquerda
+          .padding(.horizontal, 6)
         }
       } compactLeading: {
+        // compact fica igual — só a logo (nítida agora)
         logoQN(20)
       } compactTrailing: {
-        // Existe UMA Live Activity, então a ilha fica sempre aqui (nunca em minimal) e
-        // cabe o número de bots + a porcentagem juntos.
-        Text(compacto(context.state))
-          .foregroundColor(corDestaque(context.state))
+        // uma Live Activity só → a ilha fica sempre em compact; cabe contagem + % juntas
+        Text(compacto(context.state)).foregroundColor(c)
       } minimal: {
-        // Só acontece se OUTRO app tiver uma Live Activity ao mesmo tempo.
-        ZStack {
-          Circle().stroke(Color.white.opacity(0.18), lineWidth: 2.2)
-          Circle()
-            .trim(from: 0, to: context.state.medido ? pctFrac(context.state.pct) : 0)
-            .stroke(corDestaque(context.state), style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
-            .rotationEffect(.degrees(-90))
-          logoQN(13)
-        }
-        .frame(width: 25, height: 25)
+        // só aparece se OUTRO app tiver uma Live Activity ao mesmo tempo
+        AnelProgresso(frac: f, cor: c, lado: 25, traco: 2.6) { logoQN(12) }
       }
     }
   }

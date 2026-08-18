@@ -29,6 +29,19 @@ def _limpar_linha(linha):
     return _PREFIXO.sub("", (linha or "").strip()).strip()
 
 
+def _limpar_locks_chromium(profile_dir):
+    """Remove os Singleton* de um Chromium que MORREU (watchdog/kill não fecha limpo e deixa o
+    SingletonLock/Socket → o PRÓXIMO run no mesmo profile empaca). Um Chromium vivo recria eles
+    no launch, então limpar antes de subir é seguro (nada roda naquele profile nesse momento)."""
+    if not profile_dir:
+        return
+    for lk in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+        try:
+            os.remove(os.path.join(profile_dir, lk))
+        except Exception:
+            pass
+
+
 def _proc_info(bot_id, params):
     """Textos por TIPO de processo (rodar o bot × conectar o Instagram). Conectar é um
     processo de primeira classe: tem título próprio, notificação de fim e Live Activity —
@@ -445,10 +458,13 @@ class RunManager:
                 # LOTE = UM processo rodando várias contas: passa a lista (sessão+perfil+rótulo);
                 # o worker aponta config.SESSION_FILE/USER_DATA_DIR por conta no loop interno.
                 env["IG_LOTE_CONTAS"] = json.dumps(params["lote_contas"])
+                for c in params["lote_contas"]:
+                    _limpar_locks_chromium(c.get("profile"))
             else:
                 uid = params.get("conta_id") or accounts.ativa_id()
                 if uid:
                     env["IG_USER_DATA_DIR"] = accounts.profile_dir(uid)
+                    _limpar_locks_chromium(accounts.profile_dir(uid))   # tira lock órfão de run morta
                     # sessão POR conta (não a central): roda a conta certa sem trocar a ativa.
                     # No import a sessão vai pra central (fluxo de conectar), então não mexe aí.
                     if not params.get("import_cookies"):

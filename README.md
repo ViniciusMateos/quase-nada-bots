@@ -49,8 +49,11 @@ Detalhes: `frontend/README.md` (app) e `backend/README.md` (API).
 **Lançado.** Bots (`auto-follow`, `dm-followers`, `human-warmup` e `like-repost` —
 este curte + reposta o drop de uma conta-alvo, em **lote** de várias contas numa run
 só), backend FastAPI (runs, execução paralela, log ao vivo via WebSocket, histórico
-persistente com log em disco), app iOS (hub, **histórico com filtros** em bottom sheet,
-log ao vivo, **gerenciador de contas do Instagram** — várias contas salvas com login
-autofill, uma ativa por vez, revalidação automática ao conectar), **Live Activity** no
-lock screen / Dynamic Island, push de progresso, deploy na Oracle e proxy residencial
-auto-curável.
+persistente com log em disco, **cronograma** que lembra do aquecimento humano 2x/dia
+por conta em horários sorteados), app iOS (hub, **histórico com filtros** em bottom
+sheet, log ao vivo, **gerenciador de contas do Instagram** com login autofill e
+**status de sessão** — uma ativa por vez, **seletor de conta na tela de rodar**,
+revalidação automática ao conectar), **Live Activity** no lock screen / Dynamic
+Island, **push separado em montes** por bot/cronograma/conexão (com tela de
+"verificando conta" ao tocar o lembrete), aviso de **OTA desatualizada** no Settings,
+deploy na Oracle e proxy residencial auto-curável.

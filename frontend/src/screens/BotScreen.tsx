@@ -8,6 +8,7 @@ import { cmpTexto } from '@/lib/ordenar';
 import { garantirLA } from '@/lib/la';
 import { colors } from '@/theme';
 import { Aparece, Botao, Card, CartaoTocavel } from '@/ui/components';
+import { SeletorConta } from '@/ui/SeletorConta';
 import { TecladoView } from '@/ui/TecladoView';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
@@ -24,6 +25,9 @@ export function BotScreen() {
   const [postInicial, setPostInicial] = useState('');      // like-repost: fronteira opcional (1ª vez)
   const [iniciando, setIniciando] = useState(false);
   const [runAtiva, setRunAtiva] = useState<RunInfo | null>(null);
+  // conta ativa (a que o run normal usa) + popup pra trocar
+  const [contaAtiva, setContaAtiva] = useState<Account | null>(null);
+  const [abrirSeletor, setAbrirSeletor] = useState(false);
   // ── lote (rodar em várias contas, uma atrás da outra) ──
   const [lote, setLote] = useState(false);
   const [contasAtivas, setContasAtivas] = useState<Account[] | null>(null);  // null = ainda não checou
@@ -45,16 +49,22 @@ export function BotScreen() {
     }).catch(() => {});
   }, [botId]);
 
+  // conta ativa (leve, só o índice — não valida sessão aqui pra não bater no IG a cada foco)
+  const carregarContaAtiva = useCallback(() => {
+    api.getAccounts().then((cs) => setContaAtiva(cs.find((c) => c.ativa) ?? null)).catch(() => {});
+  }, []);
+
   const carregar = useCallback(() => {
     api.getModos(botId).then((m) => setModos(Object.keys(m).sort(cmpTexto))).catch(() => {});
     checarRun();
+    carregarContaAtiva();
     if (temChats) {
       api.getChats(botId).then((c) => {
         setChats(c);
         setChat((atual) => (atual && c.some((x) => x.nome === atual) ? atual : c[0]?.nome ?? null));
       }).catch(() => {});
     }
-  }, [botId, temChats, checarRun]);
+  }, [botId, temChats, checarRun, carregarContaAtiva]);
 
   useFocusEffect(useCallback(() => {
     setIniciando(false);   // voltou pra esta tela → não está mais "iniciando" (mata o spinner preso)
@@ -151,6 +161,24 @@ export function BotScreen() {
     <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ padding: 16, gap: 16 }}
       keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
       <Aparece>
+      <Card>
+        <View style={styles.contaAtivaRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>Conta</Text>
+            {contaAtiva ? (
+              <Text style={styles.contaAtivaNome} numberOfLines={1}>@{contaAtiva.label}</Text>
+            ) : (
+              <Text style={styles.contaAtivaVazia}>nenhuma conta ativa</Text>
+            )}
+          </View>
+          <TouchableOpacity onPress={() => setAbrirSeletor(true)} style={styles.trocarBtn} hitSlop={8}>
+            <Ionicons name="swap-horizontal" size={16} color={colors.marca} />
+            <Text style={styles.linkTxt}>trocar</Text>
+          </TouchableOpacity>
+        </View>
+      </Card>
+      </Aparece>
+      <Aparece delay={40}>
       <Card>
         <Text style={styles.label}>Modo</Text>
         {modos.length > 0 ? (
@@ -290,12 +318,15 @@ export function BotScreen() {
           </>
         ) : (
           <>
-            <Botao title={lote ? 'Rodar lote' : 'Rodar'} onPress={() => rodar(false)} loading={iniciando} />
+            <Botao title={lote ? 'Rodar lote' : (contaAtiva ? `Rodar com @${contaAtiva.label}` : 'Rodar')}
+              onPress={() => rodar(false)} loading={iniciando} />
             <Botao title={lote ? 'Simular lote' : 'Simular (dry-run)'} cor={colors.card2} txtCor={colors.texto}
               onPress={() => rodar(true)} disabled={iniciando} />
           </>
         )}
       </View>
+      <SeletorConta visible={abrirSeletor} onClose={() => setAbrirSeletor(false)}
+        onTrocou={carregarContaAtiva} />
     </ScrollView>
     </TecladoView>
   );
@@ -303,6 +334,10 @@ export function BotScreen() {
 
 const styles = StyleSheet.create({
   label: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', marginBottom: 10, textTransform: 'uppercase' },
+  contaAtivaRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  contaAtivaNome: { color: colors.texto, fontSize: 17, fontWeight: '800' },
+  contaAtivaVazia: { color: colors.textoFraco, fontSize: 14, fontStyle: 'italic' },
+  trocarBtn: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 },
   chipOn: { backgroundColor: colors.laranja, borderColor: colors.laranja },

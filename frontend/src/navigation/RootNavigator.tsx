@@ -16,6 +16,7 @@ import { EditModoScreen } from '@/screens/EditModoScreen';
 import { InstagramLoginScreen } from '@/screens/InstagramLoginScreen';
 import { ContasIgScreen } from '@/screens/ContasIgScreen';
 import { CronogramaScreen } from '@/screens/CronogramaScreen';
+import { VerificandoContaScreen } from '@/screens/VerificandoContaScreen';
 import { HistoricoScreen } from '@/screens/HistoricoScreen';
 
 export type RootStackParamList = {
@@ -28,23 +29,31 @@ export type RootStackParamList = {
   EditModo: { botId: string; modoNome: string; criar?: boolean };
   ContasIg: undefined;
   Cronograma: undefined;
+  VerificandoConta: { contaId?: string; label?: string; botId: string; nome: string };
   InstagramLogin: { label?: string; senha?: string } | undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
-// Roteia o tap numa notificação: lembrete do cronograma → tela do Bot (pra rodar);
-// push de run em andamento (runId) → tela da Run.
+// Roteia o tap numa notificação:
+//  - lembrete do cronograma → cai na Home e abre a tela "Verificando conta" (LoadingDog +
+//    mensagens): ela valida a sessão e então redireciona pro Bot (sessão viva) ou pro
+//    reconectar (sessão caída) — o usuário vê o que está acontecendo em vez de tela parada;
+//  - push de run em andamento (runId) → tela da Run.
 function aoTocarNotif(data: unknown) {
   const d = (data ?? {}) as {
     runId?: string; bot?: string; titulo?: string; tipo?: string; botId?: string; nome?: string;
+    conta?: string; conta_id?: string;
   };
   if (!navigationRef.isReady()) return;
   if (d.tipo === 'cronograma') {
-    // lembrete do cronograma → abre as Contas pra conectar/ativar a conta que vai rodar
-    // (provavelmente não está conectada). Depois é só rodar o bot.
-    navigationRef.navigate('ContasIg');
+    // começa na Home (base) e empilha a tela de verificação — a validação (e o feedback) vive lá
+    navigationRef.reset({ index: 0, routes: [{ name: 'Hub' }] });
+    navigationRef.navigate('VerificandoConta', {
+      contaId: d.conta_id, label: d.conta,
+      botId: d.botId || 'human-warmup', nome: d.nome || 'Aquecimento Humano',
+    });
     return;
   }
   if (d.runId) {
@@ -104,6 +113,8 @@ export function RootNavigator() {
           options={{ title: 'Contas do Instagram' }} />
         <Stack.Screen name="Cronograma" component={CronogramaScreen}
           options={{ title: 'Cronograma' }} />
+        <Stack.Screen name="VerificandoConta" component={VerificandoContaScreen}
+          options={{ title: 'Verificando conta' }} />
         <Stack.Screen name="InstagramLogin" component={InstagramLoginScreen}
           options={{ title: 'Conectar Instagram' }} />
       </Stack.Navigator>

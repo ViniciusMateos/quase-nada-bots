@@ -3,6 +3,18 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [1.5.0] — 2026-09-04
+
+### Adicionado
+- feat: **lista das últimas runs por bot** — ao entrar num bot, mostra as 10 últimas runs dele agrupadas por dia (Hoje / Ontem / N dias atrás), com a conta e a hora; ignora run-fantasma (a que nem chegou a subir)
+- feat: **transição suave no "Atualizar agora"** — um overlay "Atualizando…" com o cachorro em fade antes do reload, no lugar do flash seco
+
+### Modificado
+- update: **splash escura no reload** — a splash nativa passa a casar com o overlay (#0F0F0F + cachorro), então aplicar um OTA fica escuro→escuro, sem o flash do degradê (config nativa, vale no build)
+
+### Manutenção
+- chore: bots de exemplo (auto-2 a auto-6) pra testar a UI com vários bots
+
 ## [1.4.0] — 2026-08-18
 
 ### Adicionado

@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/theme';
 import { Aparece, Botao, Card } from '@/ui/components';
+import { LoadingDog } from '@/ui/LoadingDog';
 import { OTA_VERSION, rodandoDeUpdate } from '@/constants/otaVersion';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
@@ -44,6 +46,7 @@ export function SettingsScreen() {
     setOta('baixando');
     try {
       await U.fetchUpdateAsync();
+      await new Promise((r) => setTimeout(r, 550));   // deixa o fade "Atualizando…" aparecer antes do reload
       await U.reloadAsync();   // reinicia já com o bundle novo
     } catch { setOta('erro'); }
   }
@@ -57,6 +60,7 @@ export function SettingsScreen() {
   const estadoCor = ota === 'disponivel' || ota === 'erro' ? colors.alerta : colors.textoFraco;
 
   return (
+    <View style={styles.raiz}>
     <ScrollView style={styles.tela} contentContainerStyle={styles.conteudo}
       showsVerticalScrollIndicator={false}>
       <Aparece>
@@ -104,10 +108,29 @@ export function SettingsScreen() {
         </View>
       </Aparece>
     </ScrollView>
+
+    {/* overlay de atualização: fade suave por cima de tudo enquanto baixa o bundle novo,
+        pra não ficar só o "pisca" do reload */}
+    {ota === 'baixando' && (
+      <Animated.View entering={FadeIn.duration(220)} exiting={FadeOut.duration(180)}
+        style={styles.overlay}>
+        <LoadingDog size={64} />
+        <Text style={styles.overlayTxt}>Atualizando…</Text>
+      </Animated.View>
+    )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  raiz: { flex: 1 },
+  // overlay full-screen do "Atualizando…" — fundo = colors.bg (#0F0F0F) a ~96%
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15,15,15,0.96)',
+    alignItems: 'center', justifyContent: 'center', gap: 16,
+  },
+  overlayTxt: { color: colors.texto, fontSize: 15, fontWeight: '700' },
   tela: { flex: 1, backgroundColor: colors.bg },
   conteudo: { padding: 16, gap: 12, paddingBottom: 48 },
   label: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase' },

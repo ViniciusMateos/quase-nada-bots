@@ -53,6 +53,7 @@ persistente com log em disco, **cronograma** que lembra do aquecimento humano 2x
 por conta em horários sorteados), app iOS (hub, **histórico com filtros** em bottom
 sheet, log ao vivo, **gerenciador de contas do Instagram** com login autofill e
 **status de sessão** — uma ativa por vez, **seletor de conta na tela de rodar**,
+**lista das últimas runs por bot** (agrupada por dia),
 revalidação automática ao conectar), **Live Activity** no lock screen / Dynamic
 Island, **push separado em montes** por bot/cronograma/conexão (com tela de
 "verificando conta" ao tocar o lembrete), aviso de **OTA desatualizada** no Settings,

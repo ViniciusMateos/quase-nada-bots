@@ -54,7 +54,9 @@ module.exports = {
     userInterfaceStyle: 'dark',
     backgroundColor: '#0F0F0F',
     icon: current.icon,
-    splash: { image: './src/assets/splash.png', resizeMode: 'cover', backgroundColor: '#8114B0' },
+    // splash ESCURA (#0F0F0F + cachorro branco) = casa com o overlay "Atualizando…" do OTA,
+    // então o reload nativo (reloadAsync) fica escuro→escuro, sem o flash do degradê antigo.
+    splash: { image: './src/assets/splash_escuro.png', resizeMode: 'cover', backgroundColor: '#0F0F0F' },
     ios: {
       bundleIdentifier: current.bundleId,
       supportsTablet: false,

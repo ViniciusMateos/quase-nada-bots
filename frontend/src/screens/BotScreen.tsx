@@ -1,10 +1,11 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { api, Account, Chat, RunInfo } from '@/lib/api';
+import { api, Account, Chat, RunInfo, RunHistorico } from '@/lib/api';
 import { cmpTexto } from '@/lib/ordenar';
+import { bucketData, fmtHora } from '@/lib/datas';
 import { garantirLA } from '@/lib/la';
 import { colors } from '@/theme';
 import { Aparece, Botao, Card, CartaoTocavel } from '@/ui/components';
@@ -14,6 +15,13 @@ import type { RootStackParamList } from '@/navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Rt = RouteProp<RootStackParamList, 'Bot'>;
+
+// cor do pontinho de resultado da run (verde ok / vermelho erro-bloqueio / cinza parado)
+function corRun(r: RunHistorico): string {
+  if (r.bloqueio || r.status === 'erro') return colors.erro;
+  if (r.status === 'parado') return colors.textoFraco;
+  return colors.ok;
+}
 
 export function BotScreen() {
   const nav = useNavigation<Nav>();
@@ -28,6 +36,8 @@ export function BotScreen() {
   // conta ativa (a que o run normal usa) + popup pra trocar
   const [contaAtiva, setContaAtiva] = useState<Account | null>(null);
   const [abrirSeletor, setAbrirSeletor] = useState(false);
+  // últimas runs DESTE bot (contas que rodaram), agrupadas por dia
+  const [historico, setHistorico] = useState<RunHistorico[] | null>(null);
   // ── lote (rodar em várias contas, uma atrás da outra) ──
   const [lote, setLote] = useState(false);
   const [contasAtivas, setContasAtivas] = useState<Account[] | null>(null);  // null = ainda não checou
@@ -58,6 +68,8 @@ export function BotScreen() {
     api.getModos(botId).then((m) => setModos(Object.keys(m).sort(cmpTexto))).catch(() => {});
     checarRun();
     carregarContaAtiva();
+    // últimas runs deste bot (pra listinha "últimas contas que rodaram")
+    api.getHistorico(botId).then(setHistorico).catch(() => setHistorico([]));
     if (temChats) {
       api.getChats(botId).then((c) => {
         setChats(c);
@@ -72,6 +84,25 @@ export function BotScreen() {
     const id = setInterval(checarRun, 2500);   // atualiza o "Já está rodando" ao vivo
     return () => clearInterval(id);
   }, [carregar, checarRun]));
+
+  // 10 últimas runs DESTE bot, mais novas primeiro, com cabeçalhos de data (igual o Histórico).
+  // Ignora run-FANTASMA: a que nem chegou a rodar (sem conta E sem saldo) — ex: DM que caiu
+  // logo no início por sem sessão / túnel congestionado. Ficavam como linha vazia "conta ?".
+  const ultimasComData = useMemo<(RunHistorico | { _header: string })[]>(() => {
+    if (!historico?.length) return [];
+    const ord = [...historico]
+      .filter((r) => !!r.conta || Object.keys(r.saldo || {}).length > 0)
+      .sort((a, b) => (b.ended_at ?? b.started_at ?? 0) - (a.ended_at ?? a.started_at ?? 0))
+      .slice(0, 10);
+    const out: (RunHistorico | { _header: string })[] = [];
+    let atual: string | null = null;
+    for (const r of ord) {
+      const b = bucketData(r.ended_at ?? r.started_at);
+      if (b !== atual) { out.push({ _header: b }); atual = b; }
+      out.push(r);
+    }
+    return out;
+  }, [historico]);
 
   // carrega só as contas com SESSÃO ATIVA (valida via túnel) e já marca todas — é a lista do lote
   const carregarContasAtivas = useCallback(async () => {
@@ -325,6 +356,33 @@ export function BotScreen() {
           </>
         )}
       </View>
+      {historico && (
+        <Aparece delay={120}>
+        <Card style={{ gap: 4 }}>
+          <Text style={styles.label}>Últimas runs</Text>
+          {ultimasComData.length === 0 ? (
+            <Text style={styles.runVazio}>Esse bot ainda não rodou.</Text>
+          ) : ultimasComData.map((item, i) => {
+            if ('_header' in item) {
+              return <Text key={`h:${item._header}:${i}`} style={styles.runDataHeader}>{item._header}</Text>;
+            }
+            const r = item;
+            return (
+              <TouchableOpacity key={r.id} activeOpacity={0.7} disabled={r.backfill}
+                onPress={() => nav.navigate('Run', { runId: r.id, nome })} style={styles.runLinha}>
+                <View style={[styles.runDot, { backgroundColor: corRun(r) }]} />
+                <Ionicons name="person-circle-outline" size={14} color={colors.marca} />
+                <Text style={styles.runConta} numberOfLines={1}>
+                  {r.conta ? `@${r.conta}` : 'conta ?'}{r.dry_run ? '  ·  simulação' : ''}
+                </Text>
+                <Text style={styles.runHora}>{fmtHora(r.ended_at ?? r.started_at)}</Text>
+                {!r.backfill && <Ionicons name="chevron-forward" size={14} color={colors.textoFraco} />}
+              </TouchableOpacity>
+            );
+          })}
+        </Card>
+        </Aparece>
+      )}
       <SeletorConta visible={abrirSeletor} onClose={() => setAbrirSeletor(false)}
         onTrocou={carregarContaAtiva} />
     </ScrollView>
@@ -338,6 +396,15 @@ const styles = StyleSheet.create({
   contaAtivaNome: { color: colors.texto, fontSize: 17, fontWeight: '800' },
   contaAtivaVazia: { color: colors.textoFraco, fontSize: 14, fontStyle: 'italic' },
   trocarBtn: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  // últimas runs (listinha por dia)
+  runVazio: { color: colors.textoFraco, fontSize: 13, paddingVertical: 4 },
+  runDataHeader: { color: colors.textoFraco, fontSize: 11, fontWeight: '800', textTransform: 'uppercase',
+    letterSpacing: 0.5, marginTop: 10, marginBottom: 2 },
+  runLinha: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  runDot: { width: 8, height: 8, borderRadius: 999 },
+  runConta: { color: colors.texto, fontSize: 14, fontWeight: '600', flex: 1 },
+  runHora: { color: colors.textoFraco, fontSize: 12, fontVariant: ['tabular-nums'] },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 },
   chipOn: { backgroundColor: colors.laranja, borderColor: colors.laranja },

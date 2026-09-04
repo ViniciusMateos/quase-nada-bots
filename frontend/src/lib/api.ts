@@ -56,7 +56,8 @@ export const api = {
   runLote: (bot: string, params: Record<string, unknown>, contas: string[]) =>
     http.post<LoteInfo>(`/bots/${bot}/run-lote`, { params, contas }),
   listRuns: () => http.get<RunInfo[]>('/runs'),
-  getHistorico: () => http.get<RunHistorico[]>('/runs/history'),
+  getHistorico: (bot?: string) =>
+    http.get<RunHistorico[]>(bot ? `/runs/history?bot=${encodeURIComponent(bot)}` : '/runs/history'),
   getRun: (id: string) => http.get<RunDetail>(`/runs/${id}`),
   stopRun: (id: string) => http.post(`/runs/${id}/stop`),
   // manda o push token da Live Activity do APP + o bundle deste build (vira o tópico do

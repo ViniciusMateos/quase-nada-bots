@@ -10,6 +10,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { api, Bot, RunHistorico } from '@/lib/api';
 import { cmpTexto } from '@/lib/ordenar';
+import { bucketData } from '@/lib/datas';
 import { colors } from '@/theme';
 import { Aparece, Botao, Card } from '@/ui/components';
 import { TelaCarregando } from '@/ui/LoadingDog';
@@ -35,20 +36,6 @@ function janelaPeriodo(p: Periodo): [number, number] {
   if (p === '7d') return [agora - 7 * 86400, Infinity];
   if (p === '30d') return [agora - 30 * 86400, Infinity];
   return [0, Infinity];   // tudo
-}
-
-// rótulo do cabeçalho de data: Hoje / Ontem / N dias atrás (até 6) / Semana 2, 3… (por semana)
-function bucketData(epoch: number | null): string {
-  if (!epoch) return 'Sem data';
-  const h = new Date();
-  const inicioHoje = new Date(h.getFullYear(), h.getMonth(), h.getDate()).getTime();
-  const d = new Date(epoch * 1000);
-  const inicioDia = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const dias = Math.round((inicioHoje - inicioDia) / 86400000);
-  if (dias <= 0) return 'Hoje';
-  if (dias === 1) return 'Ontem';
-  if (dias <= 6) return `${dias} dias atrás`;
-  return `Semana ${Math.floor(dias / 7) + 1}`;
 }
 
 // backdrop que faz FADE por trás do sheet (independente do slide do sheet)

@@ -30,6 +30,23 @@ BOTS = {
         "tem_modos": True, "tem_chats": False, "tem_ig": True,
         "descricao": "Curte (e reposta) os posts de uma conta-alvo — ex: o drop do brechó.",
     },
+    # ── bots de EXEMPLO (clones do Auto Follow) só pra testar a UI com vários bots.
+    #    Apontam pro mesmo worker/config do auto-follow; dá pra apagar quando não precisar. ──
+    "auto-2": {"nome": "Auto Follow 2", "dir": "auto-follow-instagram",
+               "tem_modos": True, "tem_chats": True, "tem_ig": True,
+               "descricao": "Exemplo (clone do Auto Follow) pra teste."},
+    "auto-3": {"nome": "Auto Follow 3", "dir": "auto-follow-instagram",
+               "tem_modos": True, "tem_chats": True, "tem_ig": True,
+               "descricao": "Exemplo (clone do Auto Follow) pra teste."},
+    "auto-4": {"nome": "Auto Follow 4", "dir": "auto-follow-instagram",
+               "tem_modos": True, "tem_chats": True, "tem_ig": True,
+               "descricao": "Exemplo (clone do Auto Follow) pra teste."},
+    "auto-5": {"nome": "Auto Follow 5", "dir": "auto-follow-instagram",
+               "tem_modos": True, "tem_chats": True, "tem_ig": True,
+               "descricao": "Exemplo (clone do Auto Follow) pra teste."},
+    "auto-6": {"nome": "Auto Follow 6", "dir": "auto-follow-instagram",
+               "tem_modos": True, "tem_chats": True, "tem_ig": True,
+               "descricao": "Exemplo (clone do Auto Follow) pra teste."},
 }
 
 # arquivo (dentro do dir do worker) onde a sessão importada do IG é gravada

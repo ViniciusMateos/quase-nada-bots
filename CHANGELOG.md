@@ -3,6 +3,25 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [1.6.0] — 2026-09-10
+
+### Adicionado
+- feat: **cronograma roda o Aquecimento Humano sozinho** no horário (auto-run) — valida a sessão pelo proxy antes, **adia** se já tem bot rodando (1 IP = um por vez) e, se a sessão caiu, manda push pra **reconectar** em vez de rodar à toa
+- feat: **Live Activity automática** (push-to-start, iOS 17.2+) — a barra do lock screen **liga sozinha** quando o cronograma roda, com o app fechado (o app registra o pushToStartToken no boot e o server dispara o push de start)
+
+### Corrigido
+- fix: no **lote**, conta sem sessão viva fica **travada** (cadeado) e não pode ser marcada; só as vivas vêm pré-selecionadas
+- fix: `playwright` adicionado no `requirements.txt` (os workers rodam no mesmo venv do backend)
+
+### Modificado
+- chore: o app passou a apontar pro **server 2** (`quasenadaserver2.duckdns.org/bots`) — o backend dos bots migrou de servidor
+
+### Manutenção
+- chore: removidos os bots de exemplo (`auto-2` a `auto-6`)
+
+### Documentação
+- docs: README do backend menciona os 4 bots e o cronograma auto-run
+
 ## [1.5.0] — 2026-09-04
 
 ### Adicionado

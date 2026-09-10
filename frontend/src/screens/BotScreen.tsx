@@ -108,10 +108,22 @@ export function BotScreen() {
   const carregarContasAtivas = useCallback(async () => {
     setVerContas(true);
     try {
-      const r = await api.validarContas();
-      const ativas = r.filter((a) => a.sessao_ok && a.id).sort((a, b) => cmpTexto(a.label, b.label));
-      setContasAtivas(ativas);
-      setSelec(new Set(ativas.map((a) => a.id as string)));   // default: todas marcadas
+      // BASE: contas cadastradas (rápido e confiável) — a lista nunca esvazia à toa.
+      const base = (await api.getAccounts()).filter((a) => a.id);
+      // OVERLAY: sessão viva é best-effort. A checagem bate no IG conta por conta pelo túnel
+      // único e, sob congestão, pode voltar tudo falso — nesse caso NÃO zeramos a lista;
+      // a sessão fica "?" e o worker pula conta morta na hora de rodar.
+      const sess: Record<string, boolean> = {};
+      try {
+        for (const a of await api.validarContas()) if (a.id) sess[a.id] = !!a.sessao_ok;
+      } catch { /* checagem falhou — mantém a lista */ }
+      const lista = base
+        .map((a) => ({ ...a, sessao_ok: a.id! in sess ? sess[a.id!] : undefined }))
+        .sort((a, b) => cmpTexto(a.label, b.label));
+      setContasAtivas(lista);
+      // conta SEM sessão viva não entra no lote — pré-seleciona só as vivas (sessao_ok === true).
+      const vivas = lista.filter((a) => a.sessao_ok === true);
+      setSelec(new Set(vivas.map((a) => a.id as string)));
     } catch { setContasAtivas([]); } finally { setVerContas(false); }
   }, []);
 
@@ -256,7 +268,7 @@ export function BotScreen() {
             <View style={{ flex: 1, paddingRight: 12 }}>
               <Text style={styles.label}>Rodar em lote</Text>
               <Text style={styles.loteDica}>
-                Roda em várias contas, uma atrás da outra. Lista só as com sessão ativa.
+                Roda em várias contas, uma atrás da outra. As com sessão caída ficam sinalizadas (o worker pula elas).
               </Text>
             </View>
             <Switch value={lote} onValueChange={toggleLote}
@@ -276,20 +288,33 @@ export function BotScreen() {
                 </TouchableOpacity>
               </View>
               {(contasAtivas ?? []).map((c) => {
-                const on = !!c.id && selec.has(c.id);
+                const viva = c.sessao_ok === true;       // só quem tem sessão viva entra no lote
+                const on = viva && !!c.id && selec.has(c.id);
+                const morta = c.sessao_ok === false;     // checou e a sessão caiu
                 return (
-                  <TouchableOpacity key={c.id} activeOpacity={0.7} style={styles.contaRow}
-                    onPress={() => toggleConta(c.id as string)}>
-                    <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20}
-                      color={on ? colors.marca : colors.textoFraco} />
-                    <Text style={styles.contaRowTxt} numberOfLines={1}>@{c.label}</Text>
+                  <TouchableOpacity key={c.id} activeOpacity={viva ? 0.7 : 1}
+                    style={[styles.contaRow, !viva && styles.contaRowOff]}
+                    disabled={!viva}
+                    onPress={() => viva && toggleConta(c.id as string)}>
+                    <Ionicons name={!viva ? 'lock-closed' : (on ? 'checkbox' : 'square-outline')}
+                      size={20} color={on ? colors.marca : colors.textoFraco} />
+                    <Text style={[styles.contaRowTxt, !viva && { color: colors.textoFraco }]}
+                      numberOfLines={1}>@{c.label}</Text>
                     {c.ativa ? <Text style={styles.contaTag}>ativa</Text> : null}
+                    {morta ? <Text style={[styles.contaTag, { color: colors.erro }]}>sessão caiu</Text> : null}
+                    {c.sessao_ok === undefined ? <Text style={styles.contaTag}>sem sessão</Text> : null}
                   </TouchableOpacity>
                 );
               })}
               {contasAtivas !== null && contasAtivas.length === 0 && !verContas && (
                 <Text style={styles.loteDica}>
-                  Nenhuma conta com sessão ativa agora. Conecta/reconecta na home e atualiza.
+                  Nenhuma conta cadastrada. Conecta uma na home primeiro.
+                </Text>
+              )}
+              {contasAtivas !== null && contasAtivas.length > 0 && !verContas
+                && !contasAtivas.some((a) => a.sessao_ok === true) && (
+                <Text style={styles.loteDica}>
+                  Nenhuma conta com sessão viva agora — reconecta na home ou toca em atualizar.
                 </Text>
               )}
             </View>
@@ -425,6 +450,7 @@ const styles = StyleSheet.create({
   loteSubTxt: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
   contaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 9,
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  contaRowOff: { opacity: 0.5 },   // conta sem sessão viva: travada, não dá pra marcar no lote
   contaRowTxt: { color: colors.texto, fontSize: 14, fontWeight: '600', flex: 1 },
   contaTag: { color: colors.ok, fontSize: 11, fontWeight: '700' },
 });

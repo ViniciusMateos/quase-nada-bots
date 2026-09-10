@@ -15,7 +15,7 @@ Dynamic Island). Mesma linha dos apps Quase Nada Lembretes/Finanças.
 Não há tela de "informar servidor". A **URL** e o **token** ficam **cravados no build**:
 
 - `EXPO_PUBLIC_API_URL` — URL do backend (default de produção em `config/env.ts`:
-  `https://quasenadaserver1.duckdns.org/bots`).
+  `https://quasenadaserver2.duckdns.org/bots`).
 - `EXPO_PUBLIC_API_TOKEN` — token da API (`Authorization: Bearer …`).
 
 Ficam no `eas.json` (por perfil) e/ou `.env.local` (nunca commitados). O `apiClient.ts`

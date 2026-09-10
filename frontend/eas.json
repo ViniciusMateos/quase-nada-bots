@@ -10,7 +10,7 @@
       "environment": "development",
       "env": {
         "APP_VARIANT": "development",
-        "EXPO_PUBLIC_API_URL": "https://quasenadaserver1.duckdns.org/bots"
+        "EXPO_PUBLIC_API_URL": "https://quasenadaserver2.duckdns.org/bots"
       }
     },
     "preview": {
@@ -19,7 +19,7 @@
       "environment": "preview",
       "env": {
         "APP_VARIANT": "preview",
-        "EXPO_PUBLIC_API_URL": "https://quasenadaserver1.duckdns.org/bots"
+        "EXPO_PUBLIC_API_URL": "https://quasenadaserver2.duckdns.org/bots"
       }
     }
   }

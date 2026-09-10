@@ -5,7 +5,7 @@ const extra = (Constants.expoConfig?.extra ?? {}) as {
 };
 
 // URL de produção (fixa) — o app já abre conectado, sem precisar configurar nada.
-const URL_PADRAO = 'https://quasenadaserver1.duckdns.org/bots';
+const URL_PADRAO = 'https://quasenadaserver2.duckdns.org/bots';
 
 export const env = {
   apiBaseUrl: extra.apiBaseUrl || process.env.EXPO_PUBLIC_API_URL || URL_PADRAO,

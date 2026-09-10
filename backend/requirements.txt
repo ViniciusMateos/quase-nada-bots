@@ -3,3 +3,6 @@ uvicorn[standard]==0.34.0
 openpyxl==3.1.5
 pyjwt[crypto]
 httpx[http2]
+# os workers rodam no MESMO venv do backend e usam Playwright (Chromium headed via Xvfb).
+# depois de instalar: `playwright install chromium` + `playwright install-deps chromium`.
+playwright==1.49.1

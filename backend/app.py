@@ -34,7 +34,7 @@ def auth(authorization: str = Header(None)):
 
 @app.on_event("startup")
 async def _iniciar_cronograma():
-    asyncio.create_task(cronograma.loop())
+    asyncio.create_task(cronograma.loop(mgr))   # mgr → o cronograma AUTO-RODA o aquecimento sozinho
     asyncio.create_task(mgr.loop_reaper())   # watchdog de trava roda mesmo com o app fechado
 
 
@@ -284,6 +284,17 @@ async def set_liveactivity(payload: dict):
           flush=True)
     await mgr.empurrar_la()   # já reflete o estado atual, sem esperar o próximo [progress]
     return {"ok": True}
+
+
+@app.post("/liveactivity/pts", dependencies=[Depends(auth)])
+async def set_pts_token(payload: dict):
+    """O app manda o pushToStartToken (iOS 17.2+) — com ele o SERVER inicia a Live Activity
+    sozinho (ex: o cronograma auto-rodando o aquecimento), sem o app aberto. Diferente do
+    token de update: é do app (não por-activity), não rotaciona por run e vale até vir outro."""
+    r = mgr.registrar_pts_token(payload.get("token"), liveactivity.bundle_valido(payload.get("bundle")))
+    print(f"[la] pts token recebido: {'sim' if mgr.pts_token else 'VAZIO'} | bundle={mgr.pts_bundle or '(do .env)'}",
+          flush=True)
+    return r
 
 
 @app.post("/liveactivity/test", dependencies=[Depends(auth)])

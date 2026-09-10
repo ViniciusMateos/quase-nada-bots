@@ -1,7 +1,8 @@
 import { api } from '@/lib/api';
 import { env } from '@/config/env';
 import {
-  aoReceberTokenLA, encerrarTodasLA, iniciarLiveActivity, laDisponivel,
+  aoReceberPushToStartToken, aoReceberTokenLA, encerrarTodasLA,
+  iniciarLiveActivity, laDisponivel, observarLA,
 } from '../../modules/live-activity';
 
 /**
@@ -27,13 +28,37 @@ let ouvindo = false;
 function garantirListener() {
   if (ouvindo) return;
   ouvindo = true;
-  aoReceberTokenLA((token) => {
+  aoReceberTokenLA((token, id) => {
     // manda o activityId JUNTO com o token. O server usa pra distinguir ROTAÇÃO de token
     // (mesmo id → só troca o token, NÃO encerra nada) de SESSÃO NOVA (id diferente → encerra
     // a LA antiga órfã antes de assumir a nova). Sem o id, o server não saberia a diferença e
     // mataria a própria LA viva numa rotação. O bundle vira o tópico do APNs (dev/preview).
-    api.setLiveActivity(token, env.bundleId, ativaId ?? '').catch(() => { /* sem LA — segue */ });
+    // `id` vem do nativo (vale pras LAs iniciadas por push-to-start, que o app não criou).
+    api.setLiveActivity(token, env.bundleId, id ?? ativaId ?? '').catch(() => { /* sem LA — segue */ });
   });
+}
+
+let laIniciada = false;
+
+/**
+ * Liga a Live Activity automática (push-to-start). Chame UMA vez no boot do app.
+ *
+ * - Manda o nativo observar o pushToStartToken (iOS 17.2+) e os tokens de update de qualquer
+ *   activity (inclusive as que o SERVER cria sozinho — ex: o cronograma auto-rodando).
+ * - Registra os dois tokens no server: o pts (server cria a LA) e o de update (server atualiza).
+ * Idempotente e no-op gracioso em Expo Go / Android / iOS < 17.2.
+ */
+export function initLA(): void {
+  if (laIniciada) return;
+  laIniciada = true;
+  try {
+    if (!laDisponivel()) return;
+    garantirListener();                 // onToken → server atualiza/encerra
+    aoReceberPushToStartToken((token) => {
+      api.setPushToStartToken(token, env.bundleId).catch(() => { /* sem suporte — segue */ });
+    });
+    observarLA();                       // liga os observadores no nativo
+  } catch { /* sem LA — o app segue normal */ }
 }
 
 /**

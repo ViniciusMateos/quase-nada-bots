@@ -65,6 +65,9 @@ export const api = {
   // Live Activity, e o server é quem soma as runs dentro dela.
   setLiveActivity: (token: string, bundle: string, activityId: string) =>
     http.post('/liveactivity', { token, bundle, activity_id: activityId }),
+  // pushToStartToken (iOS 17.2+): com ele o server INICIA a Live Activity sozinho (cronograma).
+  setPushToStartToken: (token: string, bundle: string) =>
+    http.post<{ ok: boolean }>('/liveactivity/pts', { token, bundle }),
   testLiveActivity: (n: number) =>
     http.post<{ ok: boolean; erro?: string }>('/liveactivity/test', { n }),
   connectInstagram: (cookies: IgCookie[], label?: string) =>

@@ -156,3 +156,26 @@ def encerrar(push_token, estado, bundle=None):
         "dismissal-date": int(time.time()) + 4,   # some do lock screen ~4s depois
     }}
     return _enviar(push_token, payload, bundle)
+
+
+def iniciar(push_token, estado, bundle=None, alert=None):
+    """Push-to-start (iOS 17.2+): CRIA a Live Activity remotamente, com o app fechado.
+    `push_token` é o pushToStartToken (do app), NÃO o token de update. Precisa carregar
+    `attributes-type` + `attributes` (o shape imutável) além do content-state inicial.
+
+    ⚠️ O push de START **exige `alert`**: sem ele o APNs responde 200 mas o iOS NÃO cria a
+    Live Activity (silencioso — o pior tipo). Diferente do `update`, que dispensa alert."""
+    cs = _content_state(estado)
+    if not alert:
+        alert = {"title": cs.get("titulo") or "Bots", "body": cs.get("label") or "começou"}
+    aps = {
+        "timestamp": int(time.time()),
+        "event": "start",
+        "content-state": cs,
+        "attributes-type": "BotActivityAttributes",
+        "attributes": {"app": "bots"},
+        "alert": alert,
+        "stale-date": int(time.time()) + 3600,
+        "relevance-score": 100,
+    }
+    return _enviar(push_token, {"aps": aps}, bundle)

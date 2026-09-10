@@ -206,6 +206,8 @@ class Run:
 class RunManager:
     # onde o token da Live Activity é persistido (sobrevive a restart do backend)
     _LA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "la_token.json")
+    # pushToStartToken (iOS 17.2+): o server INICIA a LA sozinho (ex: cronograma auto-rodando)
+    _PTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pts_token.json")
     # logs por run gravados pelo backend (sobrevivem à saída da memória / restart) → o histórico lê daqui
     _LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "run_logs")
 
@@ -223,7 +225,12 @@ class RunManager:
         self.la_activity_id = None   # id da activity dona do token atual (distingue rotação de sessão nova)
         self._ult_la_pct = -100
         self._ult_la_t = 0.0
+        # pushToStartToken: NÃO é por-activity (é do app), não rotaciona por run — persiste e vale
+        # pra sempre até o app mandar um novo. Com ele o server inicia a LA mesmo com o app fechado.
+        self.pts_token = None
+        self.pts_bundle = None
         self._carregar_la_token()   # sobrevive a restart (senão a LA congela/some no restart)
+        self._carregar_pts_token()
 
     def _carregar_la_token(self):
         try:
@@ -282,6 +289,45 @@ class RunManager:
             os.remove(self._LA_FILE)
         except Exception:
             pass
+
+    # ── push-to-start (iOS 17.2+): o server inicia a LA sem o app aberto ──
+    def _carregar_pts_token(self):
+        try:
+            with open(self._PTS_FILE, encoding="utf-8") as f:
+                d = json.load(f)
+            self.pts_token = d.get("token") or None
+            self.pts_bundle = d.get("bundle") or None
+        except Exception:
+            pass
+
+    def registrar_pts_token(self, token, bundle):
+        """Guarda o pushToStartToken vindo do app (+bundle p/ tópico APNs) e PERSISTE."""
+        self.pts_token = (token or "").strip() or None
+        self.pts_bundle = bundle or None
+        try:
+            with open(self._PTS_FILE, "w", encoding="utf-8") as f:
+                json.dump({"token": self.pts_token, "bundle": self.pts_bundle}, f)
+        except Exception:
+            pass
+        return {"ok": bool(self.pts_token)}
+
+    async def iniciar_la_pts(self, titulo, estado=None, alert=None):
+        """INICIA a Live Activity via push-to-start (server → APNs), sem depender do app aberto.
+        No-op silencioso se não houver pts_token (build sem suporte) ou APNs não configurado.
+        Depois que o iOS cria a LA, o app manda o token de update dela (onToken) e o
+        empurrar_la() normal assume as atualizações."""
+        if not self.pts_token or not liveactivity.configurado():
+            return {"ok": False, "motivo": "sem pts_token/apns"}
+        est = estado or {"titulo": titulo, "pct": 0, "medido": False,
+                         "label": "começando", "quantos": 1, "bot": "", "linhas": []}
+        try:
+            ok, det = await asyncio.to_thread(
+                liveactivity.iniciar, self.pts_token, est, self.pts_bundle, alert)
+            print(f"[la] push-to-start ok={ok}" + ("" if ok else f" DET={det}"), flush=True)
+            return {"ok": ok, "det": det}
+        except Exception as e:
+            print(f"[la] push-to-start explodiu: {e}", flush=True)
+            return {"ok": False, "erro": str(e)}
 
     def _ativas(self):
         return [r for r in self.runs.values() if r.status in ("rodando", "iniciando")]

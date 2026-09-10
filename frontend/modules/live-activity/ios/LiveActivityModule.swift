@@ -2,9 +2,15 @@ import ExpoModulesCore
 import ActivityKit
 
 public class LiveActivityModule: Module {
+  // evita observadores duplicados (observar() idempotente; token por activity só uma vez)
+  private var observando = false
+  private var idsObservados = Set<String>()
+
   public func definition() -> ModuleDefinition {
     Name("LiveActivity")
-    Events("onToken")
+    // onToken = token de UPDATE de uma activity (o server atualiza/encerra a barra)
+    // onPushToStart = pushToStartToken do app (o server INICIA a barra sozinho, app fechado)
+    Events("onToken", "onPushToStart")
 
     // device suporta + usuário deixou ligado?
     Function("disponivel") { () -> Bool in
@@ -28,12 +34,36 @@ public class LiveActivityModule: Module {
         .first(where: { $0.activityState == .active })?.id ?? ""
     }
 
-    // Inicia A Live Activity do app (só existe uma) e devolve o id, ou "" se não rolou.
-    // String não-opcional de propósito: é o formato de retorno que já compila neste setup.
-    //
-    // O token chega DEPOIS (1-3s) e pode rotacionar a qualquer momento — por isso o
-    // evento onToken, nunca um setTimeout. Como só existe uma activity, o token que chega
-    // é sempre dela: não precisa carimbar de quem é.
+    // Liga os observadores GLOBAIS. Chame no boot do app (idempotente):
+    //   (1) pushToStartToken (iOS 17.2+) → onPushToStart → o server pode CRIAR a LA sozinho
+    //       (ex: o cronograma auto-rodando o aquecimento, com o app fechado);
+    //   (2) token de update de QUALQUER activity — inclui as que o server iniciou via push —
+    //       → onToken → o server consegue atualizar/encerrar a barra que ele mesmo criou.
+    Function("observar") {
+      if self.observando { return }
+      self.observando = true
+      if #available(iOS 17.2, *) {
+        Task { [weak self] in
+          for await data in Activity<BotActivityAttributes>.pushToStartTokenUpdates {
+            let hex = data.map { String(format: "%02x", $0) }.joined()
+            self?.sendEvent("onPushToStart", ["token": hex])
+          }
+        }
+      }
+      if #available(iOS 16.2, *) {
+        for activity in Activity<BotActivityAttributes>.activities {
+          self.ouvirToken(activity)
+        }
+        Task { [weak self] in
+          for await activity in Activity<BotActivityAttributes>.activityUpdates {
+            self?.ouvirToken(activity)
+          }
+        }
+      }
+    }
+
+    // Inicia A Live Activity do app (fluxo MANUAL — o tap do usuário). Devolve o id, ou "".
+    // O token de update chega pelo observador (onToken). push-to-start é o caminho automático.
     AsyncFunction("start") { (titulo: String) -> String in
       guard #available(iOS 16.2, *),
             ActivityAuthorizationInfo().areActivitiesEnabled else { return "" }
@@ -48,12 +78,7 @@ public class LiveActivityModule: Module {
           content: .init(state: state, staleDate: nil),
           pushType: .token
         )
-        Task { [weak self] in
-          for await tokenData in activity.pushTokenUpdates {
-            let hex = tokenData.map { String(format: "%02x", $0) }.joined()
-            self?.sendEvent("onToken", ["token": hex])
-          }
-        }
+        self.ouvirToken(activity)
         return activity.id
       } catch {
         return ""
@@ -69,6 +94,19 @@ public class LiveActivityModule: Module {
           await activity.end(nil, dismissalPolicy: .immediate)
         }
         promise.resolve(nil)
+      }
+    }
+  }
+
+  // Observa o token de update de UMA activity (uma vez por id) e emite onToken {token, id}.
+  @available(iOS 16.2, *)
+  private func ouvirToken(_ activity: Activity<BotActivityAttributes>) {
+    if idsObservados.contains(activity.id) { return }
+    idsObservados.insert(activity.id)
+    Task { [weak self] in
+      for await tokenData in activity.pushTokenUpdates {
+        let hex = tokenData.map { String(format: "%02x", $0) }.joined()
+        self?.sendEvent("onToken", ["token": hex, "id": activity.id])
       }
     }
   }

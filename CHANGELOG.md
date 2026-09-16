@@ -3,6 +3,12 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [1.6.1] — 2026-09-16
+
+### Corrigido
+- fix: a **Live Activity automática** (push-to-start) não congela mais com o app fechado — como o iOS só entrega o token de update pro app rodando, a barra agora **expira sozinha** (staleDate curto) em vez de ficar travada até a run acabar
+- fix: o push **"Cronograma · rodando sozinho"** passa a ser enviado **sempre** (aviso confiável, separado do banner da LA) — antes sumia quando a LA subia e você ficava sem aviso
+
 ## [1.6.0] — 2026-09-10
 
 ### Adicionado

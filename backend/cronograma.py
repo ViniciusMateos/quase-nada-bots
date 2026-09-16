@@ -189,23 +189,22 @@ async def _auto_rodar(t, mgr):
     nome = _NOME_BOT.get(t["bot"], t["bot"])
     titulo_push = "Cronograma · rodando sozinho"
     corpo_push = f"Segui o cronograma e comecei o Aquecimento Humano na @{t.get('conta')} sozinho."
-    # LA automática via push-to-start. O `alert` dela JÁ é a notificação (o start EXIGE alert),
-    # então quando a LA sobe não mando push separado — evita banner dobrado. Se a LA falhar
-    # (build velho/sem pts/apns), aí sim mando o push normal pra você saber que rodou.
-    la_ok = False
+    # LA automática (bônus). AO VIVO só com o app aberto — o iOS só entrega o token de UPDATE
+    # pro app rodando; com o app fechado a LA nasce e fica parada no estado inicial até expirar
+    # (staleDate). Quando a LA sobe, o iOS mostra a PRÓPRIA LA no lugar do banner — então o
+    # alert minimal aqui é só o exigido pelo push-to-start; quem avisa de verdade é o push abaixo.
     try:
-        res = await mgr.iniciar_la_pts(nome, {
+        await mgr.iniciar_la_pts(nome, {
             "titulo": nome, "pct": 0, "medido": False,
             "label": f"@{t.get('conta')} · cronograma", "quantos": 1, "bot": t["bot"], "linhas": []},
-            alert={"title": titulo_push, "body": corpo_push})
-        la_ok = bool(res and res.get("ok"))
+            alert={"title": f"@{t.get('conta')}", "body": "aquecendo…"})
     except Exception:
-        la_ok = False
-    if not la_ok:
-        await asyncio.to_thread(
-            notify.enviar, titulo_push, corpo_push,
-            {"tipo": "cronograma_auto", "botId": t["bot"], "nome": nome,
-             "conta": t.get("conta"), "conta_id": t.get("conta_id")}, grupo="cronograma")
+        pass
+    # push SEMPRE — é o aviso confiável de que rodou sozinho (não depende do banner da LA)
+    await asyncio.to_thread(
+        notify.enviar, titulo_push, corpo_push,
+        {"tipo": "cronograma_auto", "botId": t["bot"], "nome": nome,
+         "conta": t.get("conta"), "conta_id": t.get("conta_id")}, grupo="cronograma")
     return "rodou"
 
 

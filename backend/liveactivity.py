@@ -158,13 +158,17 @@ def encerrar(push_token, estado, bundle=None):
     return _enviar(push_token, payload, bundle)
 
 
-def iniciar(push_token, estado, bundle=None, alert=None):
+def iniciar(push_token, estado, bundle=None, alert=None, stale_seconds=1200):
     """Push-to-start (iOS 17.2+): CRIA a Live Activity remotamente, com o app fechado.
     `push_token` é o pushToStartToken (do app), NÃO o token de update. Precisa carregar
     `attributes-type` + `attributes` (o shape imutável) além do content-state inicial.
 
     ⚠️ O push de START **exige `alert`**: sem ele o APNs responde 200 mas o iOS NÃO cria a
-    Live Activity (silencioso — o pior tipo). Diferente do `update`, que dispensa alert."""
+    Live Activity (silencioso — o pior tipo). Diferente do `update`, que dispensa alert.
+
+    ⚠️ Com o app FECHADO a barra não anda: o iOS só entrega o token de UPDATE pro app rodando,
+    então o server não consegue atualizar nem encerrar a LA. Por isso o `stale_seconds` curto —
+    a LA expira sozinha ~quando o run acaba, em vez de ficar congelada por 1h."""
     cs = _content_state(estado)
     if not alert:
         alert = {"title": cs.get("titulo") or "Bots", "body": cs.get("label") or "começou"}
@@ -175,7 +179,7 @@ def iniciar(push_token, estado, bundle=None, alert=None):
         "attributes-type": "BotActivityAttributes",
         "attributes": {"app": "bots"},
         "alert": alert,
-        "stale-date": int(time.time()) + 3600,
+        "stale-date": int(time.time()) + int(stale_seconds),
         "relevance-score": 100,
     }
     return _enviar(push_token, {"aps": aps}, bundle)

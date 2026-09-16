@@ -311,18 +311,19 @@ class RunManager:
             pass
         return {"ok": bool(self.pts_token)}
 
-    async def iniciar_la_pts(self, titulo, estado=None, alert=None):
+    async def iniciar_la_pts(self, titulo, estado=None, alert=None, stale_seconds=1200):
         """INICIA a Live Activity via push-to-start (server → APNs), sem depender do app aberto.
         No-op silencioso se não houver pts_token (build sem suporte) ou APNs não configurado.
-        Depois que o iOS cria a LA, o app manda o token de update dela (onToken) e o
-        empurrar_la() normal assume as atualizações."""
+        Depois que o iOS cria a LA, o app (se estiver rodando) manda o token de update dela
+        (onToken) e o empurrar_la() normal assume as atualizações. Com o app fechado a barra
+        não anda (o iOS não entrega o token) — por isso o `stale_seconds` faz a LA expirar."""
         if not self.pts_token or not liveactivity.configurado():
             return {"ok": False, "motivo": "sem pts_token/apns"}
         est = estado or {"titulo": titulo, "pct": 0, "medido": False,
                          "label": "começando", "quantos": 1, "bot": "", "linhas": []}
         try:
             ok, det = await asyncio.to_thread(
-                liveactivity.iniciar, self.pts_token, est, self.pts_bundle, alert)
+                liveactivity.iniciar, self.pts_token, est, self.pts_bundle, alert, stale_seconds)
             print(f"[la] push-to-start ok={ok}" + ("" if ok else f" DET={det}"), flush=True)
             return {"ok": ok, "det": det}
         except Exception as e:

@@ -35,11 +35,12 @@ _PLANO = _DIR / "cronograma_plano.json"
 _CFG = _DIR / "cronograma_config.json"
 
 # Duas metades do dia (minutos do dia, hora local BR) pra garantir 2x/dia SEPARADOS:
-# manhã/tarde (10h-15h) e tarde/noite (15h-22h). Cada metade é fatiada em N sub-slots (um
-# por conta) → escala pra QUALQUER número de contas, sempre uma conta por sub-slot (1 IP →
-# duas contas nunca caem no mesmo horário).
-_MANHA = (10 * 60, 15 * 60)   # 10:00–15:00
-_TARDE = (15 * 60, 22 * 60)   # 15:00–22:00
+# manhã (10h-13h30) e tarde (13h30-17h). Teto às 17h de propósito: o aquecimento fecha de
+# tarde e a NOITE fica livre pro auto-follow/DM manual sem colidir. Cada metade é fatiada em
+# N sub-slots (um por conta) → escala pra qualquer número de contas, uma conta por sub-slot
+# (1 IP → duas contas nunca caem no mesmo horário; e o guard serializa qualquer sobra).
+_MANHA = (10 * 60, 13 * 60 + 30)   # 10:00–13:30
+_TARDE = (13 * 60 + 30, 17 * 60)   # 13:30–17:00 (teto às 17h; noite livre p/ auto-follow/DM manual)
 
 _NOME_BOT = {"human-warmup": "Aquecimento Humano"}
 

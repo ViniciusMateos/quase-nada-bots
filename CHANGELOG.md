@@ -3,6 +3,11 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [1.6.2] — 2026-09-17
+
+### Modificado
+- update: o **cronograma fecha o aquecimento até 17h** (janela 10h–13h30 + 13h30–17h, antes ia até 22h) — a noite fica livre pro auto-follow/DM manual sem o cronograma disparar por cima; o guard já serializa os aquecimentos (nunca 2 juntos)
+
 ## [1.6.1] — 2026-09-16
 
 ### Corrigido

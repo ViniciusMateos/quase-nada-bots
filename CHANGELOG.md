@@ -3,6 +3,11 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [1.7.1] — 2026-09-18
+
+### Modificado
+- chore: liga o entitlement **`NSSupportsLiveActivitiesFrequentUpdates`** (exigiu build) — aumenta o budget que o iOS dá pra acordar o app e entregar o token de update, deixando a **Live Activity do cronograma com o app fechado mais consistente**. Não resolve 100% (com o app fechado há muito tempo o iOS simplesmente não acorda — limite da plataforma), mas melhora a taxa de acerto
+
 ## [1.7.0] — 2026-09-18
 
 ### Adicionado

@@ -128,6 +128,14 @@ def listar():
     return out
 
 
+def existe(uid):
+    """True se a conta ainda está cadastrada (não foi removida do índice). Usado pra não tentar
+    rodar/reconectar no cronograma uma conta que o usuário deletou."""
+    if not uid:
+        return False
+    return any(c.get("id") == uid for c in listar())
+
+
 def _cookie_header(uid):
     f = _sess_path(uid)
     if not f.exists():

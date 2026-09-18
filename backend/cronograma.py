@@ -117,6 +117,47 @@ def _gerar_plano(d):
     return {"data": d.isoformat(), "tarefas": tarefas}
 
 
+def _reconciliar_plano(plano, agora):
+    """Mantém o plano do dia em sincronia com as contas cadastradas AGORA. Como roda a cada tick
+    (60s), na prática é ~tempo real:
+      - ADICIONA contas criadas depois que o plano foi montado (o plano é congelado por dia, então
+        uma conta nova não entrava até o dia seguinte). Cada uma ganha 2 slots (manhã + tarde);
+        slot cujo horário já passou entra como `enviado` (não dispara atrasado).
+      - REMOVE tarefas de contas que foram DELETADAS (o usuário apagou a conta). Sem isso o
+        cronograma tentaria rodar/reconectar uma conta que não existe mais e encheria de push.
+    Devolve True se mexeu (pro chamador salvar)."""
+    vivos = {a.get("id"): a for a in _contas()}
+    tarefas = plano.get("tarefas", [])
+    # 1) tira as órfãs (conta deletada) — silenciosamente, não vira aviso de reconectar
+    limpas = [t for t in tarefas if t.get("conta_id") in vivos]
+    removeu = len(limpas) != len(tarefas)
+    # 2) adiciona as que ainda não estão no plano (contas novas)
+    ja = {t.get("conta_id") for t in limpas}
+    novas = [a for a in vivos.values() if a.get("id") not in ja]
+    if novas:
+        d = agora.date()
+        rnd = random.Random(d.toordinal() * 7919 + 4242)   # semente ≠ da geração base p/ não colar
+        manha = _horarios(len(novas), _MANHA, rnd); rnd.shuffle(manha)
+        tarde = _horarios(len(novas), _TARDE, rnd); rnd.shuffle(tarde)
+        modo = _modo_humano() or "padrão fifa"
+        for i, a in enumerate(novas):
+            label = a.get("label")
+            for (hora, mm) in (manha[i], tarde[i]):
+                limpas.append({
+                    "conta_id": a.get("id"), "conta": label, "bot": "human-warmup",
+                    "modo": modo, "desc": "aquecimento humano",
+                    "hora": hora, "min": mm,
+                    "titulo": "Cronograma · hora de rodar",
+                    "corpo": f"Hora de rodar o Aquecimento Humano na @{label}",
+                    "enviado": (hora, mm) <= (agora.hour, agora.minute),
+                })
+    if not (removeu or novas):
+        return False
+    limpas.sort(key=lambda t: (t["hora"], t["min"]))
+    plano["tarefas"] = limpas
+    return True
+
+
 def _carregar_plano(d):
     try:
         p = json.loads(_PLANO.read_text(encoding="utf-8"))
@@ -164,11 +205,18 @@ async def _lembrar(t):
 
 async def _auto_rodar(t, mgr):
     """Tenta INICIAR o run do aquecimento sozinho. Devolve:
-      "rodou" → iniciou (+ push "rodando sozinho" + liga a LA automática);
-      "adia"  → já tem bot rodando (1 IP = um por vez) — tenta no próximo tick, NÃO marca;
-      "sem"   → sem mgr / não é aquecimento / sessão caiu / erro → o chamador manda o lembrete."""
+      "rodou"   → iniciou. SEM push nenhum: só liga a LA (visível) + registra uma linha no log
+                  da run. O Vinicius não quer ser notificado quando roda no automático.
+      "adia"    → já tem bot rodando (1 IP = um por vez) — tenta no próximo tick, NÃO marca;
+      "tratado" → sessão caiu → já mandei o push de "reconecta"; o chamador só marca feito;
+      "sem"     → sem mgr / não é aquecimento / erro → o chamador manda o lembrete."""
     if mgr is None or t.get("bot") != "human-warmup":
         return "sem"
+    # conta DELETADA depois do plano montado: não existe mais no índice. Não é "sessão caiu" —
+    # pula SEM push (não enche pra reconectar o que o usuário apagou de propósito). Guard extra:
+    # o _reconciliar_plano já tira a órfã, mas isto cobre a corrida (deletou no meio do tick).
+    if not accounts.existe(t.get("conta_id")):
+        return "tratado"
     if _bot_rodando(mgr):
         return "adia"
     # sessão VIVA de verdade (não só existir o arquivo): check HTTP leve pelo proxy
@@ -184,28 +232,33 @@ async def _auto_rodar(t, mgr):
         return "tratado"                   # já avisei — o chamador só marca como feito
     modo = _modo_humano(t.get("modo"))
     try:
-        await mgr.start("human-warmup", {"conta_id": t.get("conta_id"), "modo": modo})
+        # "cronograma": True → o _push_inicio NÃO manda o "começou". No auto-run a gente NÃO manda
+        # push nenhum: só liga a LA (visível) + registra uma linha no log da run. O único push que
+        # sobra no fluxo do cronograma é o de "reconecta" (sessão caída, tratado lá em cima).
+        run = await mgr.start("human-warmup",
+                              {"conta_id": t.get("conta_id"), "modo": modo, "cronograma": True})
     except Exception:
         return "sem"
     nome = _NOME_BOT.get(t["bot"], t["bot"])
-    titulo_push = "Cronograma · rodando sozinho"
-    corpo_push = f"Segui o cronograma e comecei o Aquecimento Humano na @{t.get('conta')} sozinho."
-    # LA automática (bônus). AO VIVO só com o app aberto — o iOS só entrega o token de UPDATE
-    # pro app rodando; com o app fechado a LA nasce e fica parada no estado inicial até expirar
-    # (staleDate). Quando a LA sobe, o iOS mostra a PRÓPRIA LA no lugar do banner — então o
-    # alert minimal aqui é só o exigido pelo push-to-start; quem avisa de verdade é o push abaixo.
+    # Em vez de notificação, deixa um registro no PRÓPRIO log da run — aparece ao vivo e no
+    # histórico, junto de "Sessão salva" etc. É o "coloca no log" que o Vinicius pediu: quando
+    # roda sozinho ele não quer banner, só ver no log que começou automático.
+    try:
+        await run.emitir(f"Cronograma: comecei o Aquecimento Humano automaticamente na @{t.get('conta')}.")
+    except Exception:
+        pass
+    # LA automática (push-to-start) — é o ÚNICO aviso VISÍVEL que sobra (o que o Vinicius quer:
+    # "só deixa o LA visível"). O `alert` é minimal só pq o iOS EXIGE alert no start; ele NÃO
+    # vira banner (o iOS mostra a própria LA no lugar), então o resultado é: LA na tela, zero
+    # notificação. (AO VIVO a barra só anda com o app aberto/em background — o iOS só entrega o
+    # token de update pro app rodando; com o app fechado o nativo posta o token direto.)
     try:
         await mgr.iniciar_la_pts(nome, {
             "titulo": nome, "pct": 0, "medido": False,
             "label": f"@{t.get('conta')} · cronograma", "quantos": 1, "bot": t["bot"], "linhas": []},
-            alert={"title": f"@{t.get('conta')}", "body": "aquecendo…"})
+            alert={"title": "Aquecimento", "body": f"@{t.get('conta')}"})
     except Exception:
         pass
-    # push SEMPRE — é o aviso confiável de que rodou sozinho (não depende do banner da LA)
-    await asyncio.to_thread(
-        notify.enviar, titulo_push, corpo_push,
-        {"tipo": "cronograma_auto", "botId": t["bot"], "nome": nome,
-         "conta": t.get("conta"), "conta_id": t.get("conta_id")}, grupo="cronograma")
     return "rodou"
 
 
@@ -221,6 +274,8 @@ async def _tick(mgr=None):
         for t in plano["tarefas"]:
             if (t["hora"], t["min"]) <= (agora.hour, agora.minute):
                 t["enviado"] = True
+        _salvar_plano(plano)
+    elif _reconciliar_plano(plano, agora):   # sincroniza o plano com as contas de agora (add/remove)
         _salvar_plano(plano)
     agora_min = agora.hour * 60 + agora.minute
     mudou = False

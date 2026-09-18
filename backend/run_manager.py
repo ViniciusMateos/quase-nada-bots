@@ -661,6 +661,10 @@ class RunManager:
         notifica normal (começou/terminou) — não é mais N runs pra virar spam."""
         if run.params.get("import_cookies"):
             return
+        # cronograma (auto): NÃO manda o "começou" — o próprio cronograma já avisa "rodando
+        # sozinho" (via LA/push). Sem isso vinham 3 avisos. O "começou" fica só pro run MANUAL.
+        if run.params.get("cronograma"):
+            return
         nome = bots.BOTS.get(run.bot, {}).get("nome", run.bot)
         try:
             await asyncio.to_thread(

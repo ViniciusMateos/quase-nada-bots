@@ -64,6 +64,9 @@ module.exports = {
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         NSSupportsLiveActivities: true,   // Live Activity do progresso dos bots
+        // aumenta o budget de wake/update do iOS pra LA push-started (cronograma com app
+        // fechado) — o iOS acorda o app com mais frequência pra entregar o token de update
+        NSSupportsLiveActivitiesFrequentUpdates: true,
         // dev fala com o backend local por http → libera cleartext só no dev
         ...(isDev ? { NSAppTransportSecurity: { NSAllowsArbitraryLoads: true, NSAllowsLocalNetworking: true } } : {}),
       },

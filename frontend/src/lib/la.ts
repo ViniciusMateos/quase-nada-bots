@@ -1,7 +1,7 @@
 import { api } from '@/lib/api';
 import { env } from '@/config/env';
 import {
-  aoReceberPushToStartToken, aoReceberTokenLA, encerrarTodasLA,
+  aoReceberPushToStartToken, aoReceberTokenLA, configurarLA, encerrarTodasLA,
   iniciarLiveActivity, laDisponivel, observarLA,
 } from '../../modules/live-activity';
 
@@ -53,7 +53,9 @@ export function initLA(): void {
   laIniciada = true;
   try {
     if (!laDisponivel()) return;
-    garantirListener();                 // onToken → server atualiza/encerra
+    // passa URL+token pro nativo postar o token direto (LA anda com app fechado)
+    configurarLA(env.apiBaseUrl, env.apiToken);
+    garantirListener();                 // onToken → server atualiza/encerra (caminho JS, redundante)
     aoReceberPushToStartToken((token) => {
       api.setPushToStartToken(token, env.bundleId).catch(() => { /* sem suporte — segue */ });
     });

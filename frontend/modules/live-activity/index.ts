@@ -6,6 +6,8 @@ type Sub = { remove: () => void };
 const M = requireOptionalNativeModule<{
   disponivel: () => boolean;
   atual: () => string;
+  // guarda URL base + token da API pro nativo postar o token DIRETO (LA anda com app fechado).
+  configurar: (baseUrl: string, token: string) => void;
   // liga os observadores globais (pushToStartToken + tokens de update). Idempotente.
   observar: () => void;
   // devolve o activityId, ou "" se não conseguiu (String não-opcional — ver o .swift)
@@ -54,6 +56,15 @@ export async function encerrarTodasLA(): Promise<void> {
 /** Liga os observadores globais no nativo (pushToStartToken + tokens de update). Idempotente. */
 export function observarLA(): void {
   try { M?.observar?.(); } catch { /* no-op */ }
+}
+
+/**
+ * Passa a URL base + token da API pro nativo (persistido lá). Com isso o módulo posta o token
+ * de update DIRETO no server — é o que faz a barra andar mesmo com o app fechado (o iOS acorda
+ * o app em background só pra entregar o token, e o JS pode nem bootar). Chame no boot.
+ */
+export function configurarLA(baseUrl: string, token: string): void {
+  try { if (baseUrl && token) M?.configurar?.(baseUrl, token); } catch { /* no-op */ }
 }
 
 /**

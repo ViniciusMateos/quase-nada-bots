@@ -3,6 +3,19 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [1.7.0] — 2026-09-18
+
+### Adicionado
+- feat: **menu de segurar no modo** — segura o pill do modo e abre um menu (mesmo esqueleto do brechó) com **editar / duplicar / excluir**; **duplicar** copia o config inteiro e abre a cópia pra ajustar (baixar o cap de follow etc.). Tem também um link "Duplicar" na linha, junto de Editar/Novo modo
+- feat: **cronograma sincroniza as contas em tempo real** — conta criada no meio do dia **entra sozinha** no plano do dia (reconcilia a cada 60s) e conta **deletada sai sozinha**; antes o plano ficava congelado do dia e só pegava conta nova no dia seguinte
+
+### Modificado
+- update: **cronograma auto-run não manda mais notificação** — quando roda sozinho mostra só a **Live Activity** e grava uma linha no log da run; antes vinham dois avisos ("começou" + "rodando sozinho"). O push de **"reconecta"** (sessão caída) continua
+
+### Corrigido
+- fix: **Live Activity anda com o app fechado** — o módulo nativo posta o token de update **direto no server**, então a barra continua andando mesmo com o app fechado (o iOS acorda o app em background só pra entregar o token e o JS pode nem bootar)
+- fix: cronograma **pula conta deletada** sem encher de "reconecta" — checa se a conta ainda existe antes de rodar
+
 ## [1.6.2] — 2026-09-17
 
 ### Modificado

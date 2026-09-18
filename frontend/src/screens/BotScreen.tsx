@@ -10,6 +10,7 @@ import { garantirLA } from '@/lib/la';
 import { colors } from '@/theme';
 import { Aparece, Botao, Card, CartaoTocavel } from '@/ui/components';
 import { SeletorConta } from '@/ui/SeletorConta';
+import { MenuContexto } from '@/ui/MenuContexto';
 import { TecladoView } from '@/ui/TecladoView';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
@@ -29,6 +30,8 @@ export function BotScreen() {
   const [modos, setModos] = useState<string[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const [modo, setModo] = useState<string | null>(null);   // nada pré-selecionado: a pessoa escolhe
+  // menu de long-press no pill do modo (editar / duplicar / excluir) — mesmo esqueleto do brechó
+  const [menuModo, setMenuModo] = useState<{ x: number; y: number; nome: string } | null>(null);
   const [chat, setChat] = useState<string | null>(null);
   const [postInicial, setPostInicial] = useState('');      // like-repost: fronteira opcional (1ª vez)
   const [iniciando, setIniciando] = useState(false);
@@ -199,6 +202,49 @@ export function BotScreen() {
     }
   }
 
+  // ── modos: editar / duplicar / excluir (menu de long-press no pill) ──
+  // nome único pra cópia: "padrão fifa" → "padrão fifa 2", "padrão fifa 3"…
+  function nomeCopia(base: string, existentes: Record<string, unknown>): string {
+    let i = 2;
+    let n = `${base} ${i}`;
+    while (existentes[n]) { i += 1; n = `${base} ${i}`; }
+    return n;
+  }
+
+  async function duplicarModo(nomeBase: string) {
+    setMenuModo(null);
+    try {
+      const todos = await api.getModos(botId);
+      const base = todos[nomeBase];
+      if (!base) { Alert.alert('Ops', 'Não achei esse modo pra duplicar.'); return; }
+      const novo = nomeCopia(nomeBase, todos);
+      todos[novo] = JSON.parse(JSON.stringify(base));   // cópia profunda do config
+      await api.putModos(botId, todos);
+      setModos(Object.keys(todos).sort(cmpTexto));
+      setModo(novo);                                     // já deixa a cópia selecionada
+      // abre a cópia pra ajustar (renomear / baixar o cap de follow) — o "ficar mais fácil" que ele pediu
+      nav.navigate('EditModo', { botId, modoNome: novo });
+    } catch {
+      Alert.alert('Ops', 'Não consegui duplicar o modo.');
+    }
+  }
+
+  function excluirModo(nomeAlvo: string) {
+    setMenuModo(null);
+    Alert.alert('Apagar modo', `Apagar o modo "${nomeAlvo}"? Não dá pra desfazer.`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Apagar', style: 'destructive', onPress: async () => {
+        try {
+          const todos = await api.getModos(botId);
+          delete todos[nomeAlvo];
+          await api.putModos(botId, todos);
+          setModos(Object.keys(todos).sort(cmpTexto));
+          if (modo === nomeAlvo) setModo(null);   // era o selecionado → limpa a seleção
+        } catch { Alert.alert('Ops', 'Não consegui apagar.'); }
+      } },
+    ]);
+  }
+
   return (
     <TecladoView>
     <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ padding: 16, gap: 16 }}
@@ -228,7 +274,10 @@ export function BotScreen() {
           <>
           <View style={styles.chips}>
             {modos.map((m) => (
-              <TouchableOpacity key={m} onPress={() => setModo(m)} style={[styles.chip, modo === m && styles.chipOn]}>
+              <TouchableOpacity key={m} onPress={() => setModo(m)}
+                onLongPress={(e) => setMenuModo({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, nome: m })}
+                delayLongPress={280}
+                style={[styles.chip, modo === m && styles.chipOn]}>
                 <Text style={[styles.chipTxt, modo === m && styles.chipTxtOn]}>{m}</Text>
               </TouchableOpacity>
             ))}
@@ -238,6 +287,12 @@ export function BotScreen() {
               <TouchableOpacity onPress={() => nav.navigate('EditModo', { botId, modoNome: modo })} style={styles.link}>
                 <Ionicons name="create-outline" size={15} color={colors.marca} />
                 <Text style={styles.linkTxt}>Editar "{modo}"</Text>
+              </TouchableOpacity>
+            ) : null}
+            {modo ? (
+              <TouchableOpacity onPress={() => duplicarModo(modo)} style={styles.link}>
+                <Ionicons name="copy-outline" size={15} color={colors.marca} />
+                <Text style={styles.linkTxt}>Duplicar</Text>
               </TouchableOpacity>
             ) : null}
             <TouchableOpacity onPress={() => nav.navigate('EditModo', { botId, modoNome: '', criar: true })} style={styles.link}>
@@ -410,6 +465,15 @@ export function BotScreen() {
       )}
       <SeletorConta visible={abrirSeletor} onClose={() => setAbrirSeletor(false)}
         onTrocou={carregarContaAtiva} />
+      <MenuContexto
+        visible={!!menuModo} x={menuModo?.x ?? 0} y={menuModo?.y ?? 0} onClose={() => setMenuModo(null)}
+        itens={menuModo ? [
+          { label: 'Editar', icon: 'create-outline',
+            onPress: () => { const n = menuModo.nome; setMenuModo(null); nav.navigate('EditModo', { botId, modoNome: n }); } },
+          { label: 'Duplicar', icon: 'copy-outline', onPress: () => duplicarModo(menuModo.nome) },
+          { label: 'Excluir', icon: 'trash-outline', cor: colors.erro, onPress: () => excluirModo(menuModo.nome) },
+        ] : []}
+      />
     </ScrollView>
     </TecladoView>
   );
@@ -435,7 +499,7 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: colors.laranja, borderColor: colors.laranja },
   chipTxt: { color: colors.texto },
   chipTxtOn: { color: '#0F0F0F', fontWeight: '700' },
-  linksRow: { flexDirection: 'row', gap: 18 },
+  linksRow: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 18 },
   link: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 12 },
   linkInline: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   linkTxt: { color: colors.marca, fontWeight: '600', fontSize: 14 },

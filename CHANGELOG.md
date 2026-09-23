@@ -3,6 +3,14 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [1.7.2] — 2026-09-22
+
+### Modificado
+- update: **verificar contas ficou mais rápido** — o check de sessão bate no IG por conta pelo túnel (~5s pra 10 contas) e o app refazia isso a cada abrir/trocar de tela; agora **cacheia ~60s**, então reabrir/navegar é **instantâneo**. Pull-to-refresh, reconectar conta e o lote passam `force` pra refazer o check na hora
+
+### Corrigido
+- fix: **cronograma não dá mais falso "reconecta"** — a validação da sessão agora tenta até 3x antes de considerar caída; um tranco isolado no túnel residencial não vira mais falso "sem sessão" (sessão morta de verdade continua falhando nas 3)
+
 ## [1.7.1] — 2026-09-18
 
 ### Modificado

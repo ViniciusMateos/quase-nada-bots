@@ -3,6 +3,11 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [1.7.3] — 2026-09-23
+
+### Adicionado
+- feat: **adicionar conta sem precisar conectar** — ao adicionar uma conta no app, ela já entra na lista e no **cronograma** como **pendente** (só o @; a senha continua só no aparelho, nunca vai pro server); nos horários de aquecimento o cronograma manda **"conecta pra rodar"** em vez de rodar. Quando você conecta de verdade, a pendente **funde** na conta real (mesmo @, idade preservada, sem duplicar). Contas que você já tinha adicionado mas ainda não conectou viram pendentes sozinhas ao abrir a tela de Contas
+
 ## [1.7.2] — 2026-09-22
 
 ### Modificado

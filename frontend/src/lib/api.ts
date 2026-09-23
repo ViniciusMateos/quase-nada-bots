@@ -73,7 +73,8 @@ export const api = {
   connectInstagram: (cookies: IgCookie[], label?: string) =>
     http.post<ConnectResult>('/instagram/session', { cookies, label }),
   getAccounts: () => http.get<Account[]>('/accounts'),
-  validarContas: () => http.get<Account[]>('/accounts/validar'),
+  // force=true ignora o cache de ~60s do server (pull-to-refresh / após reconectar uma conta)
+  validarContas: (force = false) => http.get<Account[]>(force ? '/accounts/validar?force=1' : '/accounts/validar'),
   ativarConta: (id: string) => http.post<{ ativa: string }>(`/accounts/${encodeURIComponent(id)}/ativar`, {}),
   removerConta: (id: string) => http.del(`/accounts/${encodeURIComponent(id)}`),
   registerDevice: (token: string) => http.post<{ ok: boolean; devices: number }>('/devices', { token }),

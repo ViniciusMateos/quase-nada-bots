@@ -51,10 +51,10 @@ export function ContasIgScreen() {
   }, []);
 
   // checa (via túnel) se a sessão de cada conta ainda está viva — pesado-ish, só no abrir/refresh
-  const validar = useCallback(async () => {
+  const validar = useCallback(async (force = false) => {
     setVerificando(true);
     try {
-      const r = await api.validarContas();
+      const r = await api.validarContas(force);
       const m: Record<string, boolean> = {};
       for (const a of r) if (a.id) m[a.id] = !!a.sessao_ok;
       setSessoes(m);
@@ -63,9 +63,9 @@ export function ContasIgScreen() {
 
   useFocusEffect(useCallback(() => {
     carregar();
-    if (!jaValidou.current) { jaValidou.current = true; validar(); }
+    if (!jaValidou.current) { jaValidou.current = true; validar(); }   // abrir usa cache (instantâneo)
   }, [carregar, validar]));
-  const { scrollProps, dog, spacerEl } = useDogRefresh(async () => { await carregar(); await validar(); });
+  const { scrollProps, dog, spacerEl } = useDogRefresh(async () => { await carregar(); await validar(true); });
 
   const entries = useMemo<Entry[]>(() => {
     const map = new Map<string, Entry>();

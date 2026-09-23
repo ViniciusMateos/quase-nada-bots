@@ -118,7 +118,7 @@ export function BotScreen() {
       // a sessão fica "?" e o worker pula conta morta na hora de rodar.
       const sess: Record<string, boolean> = {};
       try {
-        for (const a of await api.validarContas()) if (a.id) sess[a.id] = !!a.sessao_ok;
+        for (const a of await api.validarContas(true)) if (a.id) sess[a.id] = !!a.sessao_ok;   // lote: check fresco
       } catch { /* checagem falhou — mantém a lista */ }
       const lista = base
         .map((a) => ({ ...a, sessao_ok: a.id! in sess ? sess[a.id!] : undefined }))

@@ -155,10 +155,11 @@ async def listar_contas():
 
 
 @app.get("/accounts/validar", dependencies=[Depends(auth)])
-async def validar_contas():
+async def validar_contas(force: bool = False):
     """Checa (em paralelo, via túnel) se a sessão de cada conta ainda está viva. Devolve as
-    contas + `sessao_ok`. É pesado-ish (bate no IG por conta) → o app chama no abrir/refresh."""
-    res = await asyncio.to_thread(accounts.validar_todas)
+    contas + `sessao_ok`. É pesado-ish (bate no IG por conta) → cacheia por ~60s; o app manda
+    `?force=1` no pull-to-refresh pra refazer o check na hora."""
+    res = await asyncio.to_thread(accounts.validar_todas, force)
     return [{**c, "sessao_ok": res.get(c.get("id"), False)} for c in accounts.listar()]
 
 

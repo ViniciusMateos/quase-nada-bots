@@ -33,7 +33,7 @@ export function VerificandoContaScreen() {
     (async () => {
       let acc: Account | undefined;
       try {
-        const contas = await api.validarContas();
+        const contas = await api.validarContas(true);   // acabou de conectar → check fresco, sem cache
         acc = contas.find(
           (c) => c.id === contaId || (!!label && c.label?.toLowerCase() === label.toLowerCase()));
       } catch { /* offline / falhou → trata como indisponível abaixo */ }

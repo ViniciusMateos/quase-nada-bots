@@ -167,14 +167,29 @@ def validar(uid, timeout=12):
         return False
 
 
-def validar_todas():
-    """Valida TODAS as contas em paralelo (rápido). Retorna {uid: bool}."""
+# cache curto do resultado do validar_todas: cada check é 1 request pelo túnel residencial
+# (duplo-hop), então 10 contas custam ~5s. Sem cache, cada abrir/trocar de tela do app refazia
+# o sweep inteiro. Com TTL curto, reabrir/navegar fica instantâneo; pull-to-refresh passa
+# force=True e refaz de verdade (ex: acabei de reconectar uma conta e quero ver na hora).
+_VALIDAR_TTL = 60
+_validar_cache = {"t": 0.0, "res": {}}
+
+
+def validar_todas(force=False):
+    """Valida TODAS as contas em paralelo (rápido). Retorna {uid: bool}. Cacheia por
+    `_VALIDAR_TTL`s; `force=True` ignora o cache e refaz o check."""
+    global _validar_cache
+    agora = time.time()
+    if not force and _validar_cache["res"] and (agora - _validar_cache["t"]) < _VALIDAR_TTL:
+        return _validar_cache["res"]
     from concurrent.futures import ThreadPoolExecutor
     ids = [c.get("id") for c in listar() if c.get("id")]
     if not ids:
         return {}
-    with ThreadPoolExecutor(max_workers=min(8, len(ids))) as ex:
-        return dict(zip(ids, ex.map(validar, ids)))
+    with ThreadPoolExecutor(max_workers=min(10, len(ids))) as ex:
+        res = dict(zip(ids, ex.map(validar, ids)))
+    _validar_cache = {"t": agora, "res": res}
+    return res
 
 
 def salvar(cookies, label=None):

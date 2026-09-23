@@ -30,7 +30,7 @@ export function HubScreen() {
   const [erro, setErro] = useState<string | null>(null);
   // revalidação automática ao terminar uma conexão (import de cookies): sem isto, depois de
   // conectar/reconectar pelo Hub a conta ficava com status velho até tocar "sincronizar" na mão.
-  const validarRef = useRef<() => void>(() => {});
+  const validarRef = useRef<(force?: boolean) => void>(() => {});
   const importVistos = useRef<Set<string>>(new Set());
   const primeiraCargaRuns = useRef(true);
   const checarConexaoNova = useCallback((rs: RunInfo[]) => {
@@ -41,7 +41,7 @@ export function HubScreen() {
       !importVistos.current.has(r.id));
     novas.forEach((r) => importVistos.current.add(r.id));
     if (primeiraCargaRuns.current) { primeiraCargaRuns.current = false; return; } // 1ª carga: só marca
-    if (novas.length) validarRef.current();   // uma conexão acabou desde a última vez → sincroniza
+    if (novas.length) validarRef.current(true);   // uma conexão acabou → check fresco (sem cache)
   }, []);
 
   const carregar = useCallback(async () => {
@@ -73,10 +73,10 @@ export function HubScreen() {
   }, [checarConexaoNova]);
 
   // checa (via túnel) se a sessão de cada conta ainda está viva — pesado-ish, só no abrir/refresh
-  const validar = useCallback(async () => {
+  const validar = useCallback(async (force = false) => {
     setVerificando(true);
     try {
-      const r = await api.validarContas();
+      const r = await api.validarContas(force);
       const m: Record<string, boolean> = {};
       for (const a of r) if (a.id) m[a.id] = !!a.sessao_ok;
       setSessoes(m);
@@ -96,7 +96,7 @@ export function HubScreen() {
     return () => clearInterval(id);
   }, [carregar, atualizarRuns, validar]));
 
-  const { scrollProps, dog, spacerEl } = useDogRefresh(async () => { await carregar(); await validar(); });
+  const { scrollProps, dog, spacerEl } = useDogRefresh(async () => { await carregar(); await validar(true); });
 
   const ativos = runs.filter((r) => ['rodando', 'iniciando'].includes(r.status)).reverse();
 
@@ -180,7 +180,7 @@ export function HubScreen() {
                 <View style={styles.contasHead}>
                   <Text style={styles.secao}>Contas {verificando ? '· verificando…' : ''}</Text>
                   <View style={styles.contasAcoes}>
-                    <TouchableOpacity onPress={() => { if (!verificando) validar(); }} disabled={verificando}
+                    <TouchableOpacity onPress={() => { if (!verificando) validar(true); }} disabled={verificando}
                       hitSlop={8} style={styles.contaBtn}>
                       <Ionicons name="sync" size={14} color={verificando ? colors.textoFraco : colors.marca} />
                       <Text style={[styles.gerenciar, verificando && { color: colors.textoFraco }]}>sincronizar</Text>

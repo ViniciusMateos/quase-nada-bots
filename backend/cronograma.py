@@ -203,6 +203,20 @@ async def _lembrar(t):
     }, grupo="cronograma")
 
 
+async def _sessao_viva(conta_id, tentativas=3, intervalo=4):
+    """Valida a sessão com RETRY. O check é 1 request pelo túnel residencial (compartilhado e com
+    blips), então UMA falha isolada NÃO quer dizer 'sessão caiu' — era o que dava falso 'reconecta'
+    (medido 21/09: segue5 viva 3/3 na mão, mas o cronograma gritou sem sessão num tranco do túnel).
+    Sessão MORTA de verdade falha SEMPRE (302, ex: segue8 CAIU 3/3); blip do túnel recupera numa
+    próxima tentativa. Só devolve False se TODAS as tentativas falharem."""
+    for i in range(tentativas):
+        if await asyncio.to_thread(accounts.validar, conta_id):
+            return True
+        if i < tentativas - 1:
+            await asyncio.sleep(intervalo)
+    return False
+
+
 async def _auto_rodar(t, mgr):
     """Tenta INICIAR o run do aquecimento sozinho. Devolve:
       "rodou"   → iniciou. SEM push nenhum: só liga a LA (visível) + registra uma linha no log
@@ -220,10 +234,10 @@ async def _auto_rodar(t, mgr):
     if _bot_rodando(mgr):
         return "adia"
     # sessão VIVA de verdade (não só existir o arquivo): check HTTP leve pelo proxy
-    # (/accounts/edit/ → 200 vivo, 302 caiu). Sessão morta → push claro de reconectar, SEM
-    # fingir "rodando sozinho" nem piscar a LA à toa. Barato: 1 request, e o tunel tá livre
-    # (já checamos que nenhum bot roda). Cobre também "sem arquivo" (validar volta False).
-    if not await asyncio.to_thread(accounts.validar, t.get("conta_id")):
+    # (/accounts/edit/ → 200 vivo, 302 caiu), COM RETRY (_sessao_viva) — 1 tranco no túnel não
+    # pode virar falso "reconecta". Sessão morta de verdade falha nas 3 tentativas. Só avisa
+    # reconectar quando REALMENTE caiu; sem fingir "rodando sozinho" nem piscar a LA à toa.
+    if not await _sessao_viva(t.get("conta_id")):
         await asyncio.to_thread(
             notify.enviar, "Cronograma · reconecta",
             f"Era hora do Aquecimento na @{t.get('conta')}, mas a sessão caiu. Reconecta pra rodar.",

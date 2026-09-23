@@ -163,6 +163,17 @@ async def validar_contas(force: bool = False):
     return [{**c, "sessao_ok": res.get(c.get("id"), False)} for c in accounts.listar()]
 
 
+@app.post("/accounts/pendente", dependencies=[Depends(auth)])
+async def adicionar_conta_pendente(payload: dict):
+    """Registra uma conta PENDENTE (só o @, sem sessão) pra ela já entrar na lista e no cronograma
+    antes de conectar. Idempotente (mesmo label = devolve a existente)."""
+    label = (payload or {}).get("label") or ""
+    try:
+        return accounts.adicionar_pendente(label)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @app.post("/accounts/{conta_id}/ativar", dependencies=[Depends(auth)])
 async def ativar_conta(conta_id: str):
     try:

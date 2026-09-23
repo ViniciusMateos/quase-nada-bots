@@ -192,6 +192,39 @@ def validar_todas(force=False):
     return res
 
 
+def _slug(label):
+    s = "".join(ch for ch in (label or "").lower() if ch.isalnum())
+    return s or "conta"
+
+
+def eh_pendente(uid):
+    """True se a conta <uid> é uma PENDENTE (adicionada sem conectar, sem sessão)."""
+    return any(c.get("id") == uid and c.get("pendente") for c in listar())
+
+
+def adicionar_pendente(label):
+    """Registra uma conta PENDENTE — só o @, SEM sessão nem senha. Serve pra a conta já entrar na
+    lista e no cronograma ANTES de conectar: nos horários o cronograma manda 'conecta pra rodar'.
+    Quando você conectar de verdade, o `salvar()` funde a pendente na conta real (mesmo label).
+    Idempotente: se já existe conta (real ou pendente) com esse label, devolve a existente."""
+    label = (label or "").strip().lstrip("@")
+    if not label:
+        raise ValueError("label vazio")
+    idx = _ler_index()
+    ja = next((c for c in idx.get("contas", []) if (c.get("label") or "").lower() == label.lower()), None)
+    if ja:
+        return {"id": ja.get("id"), "label": ja.get("label"), "pendente": bool(ja.get("pendente"))}
+    existentes = {c.get("id") for c in idx.get("contas", [])}
+    pid = "pend:" + _slug(label)                 # prefixo "pend:" nunca colide com ds_user_id (numérico)
+    base, n = pid, 2
+    while pid in existentes:
+        pid = f"{base}-{n}"; n += 1
+    idx.setdefault("contas", []).append(
+        {"id": pid, "label": label, "pendente": True, "criada_em": int(time.time())})
+    _gravar_index(idx)
+    return {"id": pid, "label": label, "pendente": True}
+
+
 def salvar(cookies, label=None):
     """Registra/atualiza uma conta a partir dos cookies capturados e a deixa ATIVA."""
     uid = _ds_user_id(cookies)
@@ -200,13 +233,19 @@ def salvar(cookies, label=None):
     _garantir_dir()
     _sess_path(uid).write_text(json.dumps(cookies, ensure_ascii=False, indent=2), encoding="utf-8")
     idx = _ler_index()
-    label = (label or "").strip()
+    label = (label or "").strip().lstrip("@")
     antigo = next((c for c in idx.get("contas", []) if c.get("id") == uid), None)
     if not label:
         label = (antigo or {}).get("label") or f"conta {uid}"
+    # funde uma PENDENTE de mesmo label (que você adicionou sem conectar): adota a idade dela e
+    # remove o placeholder — a conta real assume o lugar dela na lista e no cronograma.
+    pend = next((c for c in idx.get("contas", [])
+                 if c.get("pendente") and (c.get("label") or "").lower() == label.lower()), None)
     # criada_em NÃO reseta na reconexão (idade real da conta); conectada_em é a última conexão.
-    criada_em = (antigo or {}).get("criada_em") or int(time.time())
-    contas = [c for c in idx.get("contas", []) if c.get("id") != uid]
+    criada_em = (antigo or {}).get("criada_em") or (pend or {}).get("criada_em") or int(time.time())
+    contas = [c for c in idx.get("contas", [])
+              if c.get("id") != uid
+              and not (c.get("pendente") and (c.get("label") or "").lower() == label.lower())]
     contas.append({"id": uid, "label": label, "conectada_em": int(time.time()),
                    "criada_em": criada_em})
     _gravar_index({"ativa": uid, "contas": contas})

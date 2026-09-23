@@ -19,7 +19,7 @@ import type { RootStackParamList } from '@/navigation/RootNavigator';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 // uma linha da tela = credencial salva (user+senha) e/ou conta conectada (backend), casadas por @user
-type Entry = { usuario: string; senha?: string; id?: string; ativa?: boolean; criadaEm?: number };
+type Entry = { usuario: string; senha?: string; id?: string; ativa?: boolean; criadaEm?: number; pendente?: boolean };
 
 function idadeTxt(criadaEm?: number): string | null {
   if (!criadaEm) return null;
@@ -40,12 +40,25 @@ export function ContasIgScreen() {
   const [sessoes, setSessoes] = useState<Record<string, boolean>>({});
   const [verificando, setVerificando] = useState(false);
   const jaValidou = useRef(false);
+  const sincronizouPend = useRef(false);
 
   const carregar = useCallback(async () => {
-    const [cs, cr] = await Promise.all([
+    let [cs, cr] = await Promise.all([
       api.getAccounts().catch(() => [] as Account[]),
       lerCredenciais().catch(() => [] as Credencial[]),
     ]);
+    // contas ADICIONADAS mas ainda não conectadas (credencial local sem conta no backend) →
+    // registra um placeholder PENDENTE no server pra elas já entrarem no cronograma. A senha
+    // NÃO vai (só o @). Idempotente; roda uma vez por abertura da tela.
+    if (!sincronizouPend.current) {
+      sincronizouPend.current = true;
+      const temBackend = new Set(cs.map((c) => (c.label || '').toLowerCase()));
+      const faltando = cr.filter((c) => !temBackend.has(c.usuario.toLowerCase()));
+      if (faltando.length) {
+        await Promise.all(faltando.map((c) => api.adicionarContaPendente(c.usuario).catch(() => {})));
+        cs = await api.getAccounts().catch(() => cs);
+      }
+    }
     setContas(cs);
     setCreds(cr);
   }, []);
@@ -75,7 +88,7 @@ export function ContasIgScreen() {
       const prev = map.get(k);
       map.set(k, {
         usuario: prev?.usuario || a.label, senha: prev?.senha,
-        id: a.id, ativa: a.ativa, criadaEm: a.criada_em,
+        id: a.id, ativa: a.ativa, criadaEm: a.criada_em, pendente: a.pendente,
       });
     }
     return [...map.values()].sort((a, b) => cmpTexto(a.usuario, b.usuario));
@@ -115,8 +128,11 @@ export function ContasIgScreen() {
     const u = modal.usuario.trim().replace(/^@/, '');
     if (!u) { Alert.alert('Falta o @', 'Põe o usuário da conta.'); return; }
     if (!modal.senha) { Alert.alert('Falta a senha', 'Põe a senha (fica só neste aparelho).'); return; }
-    try { await salvarCredencial({ usuario: u, senha: modal.senha }); fecharModal(); await carregar(); }
-    catch { Alert.alert('Ops', 'Não consegui salvar a credencial.'); }
+    try {
+      await salvarCredencial({ usuario: u, senha: modal.senha });
+      await api.adicionarContaPendente(u).catch(() => {});   // já entra na lista/cronograma (sem conectar)
+      fecharModal(); await carregar();
+    } catch { Alert.alert('Ops', 'Não consegui salvar a credencial.'); }
   }
 
   if (!contas) return <TelaCarregando />;
@@ -139,17 +155,18 @@ export function ContasIgScreen() {
           <Text style={styles.vazio}>Nenhuma conta ainda. Adicione uma aí em cima.</Text>
         ) : entries.map((e, i) => {
           const sess = e.id ? sessoes[e.id] : undefined;      // true/false/undefined(=não checou)
-          const checando = verificando && !!e.id && sess === undefined;
-          const caiu = !!e.id && sess === false;
+          const checando = verificando && !!e.id && !e.pendente && sess === undefined;
+          const caiu = !!e.id && !e.pendente && sess === false;   // pendente não é "caiu" (nunca conectou)
           // mesmo esquema de cor do Hub: verde SÓ na conta ativa; sessão ok = branco;
           // problema = vermelho; verificando = cinza.
           let status: string, cor: string;
-          if (!e.id) { status = 'sem sessão'; cor = colors.erro; }
+          if (e.pendente) { status = 'não conectada · conecta pra rodar'; cor = colors.erro; }
+          else if (!e.id) { status = 'sem sessão'; cor = colors.erro; }
           else if (checando) { status = 'verificando…'; cor = colors.textoFraco; }
           else if (caiu) { status = 'sessão caiu'; cor = colors.erro; }
           else if (e.ativa) { status = 'ativa · em uso'; cor = colors.ok; }
           else { status = 'sessão ok'; cor = colors.texto; }
-          const idade = e.id ? idadeTxt(e.criadaEm) : null;
+          const idade = e.id && !e.pendente ? idadeTxt(e.criadaEm) : null;
           return (
           <Animated.View key={e.usuario}
             entering={FadeInDown.delay(Math.min(i, 8) * 40).duration(280)}
@@ -175,7 +192,7 @@ export function ContasIgScreen() {
                   <View style={styles.spin}><LoadingDog size={22} /></View>
                 ) : (
                   <>
-                    {e.id && !e.ativa && !caiu ? (
+                    {e.id && !e.pendente && !e.ativa && !caiu ? (
                       <TouchableOpacity onPress={() => ativar(e)} style={styles.icon} hitSlop={6}>
                         <Ionicons name="power" size={20} color={colors.texto} />
                       </TouchableOpacity>

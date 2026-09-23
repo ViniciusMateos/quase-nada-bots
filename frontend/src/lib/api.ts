@@ -30,6 +30,7 @@ export type Account = {
   id: string; label: string; conectada_em: number; ativa: boolean;
   criada_em?: number;   // 1ª conexão — NÃO reseta ao reconectar (idade real da conta)
   sessao_ok?: boolean;  // só no /accounts/validar: sessão do IG ainda viva?
+  pendente?: boolean;   // conta adicionada SEM conectar ainda (só o @, sem sessão)
 };
 export type RunHistorico = {
   id: string; bot: string; dry_run: boolean;
@@ -73,6 +74,10 @@ export const api = {
   connectInstagram: (cookies: IgCookie[], label?: string) =>
     http.post<ConnectResult>('/instagram/session', { cookies, label }),
   getAccounts: () => http.get<Account[]>('/accounts'),
+  // registra uma conta PENDENTE no server (só o @, sem sessão) pra ela já entrar no cronograma
+  // antes de conectar. Idempotente. A senha NUNCA vai — fica só no aparelho.
+  adicionarContaPendente: (label: string) =>
+    http.post<{ id: string; label: string; pendente?: boolean }>('/accounts/pendente', { label }),
   // force=true ignora o cache de ~60s do server (pull-to-refresh / após reconectar uma conta)
   validarContas: (force = false) => http.get<Account[]>(force ? '/accounts/validar?force=1' : '/accounts/validar'),
   ativarConta: (id: string) => http.post<{ ativa: string }>(`/accounts/${encodeURIComponent(id)}/ativar`, {}),

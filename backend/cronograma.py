@@ -238,9 +238,14 @@ async def _auto_rodar(t, mgr):
     # pode virar falso "reconecta". Sessão morta de verdade falha nas 3 tentativas. Só avisa
     # reconectar quando REALMENTE caiu; sem fingir "rodando sozinho" nem piscar a LA à toa.
     if not await _sessao_viva(t.get("conta_id")):
+        # conta PENDENTE (adicionada sem conectar) → "conecta"; conta que perdeu a sessão → "reconecta".
+        pend = await asyncio.to_thread(accounts.eh_pendente, t.get("conta_id"))
+        titulo = "Cronograma · conecta" if pend else "Cronograma · reconecta"
+        corpo = (f"Hora do Aquecimento na @{t.get('conta')}, mas ela ainda não foi conectada. Conecta pra rodar."
+                 if pend else
+                 f"Era hora do Aquecimento na @{t.get('conta')}, mas a sessão caiu. Reconecta pra rodar.")
         await asyncio.to_thread(
-            notify.enviar, "Cronograma · reconecta",
-            f"Era hora do Aquecimento na @{t.get('conta')}, mas a sessão caiu. Reconecta pra rodar.",
+            notify.enviar, titulo, corpo,
             {"tipo": "cronograma", "botId": t["bot"], "nome": _NOME_BOT.get(t["bot"], t["bot"]),
              "conta": t.get("conta"), "conta_id": t.get("conta_id")}, grupo="cronograma")
         return "tratado"                   # já avisei — o chamador só marca como feito

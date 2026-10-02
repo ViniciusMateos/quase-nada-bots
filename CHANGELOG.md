@@ -3,6 +3,11 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [1.7.4] — 2026-10-01
+
+### Corrigido
+- fix: **histórico não mistura mais runs** — o id da run reiniciava em 1 a cada restart do backend, então ids se repetiam e o log (aberto em append) juntava várias runs no mesmo arquivo; ao abrir o histórico de uma conta dentro de um bot apareciam runs grudadas. Agora o contador começa acima do maior id já existente e cada run abre o log limpo
+
 ## [1.7.3] — 2026-09-23
 
 ### Adicionado

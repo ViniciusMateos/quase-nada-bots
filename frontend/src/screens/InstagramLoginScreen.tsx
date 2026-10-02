@@ -58,15 +58,26 @@ export function InstagramLoginScreen() {
     return () => { vivo = false; };
   }, []);
 
-  // Preenche user+senha (se houver credencial). Roda só uma vez por documento.
+  // Preenche user+senha (se houver credencial) — SÓ na tela de LOGIN e SÓ UMA VEZ por campo.
+  // Antes: preenchia qualquer input de texto (inclusive o de "trocar e-mail") e REESCREVIA a cada
+  // 0,3s por ~9s — você apagava, ele colocava de novo. Agora:
+  //   - só age se a página tem campo de SENHA (tela de login de verdade; a de e-mail não tem);
+  //   - cada campo é preenchido 1x, e só se estiver VAZIO;
+  //   - tocou/digitou em qualquer campo → para de mexer de vez (a página é sua).
   const _fill = usuario ? `
       if (!window.__qnFill) {
         window.__qnFill = true;
         var u = ${JSON.stringify(usuario)}, p = ${JSON.stringify(senha)}, auto = ${autoLogin ? 'true' : 'false'};
-        var n = 0, clicou = false;
+        var n = 0, clicou = false, mexeu = false;
         var setv = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        ['keydown', 'touchstart', 'mousedown', 'paste'].forEach(function(ev){
+          document.addEventListener(ev, function(e){
+            var t = e.target; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) mexeu = true;
+          }, true);
+        });
         function fill(el, val){
-          if (el && val && el.value !== val) {
+          if (el && val && !el.__qnFeito && !el.value) {
+            el.__qnFeito = true;
             setv.call(el, val);
             el.dispatchEvent(new Event('input', { bubbles: true }));
             el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -74,17 +85,19 @@ export function InstagramLoginScreen() {
         }
         function campos(){
           var pi = document.querySelector('input[type="password"], input[name="password"]');
-          var ui = document.querySelector('input[name="username"], input[autocomplete="username"], input[type="email"], input[inputmode="email"]');
-          if (!ui) {
-            var todos = Array.prototype.slice.call(document.querySelectorAll('input'));
-            ui = todos.filter(function(x){ var t=(x.type||'text').toLowerCase(); return t!=='password'&&t!=='hidden'&&t!=='checkbox'&&t!=='submit'&&t!=='button'&&t!=='radio'; })[0];
+          if (!pi) return { ui: null, pi: null };     // sem senha = não é tela de login → não mexe
+          var ui = document.querySelector('input[name="username"], input[autocomplete="username"]');
+          if (!ui && pi.form) {                        // fallback: o campo de texto DO MESMO form da senha
+            ui = Array.prototype.slice.call(pi.form.querySelectorAll('input')).filter(function(x){
+              var t=(x.type||'text').toLowerCase(); return t==='text'||t==='email'||t==='tel'; })[0] || null;
           }
           return { ui: ui, pi: pi };
         }
         var iv = setInterval(function(){
           n++;
+          if (mexeu) { clearInterval(iv); return; }    // você mexeu → a página é sua
           var c = campos();
-          if (n <= 30) { fill(c.ui, u); fill(c.pi, p); }
+          fill(c.ui, u); fill(c.pi, p);
           if (auto && !clicou && c.ui && c.pi && c.ui.value && c.pi.value && n > 3) {
             var cands = Array.prototype.slice.call(document.querySelectorAll('button, div[role="button"], [type="submit"]'));
             var btn = cands.filter(function(b){

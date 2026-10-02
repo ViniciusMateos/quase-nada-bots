@@ -3,6 +3,20 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [1.8.0] — 2026-10-02
+
+### Adicionado
+- feat: **bot Story Repost** (worker novo [`story-repost-instagram`](https://github.com/ViniciusMateos/story-repost-instagram)) — reposta as **peças disponíveis do brechó** no story das contas-vitrine, num card de post com fundo laranja, etiqueta de preço e chamada "comente fila"; modos **aleatório** (abre com o vídeo "confiram as peças disponíveis") e **drop novo**; 10 stories por run, sem repetir peça até a conta postar todas. No editor de modo, campos novos (o que postar, vídeo de abertura, estilo, etiqueta de preço) e um tipo de campo "opção" (chips)
+- feat: **grupos de contas** (ex: Vitrine, Captação) — criados e editados na tela de Contas (tocar escolhe as contas, segurar renomeia/apaga); na tela do bot, o **lote** (agora também no Story Repost) tem chips de grupo que marcam só as contas dele
+- feat: **trava por conta** (cadeado) — conta travada fica fora de qualquer automático (hoje, o aquecimento do cronograma); rodar na mão continua normal
+- feat: **Hub** com as contas **separadas por grupo** (+ avulsas) e os bots **reordenados segurando e arrastando** (saíram as setas)
+
+### Modificado
+- update: **cronograma** vira "**Rodar automaticamente**" — dá pra **pausar**; ao religar, o que passou da hora é pulado e ele segue do próximo horário. Saiu o push de lembrete: horário que não deu pra rodar é só pulado (o único aviso que sobra é o de reconectar)
+
+### Corrigido
+- fix: **login do Instagram** — o autopreenchimento preenchia qualquer campo de texto (até o de trocar e-mail) e reescrevia por ~9s; agora só preenche na tela de login, uma vez, e para assim que você mexe num campo
+
 ## [1.7.4] — 2026-10-01
 
 ### Corrigido

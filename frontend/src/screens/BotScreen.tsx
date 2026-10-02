@@ -3,7 +3,7 @@ import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacit
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { api, Account, Chat, RunInfo, RunHistorico } from '@/lib/api';
+import { api, Account, Chat, Grupo, RunInfo, RunHistorico } from '@/lib/api';
 import { cmpTexto } from '@/lib/ordenar';
 import { bucketData, fmtHora } from '@/lib/datas';
 import { garantirLA } from '@/lib/la';
@@ -46,10 +46,13 @@ export function BotScreen() {
   const [contasAtivas, setContasAtivas] = useState<Account[] | null>(null);  // null = ainda não checou
   const [selec, setSelec] = useState<Set<string>>(new Set());
   const [verContas, setVerContas] = useState(false);
+  // grupos: tocar num grupo marca SÓ as contas dele (com sessão viva); dá pra ajustar conta a conta
+  const [grupos, setGrupos] = useState<Grupo[]>([]);
+  const [grupoSel, setGrupoSel] = useState<string | null>(null);
 
   const temChats = botId === 'auto-follow';
   const temPostInicial = botId === 'like-repost';
-  const temLote = botId === 'like-repost';
+  const temLote = botId === 'like-repost' || botId === 'story-repost';
   const precisaChat = temChats && chats.length === 0;
 
   // checagem leve (só as runs) — usada no polling pra atualizar o botão ao vivo
@@ -124,11 +127,15 @@ export function BotScreen() {
         .map((a) => ({ ...a, sessao_ok: a.id! in sess ? sess[a.id!] : undefined }))
         .sort((a, b) => cmpTexto(a.label, b.label));
       setContasAtivas(lista);
-      // conta SEM sessão viva não entra no lote — pré-seleciona só as vivas (sessao_ok === true).
-      const vivas = lista.filter((a) => a.sessao_ok === true);
+      const gs = await api.getGrupos().catch(() => [] as Grupo[]);
+      setGrupos(gs);
+      // conta SEM sessão viva não entra no lote — pré-seleciona só as vivas (sessao_ok === true);
+      // com um grupo escolhido, só as vivas DO GRUPO.
+      const g = grupoSel ? gs.find((x) => x.nome === grupoSel) : null;
+      const vivas = lista.filter((a) => a.sessao_ok === true && (!g || g.contas.includes(a.id as string)));
       setSelec(new Set(vivas.map((a) => a.id as string)));
     } catch { setContasAtivas([]); } finally { setVerContas(false); }
-  }, []);
+  }, [grupoSel]);
 
   function toggleLote(v: boolean) {
     setLote(v);
@@ -137,6 +144,15 @@ export function BotScreen() {
 
   function toggleConta(id: string) {
     setSelec((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+
+  // escolhe um grupo (ou "todas" = null): marca só as contas vivas dele
+  function escolherGrupo(nome: string | null) {
+    setGrupoSel(nome);
+    const g = nome ? grupos.find((x) => x.nome === nome) : null;
+    const vivas = (contasAtivas ?? []).filter((a) => a.sessao_ok === true
+      && (!g || g.contas.includes(a.id as string)));
+    setSelec(new Set(vivas.map((a) => a.id as string)));
   }
 
   function rodar(dry: boolean) {
@@ -331,6 +347,18 @@ export function BotScreen() {
           </View>
           {lote && (
             <View style={{ marginTop: 12 }}>
+              {grupos.length > 0 && (
+                <View style={[styles.chips, { marginBottom: 10 }]}>
+                  {[null, ...grupos.map((g) => g.nome)].map((g) => (
+                    <TouchableOpacity key={g ?? '__todas'} onPress={() => escolherGrupo(g)}
+                      style={[styles.chip, grupoSel === g && styles.chipOn]}>
+                      <Text style={[styles.chipTxt, grupoSel === g && styles.chipTxtOn]}>
+                        {g ?? 'todas'}{g ? ` · ${grupos.find((x) => x.nome === g)?.contas.length ?? 0}` : ''}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
               <View style={styles.loteSub}>
                 <Text style={styles.loteSubTxt}>
                   {verContas ? 'verificando sessões…'
@@ -342,7 +370,12 @@ export function BotScreen() {
                   <Text style={styles.linkTxt}>atualizar</Text>
                 </TouchableOpacity>
               </View>
-              {(contasAtivas ?? []).map((c) => {
+              {(contasAtivas ?? [])
+                .filter((c) => {   // com grupo escolhido, lista só as contas dele
+                  const g = grupoSel ? grupos.find((x) => x.nome === grupoSel) : null;
+                  return !g || g.contas.includes(c.id as string);
+                })
+                .map((c) => {
                 const viva = c.sessao_ok === true;       // só quem tem sessão viva entra no lote
                 const on = viva && !!c.id && selec.has(c.id);
                 const morta = c.sessao_ok === false;     // checou e a sessão caiu

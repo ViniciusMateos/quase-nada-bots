@@ -8,7 +8,8 @@ Cada conta guarda a PRÓPRIA sessão (cookies) em `sessions/<id>.json`, onde <id
 Isso permite ter várias contas cadastradas e trocar a ativa sem relogar (sem senha,
 sem captcha — cada conta foi conectada uma vez pelo webview e teve os cookies salvos).
 
-Índice em `sessions/accounts.json`: {"ativa": <id|null>, "contas": [{id, label, conectada_em}]}.
+Índice em `sessions/accounts.json`: {"ativa": <id|null>, "grupos": [nome],
+"contas": [{id, label, conectada_em, grupos: [nome]}]}.
 """
 import json
 import os
@@ -246,9 +247,12 @@ def salvar(cookies, label=None):
     contas = [c for c in idx.get("contas", [])
               if c.get("id") != uid
               and not (c.get("pendente") and (c.get("label") or "").lower() == label.lower())]
+    # grupos da conta sobrevivem à reconexão (e a pendente passa os dela pra conta real)
+    grupos = (antigo or {}).get("grupos") or (pend or {}).get("grupos") or []
+    travada = bool((antigo or {}).get("travada") or (pend or {}).get("travada"))
     contas.append({"id": uid, "label": label, "conectada_em": int(time.time()),
-                   "criada_em": criada_em})
-    _gravar_index({"ativa": uid, "contas": contas})
+                   "criada_em": criada_em, "grupos": grupos, "travada": travada})
+    _gravar_index({**idx, "ativa": uid, "contas": contas})   # preserva o resto do índice (ex: "grupos")
     _escrever_central(uid)
     return {"id": uid, "label": label, "ativa": True}
 
@@ -263,6 +267,97 @@ def ativar(uid):
     idx["ativa"] = uid
     _gravar_index(idx)
     return {"ativa": uid}
+
+
+# ───────────────────────────── trava (sem automático) ─────────────────────────────
+# Conta TRAVADA = nada automático roda nela (hoje: o aquecimento do cronograma; vale pra qualquer
+# automação futura — quem agenda/auto-roda deve checar `travada(uid)`). Rodar na mão continua ok.
+def travada(uid):
+    return any(c.get("id") == uid and c.get("travada") for c in _ler_index().get("contas", []))
+
+
+def definir_travada(uid, v):
+    idx = _ler_index()
+    achou = False
+    for c in idx.get("contas", []):
+        if c.get("id") == uid:
+            c["travada"] = bool(v)
+            achou = True
+    if not achou:
+        raise KeyError(uid)
+    _gravar_index(idx)
+    return {"id": uid, "travada": bool(v)}
+
+
+# ───────────────────────────── grupos de contas ─────────────────────────────
+# Grupo = etiqueta com nome (ex: "Captação", "Vitrine"). Cada conta guarda os grupos dela em
+# `grupos: [nome]`; o índice guarda a lista de nomes em `grupos` (pra existir grupo vazio e manter
+# a ordem de criação). Uma conta pode estar em vários grupos. Usado pra rodar um bot num grupo
+# (o app pré-marca as contas do grupo no lote).
+def _nome_grupo(nome):
+    nome = " ".join(str(nome or "").split())
+    if not nome:
+        raise ValueError("nome do grupo vazio")
+    return nome[:40]
+
+
+def listar_grupos():
+    """[{nome, contas: [ids]}] — na ordem de criação; inclui grupo vazio."""
+    idx = _ler_index()
+    nomes = list(idx.get("grupos") or [])
+    for c in idx.get("contas", []):
+        for g in c.get("grupos") or []:
+            if g not in nomes:
+                nomes.append(g)
+    return [{"nome": g, "contas": [c.get("id") for c in idx.get("contas", []) if g in (c.get("grupos") or [])]}
+            for g in nomes]
+
+
+def criar_grupo(nome):
+    nome = _nome_grupo(nome)
+    idx = _ler_index()
+    gs = list(idx.get("grupos") or [])
+    if nome.lower() not in [g.lower() for g in gs]:
+        gs.append(nome)
+        idx["grupos"] = gs
+        _gravar_index(idx)
+    return {"nome": nome}
+
+
+def definir_contas_grupo(nome, uids):
+    """Define QUEM está no grupo (substitui): marca as contas de `uids`, desmarca as outras."""
+    nome = _nome_grupo(nome)
+    idx = _ler_index()
+    if nome not in (idx.get("grupos") or []):
+        idx["grupos"] = list(idx.get("grupos") or []) + [nome]
+    quer = set(uids or [])
+    for c in idx.get("contas", []):
+        gs = [g for g in (c.get("grupos") or []) if g != nome]
+        if c.get("id") in quer:
+            gs.append(nome)
+        c["grupos"] = gs
+    _gravar_index(idx)
+    return {"nome": nome, "contas": [c.get("id") for c in idx.get("contas", []) if nome in c["grupos"]]}
+
+
+def renomear_grupo(nome, novo):
+    nome, novo = _nome_grupo(nome), _nome_grupo(novo)
+    idx = _ler_index()
+    idx["grupos"] = [novo if g == nome else g for g in (idx.get("grupos") or [])]
+    for c in idx.get("contas", []):
+        c["grupos"] = [novo if g == nome else g for g in (c.get("grupos") or [])]
+    _gravar_index(idx)
+    return {"nome": novo}
+
+
+def remover_grupo(nome):
+    """Apaga o grupo (as contas continuam, só saem dele)."""
+    idx = _ler_index()
+    idx["grupos"] = [g for g in (idx.get("grupos") or []) if g != nome]
+    for c in idx.get("contas", []):
+        c["grupos"] = [g for g in (c.get("grupos") or []) if g != nome]
+    _gravar_index(idx)
+    return {"ok": True}
 
 
 def remover(uid):

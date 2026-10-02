@@ -189,6 +189,49 @@ async def remover_conta(conta_id: str):
     return accounts.remover(conta_id)
 
 
+@app.put("/accounts/{conta_id}/travada", dependencies=[Depends(auth)])
+async def travar_conta(conta_id: str, payload: dict):
+    """Trava/destrava a conta pro AUTOMÁTICO (cronograma não roda nada nela). Rodar na mão segue ok."""
+    try:
+        return accounts.definir_travada(conta_id, bool((payload or {}).get("travada")))
+    except KeyError:
+        raise HTTPException(404, "conta não encontrada")
+
+
+# ───────────────────────── grupos de contas ─────────────────────────
+@app.get("/grupos", dependencies=[Depends(auth)])
+async def listar_grupos():
+    """[{nome, contas: [ids]}] — o app usa pra pré-marcar as contas de um grupo no lote."""
+    return accounts.listar_grupos()
+
+
+@app.post("/grupos", dependencies=[Depends(auth)])
+async def criar_grupo(payload: dict):
+    try:
+        return accounts.criar_grupo((payload or {}).get("nome"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.put("/grupos/{nome}", dependencies=[Depends(auth)])
+async def editar_grupo(nome: str, payload: dict):
+    """`contas` = quem fica no grupo (substitui); `nome` = renomeia."""
+    p = payload or {}
+    try:
+        if p.get("nome") and p["nome"] != nome:
+            nome = accounts.renomear_grupo(nome, p["nome"])["nome"]
+        if "contas" in p:
+            return accounts.definir_contas_grupo(nome, p.get("contas") or [])
+        return {"nome": nome}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/grupos/{nome}", dependencies=[Depends(auth)])
+async def remover_grupo(nome: str):
+    return accounts.remover_grupo(nome)
+
+
 # ─────────────────────────── cronograma ───────────────────────────
 @app.get("/cronograma", dependencies=[Depends(auth)])
 async def cronograma_hoje():

@@ -31,7 +31,11 @@ export type Account = {
   criada_em?: number;   // 1ª conexão — NÃO reseta ao reconectar (idade real da conta)
   sessao_ok?: boolean;  // só no /accounts/validar: sessão do IG ainda viva?
   pendente?: boolean;   // conta adicionada SEM conectar ainda (só o @, sem sessão)
+  grupos?: string[];    // grupos dessa conta (ex: "Vitrine", "Captação")
+  travada?: boolean;    // trancada pro AUTOMÁTICO (cronograma não roda nada nela)
 };
+// grupo de contas: etiqueta salva no server; usado pra pré-marcar as contas no lote
+export type Grupo = { nome: string; contas: string[] };
 export type RunHistorico = {
   id: string; bot: string; dry_run: boolean;
   started_at: number | null; ended_at: number | null; duracao_s: number | null;
@@ -42,6 +46,7 @@ export type RunHistorico = {
 export type CronTarefa = {
   conta_id?: string; conta: string; bot: string; modo: string; desc: string;
   hora: number; min: number; enviado: boolean;
+  pulado?: boolean;   // passou da hora sem rodar (pausado, ou 2h na fila) — não roda atrasado
 };
 export type Cronograma = { ativo: boolean; data: string; tarefas: CronTarefa[] };
 
@@ -82,6 +87,14 @@ export const api = {
   validarContas: (force = false) => http.get<Account[]>(force ? '/accounts/validar?force=1' : '/accounts/validar'),
   ativarConta: (id: string) => http.post<{ ativa: string }>(`/accounts/${encodeURIComponent(id)}/ativar`, {}),
   removerConta: (id: string) => http.del(`/accounts/${encodeURIComponent(id)}`),
+  travarConta: (id: string, travada: boolean) =>
+    http.put<{ id: string; travada: boolean }>(`/accounts/${encodeURIComponent(id)}/travada`, { travada }),
+  getGrupos: () => http.get<Grupo[]>('/grupos'),
+  criarGrupo: (nome: string) => http.post<{ nome: string }>('/grupos', { nome }),
+  // contas = quem fica no grupo (substitui); nome = renomeia
+  editarGrupo: (nome: string, dados: { nome?: string; contas?: string[] }) =>
+    http.put<Grupo>(`/grupos/${encodeURIComponent(nome)}`, dados),
+  removerGrupo: (nome: string) => http.del(`/grupos/${encodeURIComponent(nome)}`),
   registerDevice: (token: string) => http.post<{ ok: boolean; devices: number }>('/devices', { token }),
   getCronograma: () => http.get<Cronograma>('/cronograma'),
   setCronograma: (ativo: boolean) => http.put<{ ativo: boolean }>('/cronograma', { ativo }),

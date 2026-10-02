@@ -1,8 +1,8 @@
 """
-Cronograma de lembretes.
-
-Manda push notifications lembrando de RODAR o AQUECIMENTO HUMANO (o login/run é
-manual), em horários ALEATÓRIOS dentro de janelas do dia.
+Cronograma — RODA o AQUECIMENTO HUMANO sozinho, em horários ALEATÓRIOS dentro de janelas do dia.
+(Antes mandava push lembrando de rodar; o lembrete saiu — agora é só o rodar automático, que dá
+pra pausar no app. Ao religar, o que passou da hora é pulado. O único push que sobra é o de
+"reconecta" quando a sessão da conta caiu.)
 
 Regras de ouro:
   - só aquecimento humano, em TODAS as contas, TODO dia, 2x por conta;
@@ -12,7 +12,7 @@ Regras de ouro:
 
 Persistência:
   - cronograma_plano.json → plano do dia (horários + quais já foram enviados);
-  - cronograma_config.json → {"ativo": bool} (liga/desliga os lembretes).
+  - cronograma_config.json → {"ativo": bool} (liga/desliga o rodar automático).
 """
 import asyncio
 import json
@@ -87,9 +87,10 @@ def _agora():
 
 
 def _contas():
-    """Todas as contas cadastradas (o aquecimento vale pra todas — o tap da notificação
-    resolve reconectar se a sessão tiver caído)."""
-    return [a for a in accounts.listar() if a.get("id")]
+    """Contas que entram no automático: todas as cadastradas MENOS as TRAVADAS (o usuário trancou
+    a conta pra não rodar nada automático — ex: a conta do brechó). Como o _reconciliar_plano usa
+    isto a cada tick, travar tira a conta do plano do dia na hora; destravar devolve."""
+    return [a for a in accounts.listar() if a.get("id") and not a.get("travada")]
 
 
 def _gerar_plano(d):
@@ -183,7 +184,18 @@ def ativo():
 
 
 def set_ativo(v):
+    """Liga/desliga o RODAR AUTOMÁTICO. Ao religar, o que passou da hora enquanto estava pausado
+    é PULADO (não roda tudo atrasado de uma vez) — volta a valer do próximo horário em diante."""
     _CFG.write_text(json.dumps({"ativo": bool(v)}, ensure_ascii=False, indent=2), encoding="utf-8")
+    if v:
+        agora = _agora()
+        plano = _carregar_plano(agora.date())
+        if plano:
+            for t in plano["tarefas"]:
+                if not t.get("enviado") and (t["hora"], t["min"]) <= (agora.hour, agora.minute):
+                    t["enviado"] = True
+                    t["pulado"] = True
+            _salvar_plano(plano)
     return {"ativo": bool(v)}
 
 
@@ -192,15 +204,6 @@ def preview(d=None):
     d = d or _agora().date()
     plano = _carregar_plano(d) or _gerar_plano(d)
     return {"ativo": ativo(), **plano}
-
-
-async def _lembrar(t):
-    """Push de lembrete (comportamento antigo): o tap abre o app pra rodar/reconectar."""
-    corpo = t.get("corpo") or f"Hora de rodar o Aquecimento Humano na @{t.get('conta')}"
-    await asyncio.to_thread(notify.enviar, t.get("titulo") or "Cronograma · hora de rodar", corpo, {
-        "tipo": "cronograma", "botId": t["bot"], "nome": _NOME_BOT.get(t["bot"], t["bot"]),
-        "conta": t.get("conta"), "conta_id": t.get("conta_id"), "modo": t.get("modo"),
-    }, grupo="cronograma")
 
 
 async def _sessao_viva(conta_id, tentativas=3, intervalo=4):
@@ -230,6 +233,8 @@ async def _auto_rodar(t, mgr):
     # pula SEM push (não enche pra reconectar o que o usuário apagou de propósito). Guard extra:
     # o _reconciliar_plano já tira a órfã, mas isto cobre a corrida (deletou no meio do tick).
     if not accounts.existe(t.get("conta_id")):
+        return "tratado"
+    if accounts.travada(t.get("conta_id")):   # trancada no meio do tick → não roda nada automático
         return "tratado"
     if _bot_rodando(mgr):
         return "adia"
@@ -308,13 +313,11 @@ async def _tick(mgr=None):
         if r == "adia":
             if atraso <= 120:                          # tem bot rodando: espera a vaga (até 2h)
                 continue
-            await _lembrar(t)                          # passou de 2h na fila → desiste do auto, lembra
-            t["enviado"] = True; mudou = True
+            t["enviado"] = True; t["pulado"] = True; mudou = True   # 2h na fila → pula (sem lembrete)
         elif r in ("rodou", "tratado"):               # rodou sozinho OU já avisou (sessão caiu)
             t["enviado"] = True; mudou = True
-        else:                                          # "sem" → lembrete (tap manual / sem mgr)
-            await _lembrar(t)
-            t["enviado"] = True; mudou = True
+        else:                                          # "sem" → não deu pra rodar: pula (sem lembrete)
+            t["enviado"] = True; t["pulado"] = True; mudou = True
     if mudou:
         _salvar_plano(plano)
 

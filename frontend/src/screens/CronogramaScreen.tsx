@@ -56,8 +56,12 @@ export function CronogramaScreen() {
           <Card style={{ gap: 12 }}>
             <View style={styles.linha}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.titulo}>Lembretes de rodar</Text>
-                <Text style={styles.sub}>Um push te lembra de rodar o aquecimento humano em cada conta, 2x por dia.</Text>
+                <Text style={styles.titulo}>Rodar automaticamente</Text>
+                <Text style={styles.sub}>
+                  {cron.ativo
+                    ? 'Roda o aquecimento humano sozinho em cada conta, 2x por dia, nos horários abaixo.'
+                    : 'Pausado — não roda nada. Ao ligar, volta a partir do próximo horário (o que passou é pulado).'}
+                </Text>
               </View>
               <Switch value={cron.ativo} onValueChange={toggle} disabled={salvando}
                 trackColor={{ true: colors.marca, false: colors.border }} thumbColor="#fff" />
@@ -72,23 +76,27 @@ export function CronogramaScreen() {
           </View>
         </Aparece>
 
-        {!cron.ativo ? (
-          <Text style={styles.vazio}>Lembretes desligados. Liga aí em cima pra receber os pushes.</Text>
-        ) : cron.tarefas.length === 0 ? (
+        {cron.tarefas.length === 0 ? (
           <Text style={styles.vazio}>Nenhuma conta cadastrada. Adicione uma conta pra agendar o aquecimento.</Text>
         ) : cron.tarefas.map((t, i) => (
           <Aparece key={`${t.conta}-${t.hora}-${t.min}-${i}`} delay={Math.min(i, 8) * 40}>
             <TouchableOpacity activeOpacity={0.7}
               onPress={() => nav.navigate('ContasIg')}>
-              <Card style={styles.tarefa}>
+              {/* pausado: tudo apagadinho (continua visível pra ver o que vem) */}
+              <Card style={StyleSheet.flatten([styles.tarefa, !cron.ativo && !t.enviado ? { opacity: 0.45 } : null])}>
                 <View style={[styles.hora, t.enviado && { opacity: 0.5 }]}>
                   <Text style={styles.horaTxt}>{hhmm(t)}</Text>
-                  {t.enviado ? <Ionicons name="checkmark-done" size={13} color={colors.ok} />
+                  {t.pulado ? <Ionicons name="play-skip-forward" size={13} color={colors.textoFraco} />
+                    : t.enviado ? <Ionicons name="checkmark-done" size={13} color={colors.ok} />
+                    : !cron.ativo ? <Ionicons name="pause" size={13} color={colors.textoFraco} />
                     : <Ionicons name="time-outline" size={13} color={colors.textoFraco} />}
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.tarefaBot}>{NOME_BOT[t.bot] || t.bot} · @{t.conta}</Text>
-                  <Text style={styles.tarefaSub}>hora de rodar o aquecimento</Text>
+                  <Text style={styles.tarefaSub}>
+                    {t.pulado ? 'pulado' : t.enviado ? 'rodou automático'
+                      : cron.ativo ? 'roda automático' : 'pausado'}
+                  </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={colors.textoFraco} />
               </Card>

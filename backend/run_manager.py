@@ -20,6 +20,31 @@ import settings
 
 _counter = itertools.count(1)
 
+
+def _seed_counter():
+    """Semeia o contador de run ACIMA do maior id já existente (logs + histórico). Sem isto o
+    contador reiniciava em 1 a CADA restart do backend, os ids colidiam (run-1, run-2…) e, como o
+    log abre em append, run-1.log acumulava VÁRIAS runs — por isso o histórico mostrava runs
+    misturadas e entradas duplicadas. Com a semente, todo run tem id único e log próprio."""
+    global _counter
+    maxn = 0
+    log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "run_logs")
+    try:
+        for f in os.listdir(log_dir):
+            m = re.match(r"run-(\d+)\.log$", f)
+            if m:
+                maxn = max(maxn, int(m.group(1)))
+    except Exception:
+        pass
+    try:
+        for rec in history.listar(limite=1000000):
+            m = re.match(r"run-(\d+)$", str(rec.get("id") or ""))
+            if m:
+                maxn = max(maxn, int(m.group(1)))
+    except Exception:
+        pass
+    _counter = itertools.count(maxn + 1)
+
 # os workers logam como "2026-07-16 15:04:01  INFO   Abrindo navegador…" — pra mostrar
 # na Live Activity a gente quer só a frase, sem o carimbo de data/nível.
 _PREFIXO = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\s+\w+\s+")
@@ -217,6 +242,7 @@ class RunManager:
             os.makedirs(self._LOG_DIR, exist_ok=True)
         except Exception:
             pass
+        _seed_counter()   # ids de run únicos entre restarts (senão o histórico mistura as runs)
         # ── Live Activity: UMA pro app inteiro (não uma por run). O token e o throttle
         # vivem aqui porque o conjunto é que é exibido — o app cria a activity, o server
         # soma as runs e empurra.
@@ -494,6 +520,10 @@ class RunManager:
             raise ValueError(f"bot desconhecido: {bot_id}")
         run = Run(bot_id, params)
         run._log_path = os.path.join(self._LOG_DIR, f"{run.id}.log")
+        try:
+            open(run._log_path, "w", encoding="utf-8").close()   # começa LIMPO — nunca herda log de uma run antiga de mesmo id
+        except Exception:
+            pass
         self.runs[run.id] = run
         cmd = [settings.PYTHON_BIN] + bots.montar_cmd(bot_id, params)
         env = {**os.environ, "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1"}

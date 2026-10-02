@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { api, Bot, RunInfo, Account } from '@/lib/api';
+import * as SecureStore from 'expo-secure-store';
+import { api, Bot, RunInfo, Account, Grupo } from '@/lib/api';
+import { ListaArrastavel } from '@/ui/ListaArrastavel';
 import { cmpTexto } from '@/lib/ordenar';
 import { Credencial, lerCredenciais } from '@/lib/credenciais';
 import { colors, statusCor } from '@/theme';
@@ -19,6 +21,9 @@ type AccEntry = { usuario: string; senha?: string; id?: string; ativa?: boolean 
 export function HubScreen() {
   const nav = useNavigation<Nav>();
   const [bots, setBots] = useState<[string, Bot][]>([]);
+  const [grupos, setGrupos] = useState<Grupo[]>([]);
+  const [arrastando, setArrastando] = useState(false);   // arrastando um bot → trava a rolagem
+  const ordemRef = useRef<string[]>([]);   // ordem preferida dos bots (ids), salva no aparelho
   const [runs, setRuns] = useState<RunInfo[]>([]);
   const [contas, setContas] = useState<Account[]>([]);
   const [creds, setCreds] = useState<Credencial[]>([]);
@@ -44,15 +49,38 @@ export function HubScreen() {
     if (novas.length) validarRef.current(true);   // uma conexão acabou → check fresco (sem cache)
   }, []);
 
+  // ── ordenação preferida dos bots (segurar e arrastar; salva no aparelho) ──
+  const aplicarOrdem = useCallback((entries: [string, Bot][]) => {
+    const ord = ordemRef.current;
+    if (!ord.length) return entries;
+    const pos = (id: string) => { const i = ord.indexOf(id); return i < 0 ? 999 : i; };
+    return [...entries].sort((a, b) => pos(a[0]) - pos(b[0]));
+  }, []);
+  const salvarOrdem = useCallback((entries: [string, Bot][]) => {
+    const ids = entries.map(([id]) => id);
+    ordemRef.current = ids;
+    SecureStore.setItemAsync('bots_ordem', JSON.stringify(ids)).catch(() => { /* preferência local */ });
+  }, []);
+  const reordenar = useCallback((novos: [string, Bot][]) => {
+    setBots(novos);
+    salvarOrdem(novos);
+  }, [salvarOrdem]);
+
   const carregar = useCallback(async () => {
     setLoading(true); setErro(null);
     try {
-      const [b, r, cs, cr] = await Promise.all([
+      const [b, r, cs, cr, gs] = await Promise.all([
         api.listBots(), api.listRuns(),
         api.getAccounts().catch(() => [] as Account[]),
         lerCredenciais().catch(() => [] as Credencial[]),
+        api.getGrupos().catch(() => [] as Grupo[]),
       ]);
-      setBots(Object.entries(b));
+      setGrupos(gs);
+      try {
+        const raw = await SecureStore.getItemAsync('bots_ordem');
+        ordemRef.current = raw ? (JSON.parse(raw) as string[]) : [];
+      } catch { /* mantém a ordem atual */ }
+      setBots(aplicarOrdem(Object.entries(b)));
       setRuns(r);
       checarConexaoNova(r);
       setContas(cs);
@@ -64,7 +92,7 @@ export function HubScreen() {
     } finally {
       setLoading(false);
     }
-  }, [checarConexaoNova]);
+  }, [checarConexaoNova, aplicarOrdem]);
 
   // só as runs (leve) — pra atualizar "Rodando agora" e a barra de progresso sem recarregar
   // a lista de bots inteira. Também detecta conexão que acabou → revalida sozinho.
@@ -112,6 +140,22 @@ export function HubScreen() {
     return [...map.values()].sort((a, b) => cmpTexto(a.usuario, b.usuario));
   }, [creds, contas]);
 
+  // contas separadas por GRUPO (na ordem dos grupos) + "avulsas" (sem grupo). Sem nenhum grupo
+  // com conta → uma seção só, sem título (igual era antes).
+  const secoesContas = useMemo<{ titulo: string | null; itens: AccEntry[] }[]>(() => {
+    const out: { titulo: string | null; itens: AccEntry[] }[] = [];
+    const comGrupo = new Set<string>();
+    for (const g of grupos) {
+      const itens = entradas.filter((e) => e.id && g.contas.includes(e.id));
+      if (!itens.length) continue;
+      itens.forEach((e) => comGrupo.add(e.usuario));
+      out.push({ titulo: g.nome, itens });
+    }
+    const avulsas = entradas.filter((e) => !comGrupo.has(e.usuario));
+    if (avulsas.length) out.push({ titulo: out.length ? 'Avulsas' : null, itens: avulsas });
+    return out;
+  }, [grupos, entradas]);
+
   function ativarConta(e: AccEntry) {
     if (!e.id || e.ativa || busyConta) return;
     setBusyConta(e.usuario);
@@ -123,13 +167,7 @@ export function HubScreen() {
   return (
     <View style={styles.tela}>
       {dog}
-      <FlatList
-        data={bots}
-        keyExtractor={([id]) => id}
-        contentContainerStyle={{ padding: 16, gap: 12 }}
-        {...scrollProps}
-        ListHeaderComponent={
-          <>
+      <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }} {...scrollProps} scrollEnabled={!arrastando}>
           {spacerEl}
           <View style={{ gap: 12, marginBottom: 4 }}>
             <View style={styles.topo}>
@@ -190,7 +228,15 @@ export function HubScreen() {
                     </TouchableOpacity>
                   </View>
                 </View>
-                {entradas.map((e) => {
+                {secoesContas.map((s) => (
+                <View key={s.titulo ?? '__todas'}>
+                {s.titulo ? (
+                  <TouchableOpacity onPress={() => nav.navigate('ContasIg')} hitSlop={6} style={styles.grupoHead}>
+                    <Text style={styles.grupoTitulo}>{s.titulo}</Text>
+                    <Text style={styles.grupoQtd}>{s.itens.length}</Text>
+                  </TouchableOpacity>
+                ) : null}
+                {s.itens.map((e) => {
                   const sess = e.id ? sessoes[e.id] : undefined;   // true/false/undefined(=não checou)
                   const checando = verificando && !!e.id && sess === undefined;
                   const caiu = !!e.id && sess === false;
@@ -226,20 +272,33 @@ export function HubScreen() {
                     </View>
                   );
                 })}
+                </View>
+                ))}
               </Card>
             )}
           </View>
-          </>
-        }
-        renderItem={({ item: [id, bot], index }) => (
-          <Aparece delay={index * 60}>
-            <CartaoTocavel onPress={() => nav.navigate('Bot', { botId: id, nome: bot.nome })}>
-              <Text style={styles.botNome}>{bot.nome}</Text>
-              <Text style={styles.botDesc}>{bot.descricao}</Text>
-            </CartaoTocavel>
-          </Aparece>
-        )}
-      />
+
+          {/* bots: segura e arrasta pra reordenar (a ordem fica salva no aparelho) */}
+          <ListaArrastavel
+            itens={bots}
+            chave={([id]) => id}
+            onReordenar={reordenar}
+            onArrastando={setArrastando}
+            render={([id, bot], index, segurar, dedoSaiu) => (
+              <Aparece delay={index * 60}>
+                <CartaoTocavel onPress={() => nav.navigate('Bot', { botId: id, nome: bot.nome })}
+                  onLongPress={segurar} onPressOut={dedoSaiu}>
+                  <View style={styles.botRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.botNome}>{bot.nome}</Text>
+                      <Text style={styles.botDesc}>{bot.descricao}</Text>
+                    </View>
+                  </View>
+                </CartaoTocavel>
+              </Aparece>
+            )}
+          />
+      </ScrollView>
     </View>
   );
 }
@@ -256,6 +315,10 @@ const styles = StyleSheet.create({
   runLog: { color: colors.textoFraco, fontSize: 12, fontFamily: 'monospace', marginTop: -2 },
   botNome: { color: colors.texto, fontSize: 18, fontWeight: '700' },
   botDesc: { color: colors.textoFraco, fontSize: 13, marginTop: 4 },
+  botRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  grupoHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, marginBottom: 2 },
+  grupoTitulo: { color: colors.marca, fontSize: 12, fontWeight: '800' },
+  grupoQtd: { color: colors.textoFraco, fontSize: 11, fontWeight: '700' },
   contasHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   contasAcoes: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   gerenciar: { color: colors.marca, fontSize: 12, fontWeight: '700' },

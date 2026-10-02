@@ -44,15 +44,19 @@ export function Card({ children, style }: { children: React.ReactNode; style?: V
 
 // ── Card tocável com press-scale ──
 export function CartaoTocavel({
-  children, onPress, style,
-}: { children: React.ReactNode; onPress: () => void; style?: ViewStyle }) {
+  children, onPress, onLongPress, onPressOut, style,
+}: {
+  children: React.ReactNode; onPress: () => void; onLongPress?: () => void; onPressOut?: () => void;
+  style?: ViewStyle;
+}) {
   const scale = useRef(new Animated.Value(1)).current;
   const anima = (to: number) =>
     Animated.spring(scale, { toValue: to, useNativeDriver: true, friction: 6, tension: 120 }).start();
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
       <TouchableOpacity activeOpacity={0.9} onPress={onPress}
-        onPressIn={() => anima(0.975)} onPressOut={() => anima(1)}>
+        onLongPress={onLongPress} delayLongPress={300}
+        onPressIn={() => anima(0.975)} onPressOut={() => { anima(1); onPressOut?.(); }}>
         <Card style={style}>{children}</Card>
       </TouchableOpacity>
     </Animated.View>

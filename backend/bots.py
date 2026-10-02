@@ -30,6 +30,11 @@ BOTS = {
         "tem_modos": True, "tem_chats": False, "tem_ig": True,
         "descricao": "Curte (e reposta) os posts de uma conta-alvo — ex: o drop do brechó.",
     },
+    "story-repost": {
+        "nome": "Story Repost", "dir": "story-repost-instagram",
+        "tem_modos": True, "tem_chats": False, "tem_ig": True,
+        "descricao": "Reposta peças disponíveis do brechó no story das contas-vitrine (aleatório ou drop novo).",
+    },
 }
 
 # arquivo (dentro do dir do worker) onde a sessão importada do IG é gravada

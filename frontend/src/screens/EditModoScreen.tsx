@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -14,7 +14,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Rt = RouteProp<RootStackParamList, 'EditModo'>;
 type Modos = Record<string, Record<string, unknown>>;
 type Valor = number | boolean | number[] | string;
-type Tipo = 'bool' | 'cap' | 'range' | 'text';
+type Tipo = 'bool' | 'cap' | 'range' | 'text' | 'opcao';
 
 // ── categorias (ordem de exibição) ──────────────────────────────────────────
 const CATS: { key: string; titulo: string }[] = [
@@ -30,7 +30,9 @@ const CATS: { key: string; titulo: string }[] = [
 // tipo 'cap'   → toggle; ligado abre 1 número; desligado = 0 (sem limite)
 // tipo 'range' → toggle; ligado abre "de X até Y"; desligado = [0,0] (sem)
 // tipo 'bool'  → só o interruptor
-type MetaF = { label: string; cat: string; tipo: Tipo; sug?: Valor; dica?: string };
+// tipo 'opcao' → escolhe UMA das `opcoes` (chips); sempre tem valor (sem toggle)
+type Opcao = { valor: string; label: string };
+type MetaF = { label: string; cat: string; tipo: Tipo; sug?: Valor; dica?: string; opcoes?: Opcao[] };
 const META: Record<string, MetaF> = {
   aplicar_caps: { label: 'Respeitar limites', cat: 'limites', tipo: 'bool',
     dica: 'Desligado = ignora os limites abaixo e roda até o Instagram bloquear.' },
@@ -78,6 +80,25 @@ const META: Record<string, MetaF> = {
     dica: 'Quantos posts do alvo pegar na 1ª run (o drop). Depois pega só os novos, sozinho.' },
   max_por_run: { label: 'Máx. posts por run', cat: 'limites', tipo: 'cap', sug: 15,
     dica: 'Teto de posts por execução. Desligado = processa todos os pendentes.' },
+  // ── story-repost ──
+  selecao: { label: 'O que postar', cat: 'alvo', tipo: 'opcao', sug: 'aleatorio',
+    opcoes: [{ valor: 'aleatorio', label: 'Aleatório' }, { valor: 'drop_novo', label: 'Drop novo' }],
+    dica: 'Aleatório: sorteia entre TODAS as peças disponíveis (o último drop incluso). Drop novo: só as disponíveis do último drop postado. Nos dois, cada conta só repete peça depois de postar todas.' },
+  video_intro: { label: 'Vídeo de abertura', cat: 'alvo', tipo: 'bool',
+    dica: 'Antes das peças, posta o vídeo "confiram as peças disponíveis no destaque". Ligado no aleatório; no drop novo fica desligado.' },
+  repost_card: { label: 'Repostar como card', cat: 'alvo', tipo: 'bool',
+    dica: 'Ligado: o post como card (dá pra tocar e abrir o post). Desligado: só a foto em tela cheia.' },
+  estilo: { label: 'Estilo do story', cat: 'alvo', tipo: 'opcao', sug: 'vitrine',
+    opcoes: [{ valor: 'vitrine', label: 'Vitrine' }, { valor: 'original', label: 'Igual o Insta' }],
+    dica: 'Vitrine: fundo laranja do brechó + etiqueta de preço + chamada. Igual o Insta: cópia do card do app, sem preço.' },
+  mostrar_preco: { label: 'Etiqueta de preço', cat: 'alvo', tipo: 'bool',
+    dica: 'Vitrine: o adesivo com o valor e o tamanho (conjunto mostra o preço fechado + o avulso).' },
+  quantos_posts: { label: 'Stories por run (por conta)', cat: 'alvo', tipo: 'cap', sug: 10,
+    dica: 'Quantas peças cada conta posta a cada run. No lote, cada conta posta esse tanto.' },
+  texto: { label: 'Chamada embaixo do card', cat: 'alvo', tipo: 'text', sug: '',
+    dica: 'Em branco = "comente “fila” para garantir a sua!".' },
+  link: { label: 'Link (sticker)', cat: 'alvo', tipo: 'text', sug: '',
+    dica: 'Link opcional (sticker). Exige conta elegível a link no story.' },
 };
 
 // campos ESCONDIDOS do editor (o bot já cuida deles; não faz sentido mexer)
@@ -114,6 +135,10 @@ const CAMPOS_NOVO: Record<string, string[]> = {
     'alvo', 'curtir', 'repostar', 'primeira_vez_ultimos', 'aplicar_caps', 'max_por_run',
     'delay_post', 'delay_acao_ui', 'humanizar', 'pausa_cada', 'active_hours',
   ],
+  'story-repost': [
+    'selecao', 'video_intro', 'quantos_posts', 'repost_card', 'estilo', 'mostrar_preco', 'texto', 'link',
+    'delay_post', 'active_hours',
+  ],
 };
 
 function metaDe(k: string, v: unknown): MetaF {
@@ -124,11 +149,14 @@ function metaDe(k: string, v: unknown): MetaF {
 }
 
 const zerado = (tipo: Tipo): Valor =>
-  (tipo === 'bool' ? false : tipo === 'text' ? '' : tipo === 'range' ? [0, 0] : 0);
+  (tipo === 'bool' ? false : tipo === 'text' || tipo === 'opcao' ? '' : tipo === 'range' ? [0, 0] : 0);
+
+// tipos que guardam STRING (não têm toggle: o valor é editado direto)
+const ehString = (tipo: Tipo) => tipo === 'text' || tipo === 'opcao';
 
 function temValor(tipo: Tipo, v: Valor): boolean {
   if (tipo === 'bool') return Boolean(v);
-  if (tipo === 'text') return Boolean(String(v ?? '').trim());
+  if (ehString(tipo)) return Boolean(String(v ?? '').trim());
   if (tipo === 'range') { const a = v as number[]; return (a?.[0] || 0) > 0 || (a?.[1] || 0) > 0; }
   return (v as number) > 0;
 }
@@ -167,12 +195,12 @@ export function EditModoScreen() {
           const orig = existente?.[k];
           const meta = metaDe(k, orig);
           // string SEM meta 'text' (não editável) → passthrough: preserva e não renderiza
-          if (!usarTemplate && typeof orig === 'string' && meta.tipo !== 'text') { passa[k] = orig; return; }
+          if (!usarTemplate && typeof orig === 'string' && !ehString(meta.tipo)) { passa[k] = orig; return; }
           const v = usarTemplate
-            ? (meta.tipo === 'text' ? ((meta.sug as string) ?? '') : zerado(meta.tipo))
-            : (orig ?? zerado(meta.tipo));
+            ? (ehString(meta.tipo) ? ((meta.sug as string) ?? '') : zerado(meta.tipo))
+            : (orig ?? (meta.tipo === 'opcao' ? (meta.sug as string) : zerado(meta.tipo)));
           base[k] = v;
-          if (meta.tipo !== 'text' && temValor(meta.tipo, v)) on.add(k);   // já vem ligado se tinha valor
+          if (!ehString(meta.tipo) && temValor(meta.tipo, v)) on.add(k);   // já vem ligado se tinha valor
         });
         setModo(base);
         setLigados(on);
@@ -198,7 +226,12 @@ export function EditModoScreen() {
     Object.keys(modo).forEach((k) => {
       const tipo = metaDe(k, modo[k]).tipo;
       if (tipo === 'bool') out[k] = Boolean(modo[k]);
-      else if (tipo === 'text') out[k] = String(modo[k] ?? '').replace(/^@+/, '').trim();
+      else if (tipo === 'text') {
+        // só a conta-alvo tira o "@" na frente; texto/link ficam como digitados
+        const s = String(modo[k] ?? '').trim();
+        out[k] = k === 'alvo' ? s.replace(/^@+/, '') : s;
+      }
+      else if (tipo === 'opcao') out[k] = String(modo[k] || (META[k]?.sug as string) || '');
       else out[k] = ligados.has(k) ? modo[k] : zerado(tipo);
     });
     return out;
@@ -299,7 +332,7 @@ function Campo({ meta, valor, on, onToggle, onChange }: {
     <Animated.View style={styles.campo} layout={LinearTransition.duration(220)}>
       <View style={styles.linhaTop}>
         <Text style={styles.campoLabel}>{meta.label}</Text>
-        {!isText && (
+        {!ehString(meta.tipo) && (
           <Switch value={on} onValueChange={onToggle}
             trackColor={{ true: colors.marca, false: colors.border }} thumbColor="#fff" />
         )}
@@ -308,8 +341,23 @@ function Campo({ meta, valor, on, onToggle, onChange }: {
 
       {isText && (
         <TextInput style={styles.input} autoCapitalize="none" autoCorrect={false}
-          placeholder="brechoquasenadaa" placeholderTextColor={colors.textoFraco}
-          value={String(valor ?? '')} onChangeText={(t) => onChange(t.replace(/^@+/, ''))} />
+          placeholder={typeof meta.sug === 'string' && meta.sug ? meta.sug : meta.label}
+          placeholderTextColor={colors.textoFraco}
+          value={String(valor ?? '')}
+          onChangeText={(t) => onChange(meta.label === 'Conta-alvo' ? t.replace(/^@+/, '') : t)} />
+      )}
+      {meta.tipo === 'opcao' && (
+        <View style={styles.chips}>
+          {(meta.opcoes ?? []).map((o) => {
+            const sel = (valor || meta.sug) === o.valor;
+            return (
+              <TouchableOpacity key={o.valor} onPress={() => onChange(o.valor)}
+                style={[styles.chip, sel && styles.chipOn]}>
+                <Text style={[styles.chipTxt, sel && styles.chipTxtOn]}>{o.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       )}
       {meta.tipo === 'cap' && on && (
         <Animated.View entering={FadeInDown.duration(200)} exiting={FadeOutUp.duration(160)}>
@@ -347,4 +395,10 @@ const styles = StyleSheet.create({
   range: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
   inputNum: { flex: 1, backgroundColor: colors.card2, color: colors.texto, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: colors.border, textAlign: 'center' },
   ate: { color: colors.textoFraco },
+  // chips de opção (mesmo visual dos modos no BotScreen)
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  chip: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 },
+  chipOn: { backgroundColor: colors.laranja, borderColor: colors.laranja },
+  chipTxt: { color: colors.texto },
+  chipTxtOn: { color: '#0F0F0F', fontWeight: '700' },
 });

@@ -6,3 +6,12 @@ httpx[http2]
 # os workers rodam no MESMO venv do backend e usam Playwright (Chromium headed via Xvfb).
 # depois de instalar: `playwright install chromium` + `playwright install-deps chromium`.
 playwright==1.49.1
+# story-repost usa a API privada (instagrapi, HTTP puro, sem Chromium) pra postar no story;
+# Pillow monta o canvas 9:16 e PySocks dá o socks5 pro proxy residencial.
+instagrapi==3.0.16
+Pillow
+PySocks
+# vídeo no story (abertura do story-repost): a instagrapi 3.0.16 analisa/gera a capa com a API
+# do moviepy 2.x (mp.VideoFileClip); traz o ffmpeg junto via imageio-ffmpeg. O moviepy 2 puxa o
+# Pillow 11.x (a instagrapi pede 12+, mas funciona — conferido 02/10/2026).
+moviepy>=2,<3

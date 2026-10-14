@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { DarkTheme, NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import * as Notifications from 'expo-notifications';
@@ -75,6 +75,7 @@ const navTheme = {
 
 export function RootNavigator() {
   useEffect(() => {
+    if (Platform.OS === 'web') return;   // push/notificações são nativos — na web não rola
     // auto-registra o device pra push (no-op no Expo Go/simulador)
     registrarPush();
     // tocou numa notificação → abre a Run correspondente

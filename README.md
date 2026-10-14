@@ -11,6 +11,7 @@ paralela e notificações.
 | `frontend/` | **App** React Native (Expo + TS) — o hub no iPhone. Builds EAS dev/preview. |
 | `backend/` | **API** FastAPI — orquestra os bots como subprocessos, log via WebSocket, CRUD de modos/chats. |
 | `workers/` | Os **bots** (`auto-follow-instagram`, `dm-followers-instagram`, `human-warmup-instagram`, `like-repost-instagram`, `story-repost-instagram`) — cada um com repo próprio no GitHub. |
+| `painel-sessao/` | **App no navegador** (ferramenta local): serve o app exportado pra web e um helper que **reconecta a sessão do Instagram** dirigindo um Chromium real (Playwright) — sem precisar do celular. Ver `painel-sessao/README.md`. |
 
 O **backend + workers** rodam juntos na Oracle (uma unidade de deploy). O **app** é
 buildado com EAS e fala com o backend pela API + WebSocket.
@@ -43,6 +44,11 @@ existe tela de configurar servidor: o app abre e fala com a Oracle direto. Pra d
 backend local, aponte o `EXPO_PUBLIC_API_URL` pro IP da sua máquina antes de buildar/rodar.
 
 Detalhes: `frontend/README.md` (app) e `backend/README.md` (API).
+
+**App no navegador (local):** `painel-sessao/iniciar.bat` sobe uma cópia do app em
+`http://127.0.0.1:8777` (mesmo código, via `react-native-web`) com a reconexão da sessão
+do Instagram feita por um Chromium dirigido pelo Playwright. Live Activity e push ficam de
+fora (são nativos). Ver `painel-sessao/README.md`.
 
 ## Status
 

@@ -3,6 +3,13 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [1.9.0] — 2026-10-13
+
+### Adicionado
+- feat: **app no navegador** — uma cópia do app dos bots roda no PC (mesmo código, via `react-native-web`), servida pela ferramenta local **`painel-sessao`** (`iniciar.bat` → `http://127.0.0.1:8777`): Hub, contas por grupo, rodar bots, logs e histórico, tudo com dados ao vivo. Live Activity e push ficam de fora (são nativos de iPhone)
+- feat: **reconexão da sessão do Instagram pelo navegador** — o painel abre um **Chromium de verdade** (Playwright) no login; você loga na mão e ele captura a sessão (o `sessionid` é httpOnly, nenhuma página comum lê) e manda pro backend, sem precisar do celular. Perfil persistente por conta + máscara de automação pra reduzir captcha; o login só pré-preenche user+senha (não clica em nada)
+- feat: **seletor de conta (tela de rodar) com as contas separadas por grupo** (Vitrine, Captação + Avulsas), igual o card de Contas do Hub
+
 ## [1.8.0] — 2026-10-02
 
 ### Adicionado

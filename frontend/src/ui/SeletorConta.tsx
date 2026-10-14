@@ -3,7 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View 
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { api, Account } from '@/lib/api';
+import { api, Account, Grupo } from '@/lib/api';
 import { cmpTexto } from '@/lib/ordenar';
 import { Credencial, lerCredenciais } from '@/lib/credenciais';
 import { colors } from '@/theme';
@@ -25,14 +25,17 @@ export function SeletorConta({ visible, onClose, onTrocou }: {
 }) {
   const nav = useNavigation<Nav>();
   const [entries, setEntries] = useState<Entry[] | null>(null);   // null = carregando
+  const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     setEntries(null);
-    const [contas, creds] = await Promise.all([
+    const [contas, creds, gs] = await Promise.all([
       api.validarContas().catch(() => [] as Account[]),   // traz sessao_ok junto
       lerCredenciais().catch(() => [] as Credencial[]),
+      api.getGrupos().catch(() => [] as Grupo[]),
     ]);
+    setGrupos(gs);
     const map = new Map<string, Entry>();
     for (const c of creds) map.set(c.usuario.toLowerCase(), { usuario: c.usuario, senha: c.senha });
     for (const a of contas) {
@@ -71,8 +74,16 @@ export function SeletorConta({ visible, onClose, onTrocou }: {
           ) : entries.length === 0 ? (
             <Text style={styles.vazio}>Nenhuma conta ainda. Conecta uma na tela de Contas.</Text>
           ) : (
-            <ScrollView style={{ maxHeight: 360 }} contentContainerStyle={{ gap: 2 }}>
-              {entries.map((e) => {
+            <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ gap: 2 }}>
+              {secoes(entries, grupos).map((s) => (
+              <View key={s.titulo ?? '__todas'}>
+              {s.titulo ? (
+                <View style={styles.grupoHead}>
+                  <Text style={styles.grupoTitulo}>{s.titulo}</Text>
+                  <Text style={styles.grupoQtd}>{s.itens.length}</Text>
+                </View>
+              ) : null}
+              {s.itens.map((e) => {
                 let status: string, cor: string;
                 if (!e.id) { status = 'sem sessão'; cor = colors.erro; }
                 else if (e.sessaoOk === false) { status = 'sessão caiu'; cor = colors.erro; }
@@ -102,6 +113,8 @@ export function SeletorConta({ visible, onClose, onTrocou }: {
                   </TouchableOpacity>
                 );
               })}
+              </View>
+              ))}
             </ScrollView>
           )}
           <TouchableOpacity onPress={onClose} style={styles.fechar} hitSlop={8}>
@@ -113,7 +126,26 @@ export function SeletorConta({ visible, onClose, onTrocou }: {
   );
 }
 
+// contas separadas por GRUPO (ordem dos grupos) + "Avulsas" — igual o card de Contas do Hub.
+// Sem nenhum grupo com conta → uma seção só, sem título.
+function secoes(entries: Entry[], grupos: Grupo[]): { titulo: string | null; itens: Entry[] }[] {
+  const out: { titulo: string | null; itens: Entry[] }[] = [];
+  const comGrupo = new Set<string>();
+  for (const g of grupos) {
+    const itens = entries.filter((e) => e.id && g.contas.includes(e.id));
+    if (!itens.length) continue;
+    itens.forEach((e) => comGrupo.add(e.usuario));
+    out.push({ titulo: g.nome, itens });
+  }
+  const avulsas = entries.filter((e) => !comGrupo.has(e.usuario));
+  if (avulsas.length) out.push({ titulo: out.length ? 'Avulsas' : null, itens: avulsas });
+  return out;
+}
+
 const styles = StyleSheet.create({
+  grupoHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, marginBottom: 2 },
+  grupoTitulo: { color: colors.marca, fontSize: 12, fontWeight: '800' },
+  grupoQtd: { color: colors.textoFraco, fontSize: 11, fontWeight: '700' },
   wrap: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.55)' },
   card: { backgroundColor: '#171717', borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: 18, gap: 10 },
   titulo: { color: colors.texto, fontSize: 18, fontWeight: '800' },

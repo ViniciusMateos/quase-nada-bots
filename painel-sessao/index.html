@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Painel de Sessão — Quase Nada Bots</title>
+<style>
+  :root{
+    --bg:#09090b; --card:#131316; --card2:#1b1b1f; --border:#242428;
+    --txt:#f4f4f5; --fraco:#8a8f99;
+    --mag:#ff2e88; --magd:#c01f66;
+    --caiu:#ff5c3d; --ok:#eceef2; --oktxt:#c9cdd4;
+    --warnbg:#241c10; --warn:#ffcf5c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:15px}
+  .wrap{max-width:560px;margin:0 auto;padding:18px 16px 40px}
+  .topo{padding:14px 2px 20px}
+  .topo h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.02em}
+  .topo .sub{color:var(--fraco);font-size:12.5px;margin-top:5px;word-break:break-all}
+
+  .contas{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:16px 14px 8px}
+  .contas-top{display:flex;align-items:center;gap:10px;padding:2px 6px 4px}
+  .contas-lbl{flex:1;font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--fraco)}
+  .lk{display:inline-flex;align-items:center;gap:6px;background:none;border:0;cursor:pointer;
+    font-size:14px;font-weight:700;padding:6px 6px;border-radius:8px;font-family:inherit}
+  .lk.mag{color:var(--mag)} .lk.neu{color:var(--oktxt)}
+  .lk:hover{background:#ffffff0d}
+  .lk:disabled{opacity:.5;cursor:default}
+
+  .grupo{margin-top:14px}
+  .grupo-h{display:flex;align-items:baseline;gap:8px;padding:2px 8px 6px}
+  .grupo-nome{color:var(--mag);font-size:15px;font-weight:800}
+  .grupo-n{color:var(--fraco);font-size:13px;font-weight:700}
+
+  .linha{display:flex;align-items:center;gap:11px;padding:11px 8px;border-radius:12px}
+  .linha:hover{background:#ffffff07}
+  .dot{width:11px;height:11px;border-radius:50%;flex-shrink:0;box-shadow:0 0 0 3px #ffffff08}
+  .dot.caiu{background:var(--caiu)} .dot.ok{background:var(--ok)}
+  .handle{flex:1;min-width:0;font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .handle .lock{color:var(--warn);margin-left:5px;vertical-align:-1px}
+  .st{font-size:13.5px;font-weight:600;white-space:nowrap}
+  .st.caiu{color:var(--caiu)} .st.ok{color:var(--oktxt)}
+  .tag-ativa{display:inline-flex;align-items:center;gap:6px;color:var(--mag);font-size:14px;font-weight:800;padding:6px 4px}
+
+  .vazio{color:var(--fraco);text-align:center;padding:26px}
+  svg{display:block}
+  .spin{animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* modal de reconexão */
+  .ov{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;
+    justify-content:center;padding:16px;z-index:50}
+  .ov.on{display:flex}
+  .modal{background:var(--card);border:1px solid var(--border);border-radius:18px;
+    width:100%;max-width:440px;padding:22px;max-height:90vh;overflow:auto}
+  .modal h3{margin:0 0 4px;font-size:18px}
+  .modal .alvo{color:var(--mag);font-weight:800}
+  .steps{list-style:none;padding:0;margin:16px 0}
+  .steps li{display:flex;gap:11px;padding:10px 0;border-bottom:1px solid var(--border);color:var(--fraco);font-size:14px;line-height:1.45}
+  .steps li:last-child{border-bottom:0}
+  .steps .n{width:22px;height:22px;border-radius:50%;background:var(--card2);border:1px solid var(--border);
+    color:var(--txt);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .estado{display:flex;align-items:center;gap:9px;padding:11px 13px;border-radius:12px;
+    font-size:13.5px;font-weight:600;margin:4px 0 16px;background:var(--card2);border:1px solid var(--border);color:var(--fraco)}
+  .estado.ok{background:#10231a;border-color:#1d4a35;color:#3ecf8e}
+  .estado.ruim{background:#2a1416;border-color:#5a2a2c;color:var(--caiu)}
+  .estado.warn{background:var(--warnbg);border-color:#4a3f18;color:var(--warn)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--border);
+    background:var(--card2);color:var(--txt);padding:11px 14px;border-radius:12px;font-size:15px;
+    font-weight:700;cursor:pointer;font-family:inherit;transition:.15s}
+  .btn.acc{background:var(--mag);border-color:var(--mag);color:#1a0511}
+  .btn.acc:hover{background:#ff4f9c;border-color:#ff4f9c}
+  .btn:disabled{opacity:.5;cursor:default}
+  .acoes{display:flex;gap:10px;margin-top:4px}.acoes .btn{flex:1}
+
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--card2);
+    border:1px solid var(--border);padding:12px 18px;border-radius:12px;font-weight:600;
+    box-shadow:0 8px 30px rgba(0,0,0,.45);display:none;z-index:60;max-width:90vw;text-align:center}
+  .toast.on{display:block}.toast.ok{border-color:#1d4a35}.toast.ruim{border-color:#5a2a2c;color:var(--caiu)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topo">
+    <h1>Painel de Sessão</h1>
+    <div class="sub" id="sub">carregando…</div>
+  </div>
+
+  <div class="contas">
+    <div class="contas-top">
+      <span class="contas-lbl">CONTAS</span>
+      <button class="lk mag" id="bSync">
+        <svg id="icSync" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5"/></svg>
+        sincronizar
+      </button>
+      <button class="lk mag" id="bAdd">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        conta nova
+      </button>
+    </div>
+    <div id="grupos"><div class="vazio">carregando contas…</div></div>
+  </div>
+</div>
+
+<!-- modal de reconexão -->
+<div class="ov" id="ov">
+  <div class="modal">
+    <h3>Reconectar <span class="alvo" id="mAlvo">@conta</span></h3>
+    <ol class="steps">
+      <li><span class="n">1</span><span>Abriu uma janela do navegador no login do Instagram. <b>Entre na conta na mão</b> (resolva o captcha/verificação se pedir).</span></li>
+      <li><span class="n">2</span><span>Quando estiver <b>dentro da conta</b> (feed aberto), volte aqui e clique em <b>Conectar sessão</b>.</span></li>
+    </ol>
+    <div class="estado" id="mEstado">
+      <svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>
+      abrindo o navegador…
+    </div>
+    <div class="acoes">
+      <button class="btn" id="mCancel">Cancelar</button>
+      <button class="btn acc" id="mConectar">Conectar sessão</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s)=>document.querySelector(s);
+let ALVO=null, pollTimer=null;
+
+const ICON = {
+  link:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h8"/></svg>',
+  power:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>',
+  lock:'<svg class="lock" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+};
+
+function toast(msg, tipo){
+  const t=$('#toast'); t.textContent=msg; t.className='toast on '+(tipo||'');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.className='toast',3800);
+}
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
+
+async function carregar(force){
+  const ic=$('#icSync'); ic.classList.add('spin'); $('#bSync').disabled=true;
+  try{
+    const [rc, rg] = await Promise.all([
+      fetch('/api/contas'+(force?'?force=1':'')),
+      fetch('/api/grupos').catch(()=>null),
+    ]);
+    if(!rc.ok){ throw new Error((await rc.json()).detail || rc.statusText); }
+    const contas = await rc.json();
+    let grupos = [];
+    try{ grupos = rg && rg.ok ? await rg.json() : []; }catch(e){ grupos=[]; }
+    render(contas, grupos);
+  }catch(e){
+    $('#grupos').innerHTML='<div class="vazio">Não consegui carregar as contas.<br>'+esc(e.message||e)+'</div>';
+  }finally{
+    ic.classList.remove('spin'); $('#bSync').disabled=false;
+  }
+}
+
+function render(contas, grupos){
+  if(!Array.isArray(contas)||!contas.length){
+    $('#grupos').innerHTML='<div class="vazio">Nenhuma conta cadastrada.</div>'; return;
+  }
+  const byId = {}; contas.forEach(c=>byId[c.id]=c);
+  const emGrupo = new Set();
+  let html='';
+
+  (grupos||[]).forEach(g=>{
+    const ids=(g.contas||[]).filter(id=>byId[id]);
+    ids.forEach(id=>emGrupo.add(id));
+    if(!ids.length) return;
+    const linhas=ids.map(id=>byId[id]).sort(ord).map(linha).join('');
+    html+=bloco(g.nome, ids.length, linhas);   // /grupos já vem com encoding certo
+  });
+
+  const avulsas=contas.filter(c=>!emGrupo.has(c.id)).sort(ord);
+  if(avulsas.length){
+    html+=bloco('Avulsas', avulsas.length, avulsas.map(linha).join(''));
+  }
+
+  $('#grupos').innerHTML=html || '<div class="vazio">Nenhuma conta.</div>';
+  document.querySelectorAll('[data-rec]').forEach(b=>b.onclick=()=>reconectar(b.getAttribute('data-rec')));
+  document.querySelectorAll('[data-ativar]').forEach(b=>b.onclick=()=>ativar(b.getAttribute('data-ativar'), b.getAttribute('data-lbl')));
+}
+
+function ord(a,b){ return (a.label||'').localeCompare(b.label||'',undefined,{numeric:true}); }
+
+function bloco(nome,n,linhas){
+  return '<div class="grupo"><div class="grupo-h"><span class="grupo-nome">'+esc(nome)
+    +'</span><span class="grupo-n">'+n+'</span></div>'+linhas+'</div>';
+}
+
+function linha(c){
+  const down=!c.sessao_ok;
+  const nome=esc((c.label||c.id).replace(/^@/,''));
+  const lock=c.travada?ICON.lock:'';
+  let dir;
+  if(down){
+    dir='<span class="st caiu">sessão caiu</span>'
+       +'<button class="lk mag" data-rec="'+esc(c.label||c.id)+'">'+ICON.link+'reconectar</button>';
+  }else if(c.ativa){
+    dir='<span class="st ok">sessão ok</span><span class="tag-ativa">'+ICON.power+'ativa</span>';
+  }else{
+    dir='<span class="st ok">sessão ok</span>'
+       +'<button class="lk neu" data-ativar="'+esc(c.id)+'" data-lbl="'+nome+'">'+ICON.power+'ativar</button>';
+  }
+  return '<div class="linha"><span class="dot '+(down?'caiu':'ok')+'"></span>'
+    +'<span class="handle">@'+nome+lock+'</span>'+dir+'</div>';
+}
+
+// ─── ativar conta ───
+async function ativar(id, nome){
+  try{
+    const r=await fetch('/api/ativar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.detail||r.statusText);
+    toast('@'+(nome||'conta')+' agora é a ativa.','ok');
+    carregar(false);
+  }catch(e){ toast('não deu pra ativar: '+(e.message||e),'ruim'); }
+}
+
+// ─── reconexão ───
+async function reconectar(label){
+  ALVO=label;
+  $('#mAlvo').textContent='@'+label.replace(/^@/,'');
+  setEstado('warn','abrindo o navegador…', true);
+  $('#mConectar').disabled=true;
+  $('#ov').classList.add('on');
+  try{
+    const r=await fetch('/api/abrir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label})});
+    if(!r.ok) throw new Error((await r.json()).detail||r.statusText);
+    setEstado('warn','faça login na janela que abriu…', true);
+    $('#mConectar').disabled=false;
+    poll();
+  }catch(e){
+    setEstado('ruim','não consegui abrir o navegador: '+(e.message||e), false);
+  }
+}
+
+function setEstado(tipo,txt,spin){
+  const el=$('#mEstado'); el.className='estado '+(tipo||'');
+  const ic = spin
+    ? '<svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>'
+    : '';
+  el.innerHTML=ic+'<span>'+esc(txt)+'</span>';
+}
+
+function poll(){
+  clearTimeout(pollTimer);
+  const tick=async()=>{
+    if(!ALVO) return;
+    try{
+      const r=await fetch('/api/status?label='+encodeURIComponent(ALVO));
+      const s=await r.json();
+      if(!s.aberto){ setEstado('ruim','a janela foi fechada. Clique em reconectar de novo.',false); return; }
+      if(s.sessionid){ setEstado('ok','sessão detectada — pode clicar em Conectar sessão.',false); }
+      else{ setEstado('warn','faça login na janela que abriu…',true); }
+    }catch(e){}
+    pollTimer=setTimeout(tick,2000);
+  };
+  pollTimer=setTimeout(tick,1500);
+}
+
+function fecharModal(){
+  clearTimeout(pollTimer);
+  if(ALVO){ fetch('/api/fechar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label:ALVO})}); }
+  ALVO=null; $('#ov').classList.remove('on');
+}
+
+$('#mCancel').onclick=fecharModal;
+$('#ov').onclick=(e)=>{ if(e.target===$('#ov')) fecharModal(); };
+
+$('#mConectar').onclick=async()=>{
+  if(!ALVO) return;
+  const b=$('#mConectar'); b.disabled=true; const alvo=ALVO;
+  setEstado('warn','capturando a sessão e enviando pro servidor…',true);
+  try{
+    const r=await fetch('/api/conectar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label:alvo})});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.detail||r.statusText);
+    clearTimeout(pollTimer); ALVO=null; $('#ov').classList.remove('on');
+    toast('@'+alvo.replace(/^@/,'')+' reconectada. O servidor está validando a sessão.','ok');
+    setTimeout(()=>carregar(true),4000);
+  }catch(e){
+    setEstado('ruim',(e.message||e),false); b.disabled=false;
+  }
+};
+
+$('#bSync').onclick=()=>carregar(true);
+$('#bAdd').onclick=()=>{
+  const a=prompt('@ da conta que você quer conectar (ex: quasenadasegue9):');
+  if(a&&a.trim()) reconectar(a.trim().replace(/^@/,''));
+};
+
+fetch('/api/config').then(r=>r.json()).then(c=>{
+  $('#sub').textContent=(c.tem_token?'':'[SEM TOKEN] ')+c.backend;
+}).catch(()=>{ $('#sub').textContent=''; });
+
+carregar(false);
+</script>
+</body>
+</html>

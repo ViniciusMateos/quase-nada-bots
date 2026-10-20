@@ -87,10 +87,11 @@ def _agora():
 
 
 def _contas():
-    """Contas que entram no automático: todas as cadastradas MENOS as TRAVADAS (o usuário trancou
-    a conta pra não rodar nada automático — ex: a conta do brechó). Como o _reconciliar_plano usa
-    isto a cada tick, travar tira a conta do plano do dia na hora; destravar devolve."""
-    return [a for a in accounts.listar() if a.get("id") and not a.get("travada")]
+    """Contas que entram no automático (aquecimento roda no SERVIDOR): as marcadas pro servidor
+    (`locais`) MENOS as TRAVADAS (cadeado — ex: a conta do brechó). Como o _reconciliar_plano usa
+    isto a cada tick, travar/tirar do servidor tira a conta do plano do dia na hora."""
+    return [a for a in accounts.listar()
+            if a.get("id") and not a.get("travada") and "servidor" in a.get("locais", [])]
 
 
 def _gerar_plano(d):

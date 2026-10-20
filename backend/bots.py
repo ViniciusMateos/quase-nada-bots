@@ -9,29 +9,44 @@ import json
 
 from settings import WORKERS_DIR
 
+# `target` = ONDE o bot roda:
+#   "server"   → subprocesso `python main.py` nesta máquina (comportamento histórico)
+#   "emulador" → NÃO roda aqui; o backend ENFILEIRA um job que o "agente do PC" (emulador
+#                LDPlayer tocando no app real) consome, executa e reporta de volta via
+#                /emulador/*. A run aparece no app igual a uma normal (logs, progresso, LA).
+# Default implícito é "server" (ver bots.target) pra qualquer bot sem o campo.
 BOTS = {
     "auto-follow": {
-        "nome": "Auto Follow", "dir": "auto-follow-instagram",
+        "nome": "Auto Follow", "dir": "auto-follow-instagram", "target": "emulador",
         "tem_modos": True, "tem_chats": True, "tem_ig": True,
         "descricao": "Segue os curtidores dos posts compartilhados num chat.",
     },
+    # 19/10/2026: DM roda no EMULADOR (bots/dm_follow.py do quase-nada-bots-device, mesma lógica
+    # deste worker). O dir segue apontando pro worker só pra ler os MODOS (perfis.json).
     "dm-followers": {
-        "nome": "DM Followers", "dir": "dm-followers-instagram",
+        "nome": "DM Followers", "dir": "dm-followers-instagram", "target": "emulador",
         "tem_modos": True, "tem_chats": False, "tem_ig": True,
         "descricao": "Manda DM pros novos seguidores.",
     },
     "human-warmup": {
-        "nome": "Aquecimento Humano", "dir": "human-warmup-instagram",
+        "nome": "Aquecimento Humano", "dir": "human-warmup-instagram", "target": "server",
         "tem_modos": True, "tem_chats": False, "tem_ig": True,
         "descricao": "Navega como gente (feed, story, curtidas) pra aquecer a conta.",
     },
     "like-repost": {
-        "nome": "Like + Repost", "dir": "like-repost-instagram",
+        "nome": "Like + Repost", "dir": "like-repost-instagram", "target": "server",
         "tem_modos": True, "tem_chats": False, "tem_ig": True,
         "descricao": "Curte (e reposta) os posts de uma conta-alvo — ex: o drop do brechó.",
     },
+    # 20/10/2026: story da conta do BRECHÓ pelo app de verdade, numa instância do MuMu só dele (o
+    # story pela API do server tomou "restricted from uploading"). O dir só guarda os MODOS.
+    "story-brecho": {
+        "nome": "Story Repost", "dir": "story-brecho-emulador", "target": "emulador",
+        "tem_modos": True, "tem_chats": False, "tem_ig": False,
+        "descricao": "Posta as peças disponíveis no story do brechó pelo app (repost do post + fundo, etiqueta e chamada).",
+    },
     "story-repost": {
-        "nome": "Story Repost", "dir": "story-repost-instagram",
+        "nome": "Story Repost (antigo)", "dir": "story-repost-instagram", "target": "server",
         "tem_modos": True, "tem_chats": False, "tem_ig": True,
         "descricao": "Reposta peças disponíveis do brechó no story das contas-vitrine (aleatório ou drop novo).",
     },
@@ -43,6 +58,12 @@ COOKIES_FILE = "imported_cookies.json"
 
 def existe(bot_id):
     return bot_id in BOTS
+
+
+def target(bot_id):
+    """Onde o bot roda: "server" (subprocesso local, default) ou "emulador" (job na fila
+    consumido pelo agente do PC). Qualquer bot sem o campo cai em "server" (retrocompat)."""
+    return BOTS.get(bot_id, {}).get("target", "server")
 
 
 def bot_dir(bot_id):

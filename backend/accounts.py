@@ -9,7 +9,11 @@ Isso permite ter várias contas cadastradas e trocar a ativa sem relogar (sem se
 sem captcha — cada conta foi conectada uma vez pelo webview e teve os cookies salvos).
 
 Índice em `sessions/accounts.json`: {"ativa": <id|null>, "grupos": [nome],
-"contas": [{id, label, conectada_em, grupos: [nome]}]}.
+"contas": [{id, label, conectada_em, grupos: [nome], locais: ["emulador"|"servidor"]}]}.
+
+LOCAIS (20/10/2026): onde a conta é usada — "emulador" (agente do PC), "servidor" (bots do server),
+os dois ou nenhum. Decide em quais listas ela aparece (abas, lote dos bots, cronograma). Conta antiga
+sem o campo = os dois (não muda nada pra trás).
 """
 import json
 import os
@@ -114,10 +118,25 @@ def _migrar_sessao_existente(idx):
     return idx
 
 
+LOCAIS_VALIDOS = ("emulador", "servidor")
+
+
+def locais_de(c):
+    """Onde a conta é usada. Sem o campo (conta antiga) = os dois."""
+    v = (c or {}).get("locais")
+    if isinstance(v, list):
+        return [x for x in LOCAIS_VALIDOS if x in v]
+    return list(LOCAIS_VALIDOS)
+
+
+def _limpar_locais(locais):
+    return [x for x in LOCAIS_VALIDOS if x in (locais or [])]
+
+
 def listar():
     """Lista as contas salvas, marcando qual é a ativa. Preenche defaults de contas antigas
-    (criada_em cai pro conectada_em). `tier` foi removido do produto → nunca sai na resposta,
-    mesmo que ainda exista no arquivo de contas antigo."""
+    (criada_em cai pro conectada_em; locais = os dois). `tier` foi removido do produto → nunca sai
+    na resposta, mesmo que ainda exista no arquivo de contas antigo."""
     idx = _migrar_sessao_existente(_ler_index())
     ativa = idx.get("ativa")
     out = []
@@ -125,6 +144,7 @@ def listar():
         item = {k: v for k, v in c.items() if k != "tier"}
         item["ativa"] = c.get("id") == ativa
         item["criada_em"] = c.get("criada_em") or c.get("conectada_em")
+        item["locais"] = locais_de(c)
         out.append(item)
     return out
 
@@ -184,7 +204,8 @@ def validar_todas(force=False):
     if not force and _validar_cache["res"] and (agora - _validar_cache["t"]) < _VALIDAR_TTL:
         return _validar_cache["res"]
     from concurrent.futures import ThreadPoolExecutor
-    ids = [c.get("id") for c in listar() if c.get("id")]
+    # só as contas do SERVIDOR têm sessão de cookie pra checar (as do emulador vivem no device)
+    ids = [c.get("id") for c in listar() if c.get("id") and "servidor" in c.get("locais", [])]
     if not ids:
         return {}
     with ThreadPoolExecutor(max_workers=min(10, len(ids))) as ex:
@@ -203,11 +224,12 @@ def eh_pendente(uid):
     return any(c.get("id") == uid and c.get("pendente") for c in listar())
 
 
-def adicionar_pendente(label):
+def adicionar_pendente(label, locais=None):
     """Registra uma conta PENDENTE — só o @, SEM sessão nem senha. Serve pra a conta já entrar na
     lista e no cronograma ANTES de conectar: nos horários o cronograma manda 'conecta pra rodar'.
     Quando você conectar de verdade, o `salvar()` funde a pendente na conta real (mesmo label).
-    Idempotente: se já existe conta (real ou pendente) com esse label, devolve a existente."""
+    Idempotente: se já existe conta (real ou pendente) com esse label, devolve a existente.
+    `locais` default = só emulador (conta nova hoje nasce pro emulador; o server é só o brechó)."""
     label = (label or "").strip().lstrip("@")
     if not label:
         raise ValueError("label vazio")
@@ -220,8 +242,9 @@ def adicionar_pendente(label):
     base, n = pid, 2
     while pid in existentes:
         pid = f"{base}-{n}"; n += 1
+    locais = _limpar_locais(locais) if locais is not None else ["emulador"]
     idx.setdefault("contas", []).append(
-        {"id": pid, "label": label, "pendente": True, "criada_em": int(time.time())})
+        {"id": pid, "label": label, "pendente": True, "criada_em": int(time.time()), "locais": locais})
     _gravar_index(idx)
     return {"id": pid, "label": label, "pendente": True}
 
@@ -250,8 +273,13 @@ def salvar(cookies, label=None):
     # grupos da conta sobrevivem à reconexão (e a pendente passa os dela pra conta real)
     grupos = (antigo or {}).get("grupos") or (pend or {}).get("grupos") or []
     travada = bool((antigo or {}).get("travada") or (pend or {}).get("travada"))
+    # locais sobrevivem à reconexão; conta nova = emulador (desde 20/10/2026 tudo roda no emulador;
+    # a única "servidor" é a do brechó, que já existe e mantém o dela)
+    base = antigo if (antigo and "locais" in antigo) else pend if (pend and "locais" in pend) else None
+    locais = locais_de(base) if base else ["emulador"]
     contas.append({"id": uid, "label": label, "conectada_em": int(time.time()),
-                   "criada_em": criada_em, "grupos": grupos, "travada": travada})
+                   "criada_em": criada_em, "grupos": grupos, "travada": travada,
+                   "locais": _limpar_locais(locais)})
     _gravar_index({**idx, "ativa": uid, "contas": contas})   # preserva o resto do índice (ex: "grupos")
     _escrever_central(uid)
     return {"id": uid, "label": label, "ativa": True}
@@ -270,8 +298,9 @@ def ativar(uid):
 
 
 # ───────────────────────────── trava (sem automático) ─────────────────────────────
-# Conta TRAVADA = nada automático roda nela (hoje: o aquecimento do cronograma; vale pra qualquer
-# automação futura — quem agenda/auto-roda deve checar `travada(uid)`). Rodar na mão continua ok.
+# Conta TRAVADA (cadeado) = nada automático mexe nela: NÃO loga sozinha no emulador na
+# sincronização (20/10/2026, a função principal agora) e não entra no aquecimento do cronograma.
+# Quem agenda/auto-roda deve checar `travada(uid)`. Rodar/logar na mão continua ok.
 def travada(uid):
     return any(c.get("id") == uid and c.get("travada") for c in _ler_index().get("contas", []))
 
@@ -287,6 +316,23 @@ def definir_travada(uid, v):
         raise KeyError(uid)
     _gravar_index(idx)
     return {"id": uid, "travada": bool(v)}
+
+
+def definir_locais(uid, locais):
+    """Onde a conta é usada: subconjunto de ("emulador", "servidor"); vazio = nenhum."""
+    global _validar_cache
+    idx = _ler_index()
+    achou = False
+    novos = _limpar_locais(locais)
+    for c in idx.get("contas", []):
+        if c.get("id") == uid:
+            c["locais"] = novos
+            achou = True
+    if not achou:
+        raise KeyError(uid)
+    _gravar_index(idx)
+    _validar_cache = {"t": 0.0, "res": {}}   # mudou quem é do servidor → refaz o check
+    return {"id": uid, "locais": novos}
 
 
 # ───────────────────────────── grupos de contas ─────────────────────────────

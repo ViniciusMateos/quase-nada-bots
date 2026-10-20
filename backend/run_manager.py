@@ -17,6 +17,7 @@ import history
 import liveactivity
 import notify
 import settings
+import story_contas_svc
 
 _counter = itertools.count(1)
 
@@ -80,6 +81,28 @@ def _proc_info(bot_id, params):
             "fim_ok": ("Instagram · conectado", "Sessão salva — já pode rodar os bots."),
             "fim_erro": ("Instagram · deu ruim", "Não consegui conectar o Instagram."),
             "fim_parado": ("Instagram · parado", "A conexão do Instagram foi parada."),
+        }
+    if (params or {}).get("acao") == "login":
+        # LOGIN no emulador (reconectar a conta tocando no app do device, job pro agente do PC):
+        # processo próprio, com título e notificações dedicados — senão apareceria como "Auto
+        # Follow" (o bot-veículo do job de emulador) e confundiria o usuário. Várias contas = UMA
+        # run só (lote), igual os outros lotes.
+        n = len((params or {}).get("contas") or [])
+        return {
+            "titulo": "Reconectar no app" + (f" · {n} contas" if n > 1 else ""),
+            "fim_ok": ("Reconectar · pronto", "Login no app do device concluído."),
+            "fim_erro": ("Reconectar · deu ruim", "Não consegui logar no app do device."),
+            "fim_parado": ("Reconectar · parado", "O login no app foi parado."),
+        }
+    if (params or {}).get("acao") == "verificar":
+        # VERIFICAÇÃO PROFUNDA de sessões no emulador (o agente entra em CADA conta logada e marca
+        # ok/bloqueada). Processo próprio, com título e notificações dedicados — senão apareceria
+        # como "Auto Follow" (o bot-veículo do job de emulador) e confundiria o usuário.
+        return {
+            "titulo": "Verificar sessões",
+            "fim_ok": ("Sessões · verificadas", "Terminei de checar as contas do emulador."),
+            "fim_erro": ("Sessões · deu ruim", "Não consegui verificar as sessões."),
+            "fim_parado": ("Sessões · parado", "A verificação de sessões foi parada."),
         }
     # título SEMPRE prefixado com o nome do bot → na lista do iPhone dá pra separar por bot
     # (o iOS junta tudo num monte só do app; o prefixo é o que deixa cada um identificável)
@@ -235,9 +258,33 @@ class RunManager:
     _PTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pts_token.json")
     # logs por run gravados pelo backend (sobrevivem à saída da memória / restart) → o histórico lê daqui
     _LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "run_logs")
+    # TTL do código de verificação guardado em memória pro agente do emulador consumir (~5min):
+    # tempo de sobra pro agente pegar no próximo claim/poll, sem deixar um código velho valer pra
+    # um login futuro (o arquivo codigos/<user>.txt do server tem a própria janela no ig_auth).
+    _CODIGO_TTL = 300
 
     def __init__(self):
         self.runs = {}
+        # ── fila de jobs pro agente do PC (bots target="emulador") ──
+        # cada item: {run_id, bot, conta:{label,id,...}, params, estado, parar}
+        #   estado: "pendente" (ninguém pegou) | "em_execucao" (agente rodando) | "descartado"
+        # O agente reivindica 1 por vez (GET /emulador/jobs), reporta log (POST .../log) e fim
+        # (POST .../fim). NÃO há subprocesso local — a run só espelha no app o que o agente manda.
+        self._fila_emulador = []
+        self._agente_visto = None   # epoch do último ping/claim do agente (heartbeat → /emulador/status)
+        # último estado do emulador reportado pelo agente do PC (vem OPCIONAL no ping). Fica aqui
+        # pra o /emulador/status mostrar em qual conta o agente está tocando, quais estão logadas
+        # no app e se a sessão está viva. Nunca reportado → estes defaults (conta=null, lista=[]).
+        self._agente_estado = {"conta_ativa": None, "contas_logadas": [], "sessao": None, "device": None}
+        # ── códigos de verificação (challenge) guardados em memória pro login no EMULADOR ──
+        # {user: (codigo, ts)}. O POST /contas/codigo preenche aqui (além de gravar o arquivo pro
+        # login do server); o agente do PC consome via GET /emulador/codigo. One-shot + TTL.
+        self._codigos = {}
+        # ── último resultado da VERIFICAÇÃO PROFUNDA de sessões por conta ──
+        # {user: {status: "ok"|"bloqueada"|"desconhecida", ts}}. O agente reporta conta a conta
+        # (POST /emulador/sessoes, incremental pra UI atualizar ao vivo); status_emulador() devolve
+        # isto em "sessoes". Estar na gavetinha do IG NÃO prova sessão sã — só entrar na conta prova.
+        self._sessoes_emulador = {}
         try:
             os.makedirs(self._LOG_DIR, exist_ok=True)
         except Exception:
@@ -518,6 +565,14 @@ class RunManager:
     async def start(self, bot_id, params):
         if not bots.existe(bot_id):
             raise ValueError(f"bot desconhecido: {bot_id}")
+        # BIFURCAÇÃO POR TARGET: bot de emulador não roda aqui — vira job na fila do agente do PC.
+        # EXCEÇÃO: conectar o Instagram (import_cookies) SEMPRE roda no server (valida a sessão via
+        # o worker local), mesmo que o bot-veículo seja o auto-follow (target=emulador). Sem isto o
+        # "Conectar Instagram" quebraria, já que ele usa o 1º bot de IG como veículo.
+        if bots.target(bot_id) == "emulador" and not (params or {}).get("import_cookies"):
+            return await self._start_emulador(bot_id, params)
+        # (story-repost VOLTOU a rodar o worker de cookie normal — posta o brechó. A story-vitrine
+        # via story_poster.py foi descontinuada; _start_story_poster fica como código morto por ora.)
         run = Run(bot_id, params)
         run._log_path = os.path.join(self._LOG_DIR, f"{run.id}.log")
         try:
@@ -589,6 +644,368 @@ class RunManager:
         asyncio.create_task(self.empurrar_la(forcar=True))
         return run
 
+    # ─────────────────────── STORY-REPOST (story_poster.py) ───────────────────────
+    async def _start_story_poster(self, bot_id, params):
+        """RUN do story-repost: roda o story_poster.py do story-poster-qn (posta as peças-vitrine
+        no story via instagrapi + proxy residencial), reaproveitando a MESMA maquinaria de run
+        (log/WS/LA/histórico/push/stop) via _pump — só muda o executável, o cwd e o python (venv
+        COMPARTILHADO dos bots). SEM xvfb e SEM IG_SESSION/IG_USER_DATA_DIR: aqui não há Chromium
+        nem sessão-cookie (o login é instagrapi, por conta, dentro do story-poster-qn).
+
+        params["story_contas"] (lista de usernames) → --contas u1,u2,… (roda SÓ essas, em sequência
+        dentro do próprio script = a fila, com pausa humana entre contas). Vazio → todas do
+        contas.json do story-poster. O stdout cai no processar_linha (parse de [progress]/[saldo])."""
+        p = params or {}
+        run = Run(bot_id, params)
+        run._log_path = os.path.join(self._LOG_DIR, f"{run.id}.log")
+        try:
+            open(run._log_path, "w", encoding="utf-8").close()   # começa LIMPO (não herda id antigo)
+        except Exception:
+            pass
+        self.runs[run.id] = run
+        usuarios = [str(u).strip().lstrip("@") for u in (p.get("story_contas") or []) if str(u).strip()]
+        cmd = [settings.STORY_VENV_PY, "story_poster.py",
+               "--proxy", str(p.get("proxy") or settings.STORY_PROXY)]
+        if usuarios:
+            cmd += ["--contas", ",".join(usuarios)]
+            if len(usuarios) == 1:
+                run.conta = usuarios[0]          # já deixa a conta visível no card (single run)
+        # RECONECTAR (login=True): só loga/valida as contas selecionadas via ig_auth (user/senha) e
+        # sai — SEM --por-conta/--selecao (não posta nada). A run aparece no app com log ao vivo;
+        # quando uma conta cai em challenge, o ig_auth imprime "[codigo] <user>" e o app pede o
+        # código (POST /contas/codigo grava codigos/<user>.txt, de onde o ig_auth lê). O cron NÃO
+        # passa por aqui (roda sem --login), então este ramo não afeta o aquecimento automático.
+        if p.get("login"):
+            cmd.append("--login")
+        else:
+            # MODO escolhido no app (nome) → flags do story_poster. O modo mora no perfis.json do
+            # worker de referência; bots.ler_modos lê de lá (selecao/quantos_posts/delay_post). Sem
+            # isto a run ignorava o modo (rodava 8 em ordem). Params explícitos ganham do modo.
+            modo = {}
+            if p.get("modo"):
+                try:
+                    modo = bots.ler_modos("story-repost").get(p["modo"]) or {}
+                except Exception:
+                    modo = {}
+            # quantos_posts → --por-conta (o "10" do modo); por_conta explícito nos params manda
+            por_conta = p.get("por_conta")
+            if por_conta is None:
+                por_conta = modo.get("quantos_posts")
+            if por_conta is not None:
+                cmd += ["--por-conta", str(por_conta)]
+            # selecao → --selecao (flag nova: aleatorio | drop_novo)
+            selecao = p.get("selecao") or modo.get("selecao")
+            if selecao:
+                cmd += ["--selecao", str(selecao)]
+            # delay_post [a, b] → --entre-min a --entre-max b
+            delay = p.get("delay_post") or modo.get("delay_post")
+            if isinstance(delay, (list, tuple)) and len(delay) == 2:
+                cmd += ["--entre-min", str(delay[0]), "--entre-max", str(delay[1])]
+            if p.get("janela_h") is not None:
+                cmd += ["--janela-h", str(p["janela_h"])]
+            if p.get("dry_run"):
+                cmd.append("--dry-run")
+            for x in p.get("extra", []) or []:
+                cmd.append(str(x))
+        env = {**os.environ, "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1"}
+        acao_txt = "reconectar (login)" if p.get("login") else "story-repost"
+        await run.emitir(f"[backend] {acao_txt} via story_poster.py · "
+                         + (", ".join(usuarios) if usuarios else "todas as contas-vitrine"))
+        try:
+            run.proc = await asyncio.create_subprocess_exec(
+                *cmd, cwd=str(settings.STORY_DIR),
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, env=env,
+                # grupo de processo próprio → o stop mata a árvore inteira (igual aos outros bots)
+                start_new_session=True,
+            )
+        except Exception as e:
+            # processo nem começou (python/venv ausente, cwd inválido…) — marca erro e encerra limpo
+            run.status = "erro"
+            run.ended_at = time.time()
+            await run.emitir(f"[backend] não consegui iniciar o story_poster: {e}")
+            self._gravar_historico(run)
+            asyncio.create_task(self._encerrar_la_se_acabou(run))
+            return run
+        run.status = "rodando"
+        asyncio.create_task(self._pump(run))        # MESMO pump dos outros bots de server
+        asyncio.create_task(self._push_inicio(run))
+        asyncio.create_task(self.empurrar_la(forcar=True))
+        return run
+
+    # ─────────────────────── EMULADOR (agente do PC) ───────────────────────
+    async def _start_emulador(self, bot_id, params):
+        """Enfileira um job pro agente do PC em vez de rodar subprocesso. Cria a Run (iniciando),
+        escreve o .log próprio (igual ao server, pro histórico/WS), guarda o job na fila e deixa a
+        run aparecer no app na hora (iniciando + LA). O agente mais tarde reivindica o job
+        (reivindicar_job), reporta log (processar_linha) e finaliza (finalizar_emulador)."""
+        params = self._expandir_modo_emulador(bot_id, params)
+        run = Run(bot_id, params)
+        run._log_path = os.path.join(self._LOG_DIR, f"{run.id}.log")
+        try:
+            open(run._log_path, "w", encoding="utf-8").close()   # começa LIMPO (não herda id antigo)
+        except Exception:
+            pass
+        self.runs[run.id] = run
+        conta = self._conta_do_job(params)
+        if conta.get("id"):          # já deixa a conta visível no card antes do agente logar "Conta:"
+            run.conta = conta.get("label") or conta.get("id")
+        self._fila_emulador.append({
+            "run_id": run.id, "bot": bot_id, "conta": conta,
+            "params": params or {}, "estado": "pendente", "parar": False,
+        })
+        rotulo = conta.get("label") or conta.get("id") or "conta ativa"
+        await run.emitir(f"[backend] job enfileirado pro agente do emulador · {rotulo}")
+        # a run já entra como "iniciando" → aparece no app e a LA reflete (igual run normal subindo)
+        asyncio.create_task(self.empurrar_la(forcar=True))
+        return run
+
+    def _expandir_modo_emulador(self, bot_id, params):
+        """O agente do PC não lê o perfis.json (vive aqui no server) → copia os knobs do MODO
+        escolhido pra dentro dos params do job. Params explícitos ganham. Só pro DM por enquanto
+        (o auto-follow do emulador ignora o modo hoje; expandir mudaria o comportamento dele)."""
+        p = dict(params or {})
+        if bot_id not in ("dm-followers", "story-brecho") or not p.get("modo"):
+            return p
+        try:
+            modo = bots.ler_modos(bot_id).get(p["modo"]) or {}
+        except Exception:
+            modo = {}
+        for k, v in modo.items():
+            p.setdefault(k, v)
+        return p
+
+    def _conta_do_job(self, params):
+        """{label, id, …} da conta do job (pro agente saber em qual conta tocar no emulador).
+        No lote a conta específica já vem em params["emulador_conta"]; fora dele, resolve pela
+        conta_id (ou a ativa). Sessão NÃO é exigida: no emulador o login vive no app, não no cookie."""
+        p = params or {}
+        if isinstance(p.get("emulador_conta"), dict) and p["emulador_conta"].get("id"):
+            return p["emulador_conta"]
+        uid = p.get("conta_id") or accounts.ativa_id()
+        if not uid:
+            return {}
+        label = uid
+        try:
+            for c in accounts.listar():
+                if c.get("id") == uid:
+                    label = c.get("label") or uid
+                    break
+        except Exception:
+            pass
+        return {"id": uid, "label": label,
+                "session": accounts.sessao_path(uid), "profile": accounts.profile_dir(uid)}
+
+    def _job_de(self, run_id):
+        for j in self._fila_emulador:
+            if j.get("run_id") == run_id:
+                return j
+        return None
+
+    def _remover_job(self, run_id):
+        self._fila_emulador = [j for j in self._fila_emulador if j.get("run_id") != run_id]
+
+    def ping_agente(self, info=None):
+        """Heartbeat do agente do PC (registra 'vivo' + timestamp pro /emulador/status). O agente
+        pode mandar JUNTO o estado do emulador (conta ativa no app, contas logadas, se a sessão
+        está viva, device) — campos OPCIONAIS; o ping vazio ({}) continua valendo (compat pra
+        trás) e NÃO zera o último estado conhecido."""
+        self._agente_visto = time.time()
+        self._guardar_estado_agente(info)
+        return {"ok": True, "ts": self._agente_visto}
+
+    def _guardar_estado_agente(self, info):
+        """Funde no estado guardado só os campos que vieram no ping (ping vazio não apaga nada)."""
+        if not isinstance(info, dict) or not info:
+            return
+        est = self._agente_estado
+        if "conta_ativa" in info:
+            est["conta_ativa"] = info.get("conta_ativa") or None
+        if "contas_logadas" in info:
+            cl = info.get("contas_logadas")
+            est["contas_logadas"] = [str(x) for x in cl] if isinstance(cl, list) else []
+            # AUTO-REGISTRA no app as contas do EMULADOR que ainda não existem (como pendente, só o
+            # @). Assim conta logada no device aparece SOZINHA no Gerenciar contas — o usuário pediu
+            # que adicionar no emulador (manual) reflita no app automático. Idempotente por label.
+            try:
+                existentes = {(c.get("label") or "").strip().lower()
+                              for c in accounts.listar()}
+                for u in (est["contas_logadas"] or []):
+                    uu = (u or "").strip().lstrip("@")
+                    if uu and uu.lower() not in existentes:
+                        accounts.adicionar_pendente(uu)
+                        existentes.add(uu.lower())
+            except Exception:
+                pass
+        if "sessao" in info:
+            s = info.get("sessao")
+            est["sessao"] = s if s in ("viva", "desconhecida") else None
+        if "device" in info:
+            est["device"] = info.get("device") or None
+
+    def status_emulador(self):
+        """Estado do agente/fila: se o agente está online (viu nos últimos 90s), o tamanho da fila
+        e o último estado do emulador reportado no ping (conta ativa / contas logadas / sessão)."""
+        agora = time.time()
+        visto = self._agente_visto
+        pend = sum(1 for j in self._fila_emulador if j.get("estado") == "pendente")
+        emexec = sum(1 for j in self._fila_emulador if j.get("estado") == "em_execucao")
+        # tem job de VERIFICAÇÃO de sessões pendente/rodando? (deriva da fila, igual pend/emexec):
+        # o front usa pra mostrar o "verificando…" ao vivo. Volta False sozinho quando o job finaliza.
+        verificando = any(
+            (j.get("params") or {}).get("acao") == "verificar"
+            and j.get("estado") in ("pendente", "em_execucao")
+            for j in self._fila_emulador
+        )
+        est = self._agente_estado
+        return {
+            "online": bool(visto and (agora - visto) < 90),
+            "ultimo_ping": visto,
+            "ha_segundos": (round(agora - visto) if visto else None),
+            "fila": {"pendentes": pend, "em_execucao": emexec, "total": len(self._fila_emulador)},
+            # estado do emulador vindo do ping (nunca reportado → defaults do __init__)
+            "conta_ativa": est.get("conta_ativa"),
+            "contas_logadas": list(est.get("contas_logadas") or []),
+            "sessao": est.get("sessao"),
+            # último resultado da verificação profunda por conta ({user: "ok"|"bloqueada"|"desconhecida"})
+            "sessoes": {u: (d or {}).get("status") for u, d in self._sessoes_emulador.items()},
+            "verificando_sessoes": verificando,
+        }
+
+    def guardar_sessao(self, user, status):
+        """Guarda o último resultado da verificação PROFUNDA de sessão de UMA conta (o agente reporta
+        incremental via POST /emulador/sessoes, pra a UI atualizar ao vivo). status ∈ {ok, bloqueada,
+        desconhecida}; qualquer outro valor vira 'desconhecida'. Devolve True se guardou."""
+        u = (user or "").strip().lstrip("@")
+        if not u:
+            return False
+        st = status if status in ("ok", "bloqueada", "desconhecida") else "desconhecida"
+        self._sessoes_emulador[u] = {"status": st, "ts": time.time()}
+        return True
+
+    async def enfileirar_verificar(self):
+        """Enfileira UM job de VERIFICAÇÃO PROFUNDA de sessões pro agente do PC: ele entra em CADA
+        conta logada no device e marca ok/bloqueada (estar na gavetinha do IG NÃO garante sessão sã —
+        conta em 'recurso em análise' aparece lá mesmo bloqueada). Sem conta específica (varre todas).
+        MESMA fila/maquinaria dos jobs de emulador (1 por vez): bot='auto-follow' (bot-veículo, pro
+        stop/LA/target reconhecerem o emulador); params={acao:'verificar'} é o que o agente lê.
+        Devolve {ok, run_id}."""
+        run = Run("auto-follow", {"acao": "verificar"})
+        run._log_path = os.path.join(self._LOG_DIR, f"{run.id}.log")
+        try:
+            open(run._log_path, "w", encoding="utf-8").close()   # começa LIMPO (não herda id antigo)
+        except Exception:
+            pass
+        self.runs[run.id] = run
+        self._fila_emulador.append({
+            "run_id": run.id, "bot": "auto-follow", "conta": {},
+            "params": {"acao": "verificar"}, "estado": "pendente", "parar": False,
+        })
+        await run.emitir("[backend] verificação de sessões enfileirada pro agente do emulador")
+        # a run já entra como "iniciando" → aparece no app e a LA reflete (igual run normal subindo)
+        asyncio.create_task(self.empurrar_la(forcar=True))
+        return {"ok": True, "run_id": run.id}
+
+    # ── código de verificação (challenge) pro login no EMULADOR (o do server vai pro arquivo) ──
+    def guardar_codigo(self, user, codigo):
+        """Guarda o código de verificação em memória {user: (codigo, ts)} pro agente do emulador
+        buscar via GET /emulador/codigo. É INDEPENDENTE da escrita do arquivo codigos/<user>.txt
+        (essa resolve o login do SERVER via ig_auth); o store resolve o login do DEVICE. Devolve
+        True se guardou."""
+        u = (user or "").strip().lstrip("@")
+        c = (codigo or "").strip()
+        if not u or not c:
+            return False
+        self._codigos[u] = (c, time.time())
+        return True
+
+    def pegar_codigo(self, user):
+        """Devolve o código guardado pro user e o CONSOME (one-shot). Expira após _CODIGO_TTL —
+        código velho não vale pra um login futuro. None se não há (ou expirou)."""
+        u = (user or "").strip().lstrip("@")
+        item = self._codigos.get(u)
+        if not item:
+            return None
+        codigo, ts = item
+        self._codigos.pop(u, None)                 # consome sempre que leu (one-shot)
+        if time.time() - ts > self._CODIGO_TTL:    # expirou → trata como ausente
+            return None
+        return codigo
+
+    async def reivindicar_job(self):
+        """O agente pega o PRÓXIMO job pendente (FIFO). Marca a Run 'rodando' e o job 'em_execucao'.
+        Devolve {run_id, bot, conta, params} — ou {} se a fila não tem nada pendente."""
+        self._agente_visto = time.time()      # pedir job também conta como heartbeat
+        agora = time.time()
+        # AUTO-RECUPERA job PRESO: só há 1 agente e ele NÃO pede o próximo job enquanto roda um, então
+        # um job "em_execucao" visto AQUI (agente ocioso pedindo job) é ÓRFÃO — quem pegou morreu no
+        # meio (ex: reinício do agente) e nunca finalizou. Sem isto a run fica "rodando/verificando"
+        # pra SEMPRE e o /emulador/status trava em verificando_sessoes=true. Grace de 120s (ou sem a
+        # marca `reivindicado_em` = job antigo) pra não cortar nada legítimo.
+        for job in self._fila_emulador:
+            if job.get("estado") == "em_execucao" and (agora - (job.get("reivindicado_em") or 0)) > 120:
+                run = self.runs.get(job.get("run_id"))
+                if run and run.status not in ("finalizado", "erro", "parado"):
+                    run.status = "erro"
+                    if run.ended_at is None:
+                        run.ended_at = time.time()
+                    try:
+                        self._gravar_historico(run)
+                    except Exception:
+                        pass
+                    asyncio.create_task(self._encerrar_la_se_acabou(run))
+                job["estado"] = "descartado"
+        self._fila_emulador = [j for j in self._fila_emulador if j.get("estado") != "descartado"]
+        for job in self._fila_emulador:
+            if job.get("estado") != "pendente":
+                continue
+            run = self.runs.get(job["run_id"])
+            if not run or run.status == "parado":   # run sumiu / foi parada antes de rodar → descarta
+                job["estado"] = "descartado"
+                continue
+            job["estado"] = "em_execucao"
+            job["reivindicado_em"] = agora          # marca quando pegou (pro auto-recupera acima)
+            if run.status == "iniciando":
+                run.status = "rodando"
+            # virou "rodando" → a LA reage na hora (igual bot do server quando entra em execução)
+            asyncio.create_task(self.empurrar_la(forcar=True))
+            return {"run_id": job["run_id"], "bot": job["bot"],
+                    "conta": job.get("conta") or {}, "params": job.get("params") or {}}
+        return {}
+
+    def job_parar(self, run_id):
+        """O agente consulta se deve ABORTAR o job (passa como parar_flag no processar()).
+        True quando o stop marcou o job/Run como parado."""
+        job = self._job_de(run_id)
+        run = self.runs.get(run_id)
+        return {"parar": bool((job and job.get("parar")) or (run and run.status == "parado"))}
+
+    async def finalizar_emulador(self, run, ok, saldo=None, motivo=""):
+        """Fim de um job de emulador (espelha o fim do _pump): fecha a Run, grava histórico, encerra
+        a LA e manda o push de fim. Respeita 'parado' (stop já setou) — não reescreve pra finalizado."""
+        if saldo:
+            run.saldo = saldo
+        run.motivo = motivo or None
+        run.espera = None
+        if run.ended_at is None:
+            run.ended_at = time.time()
+        if run.status not in ("parado",):
+            run.status = "finalizado" if ok else "erro"
+        linha = f"[backend] job do emulador terminou (status={run.status})"
+        if motivo:
+            linha += f" — {motivo}"
+        await run.emitir(linha)
+        self._gravar_historico(run)
+        self._remover_job(run.id)
+        # ordem igual ao _pump: a run já saiu de "rodando", então _ativas() não a conta mais
+        await self._encerrar_la_se_acabou(run)
+        await self._push_fim(run)
+        for q in list(run.subs):       # sinaliza fim (None) aos assinantes do WS
+            try:
+                q.put_nowait(None)
+            except Exception:
+                pass
+        return run
+
     # ───────────────────────────── LOTE (várias contas) ─────────────────────────────
     async def start_lote(self, bot_id, base_params, uids):
         """LOTE = UMA run só (UM processo) rodando todas as contas em sequência DENTRO do worker.
@@ -600,6 +1017,9 @@ class RunManager:
         uids = [u for u in (uids or []) if u]
         if not uids:
             raise ValueError("sem contas pro lote")
+        if bots.target(bot_id) == "emulador":
+            return await self._start_lote_emulador(bot_id, base_params, uids)
+        # (story-repost voltou ao lote de cookie normal — posta o brechó; vitrine descontinuada)
         infos = {c.get("id"): c for c in accounts.listar()}
         contas = []
         for u in uids:
@@ -616,41 +1036,151 @@ class RunManager:
         return {"lote": True, "bot": bot_id, "total": len(contas),
                 "contas": [c["label"] for c in contas], "run_id": run.id}
 
+    async def _start_lote_emulador(self, bot_id, base_params, uids):
+        """LOTE no emulador = UMA Run só (UM job) rodando TODAS as contas EM SEQUÊNCIA dentro do
+        agente do PC. Antes era N jobs (uma Run por conta) → o app mostrava "vários bots"; agora o
+        app vê UMA run só (um log, um balão, uma barra) e o agente percorre a lista conta a conta,
+        com progresso em cascata (barra por conta + rótulo "conta i/N @user").
+
+        Reaproveita o padrão do _start_emulador (cria a Run, abre o .log próprio, enfileira na
+        _fila_emulador), mas com UM job carregando a lista inteira em params["lote_contas"]. Sessão
+        e perfil NÃO são exigidos no emulador (o login vive no app do device) — o agente só precisa
+        do label de cada conta pra trocar de conta no seletor nativo."""
+        infos = {c.get("id"): c for c in accounts.listar()}
+        contas = [{"id": u, "label": (infos.get(u) or {}).get("label") or u} for u in uids]
+        if not contas:
+            raise ValueError("sem contas pro lote")
+        # params da run: acao=lote + a lista + os base_params (modo/chat/limite/entre…). lote/
+        # lote_total ligam o título "· lote (N contas)" do _proc_info (igual ao lote do server).
+        params = {**self._expandir_modo_emulador(bot_id, base_params), "acao": "lote", "lote": True,
+                  "lote_total": len(contas), "lote_contas": contas}
+        run = Run(bot_id, params)
+        run._log_path = os.path.join(self._LOG_DIR, f"{run.id}.log")
+        try:
+            open(run._log_path, "w", encoding="utf-8").close()   # começa LIMPO (não herda id antigo)
+        except Exception:
+            pass
+        self.runs[run.id] = run
+        # UM job só carregando a lista → o agente roda lote_contas em sequência (sem conta única).
+        self._fila_emulador.append({
+            "run_id": run.id, "bot": bot_id, "conta": {},
+            "params": params, "estado": "pendente", "parar": False,
+        })
+        labels = [c["label"] for c in contas]
+        await run.emitir(f"[backend] lote enfileirado pro agente do emulador · "
+                         f"{len(contas)} conta(s): {', '.join(labels)}")
+        # a run já entra como "iniciando" → aparece no app e a LA reflete (igual run normal subindo)
+        asyncio.create_task(self.empurrar_la(forcar=True))
+        return {"lote": True, "emulador": True, "bot": bot_id, "total": len(contas),
+                "contas": labels, "run_id": run.id}
+
+    async def start_login_emulador(self, usernames, senhas=None):
+        """Enfileira um job de LOGIN no emulador por conta (o agente do PC loga a conta tocando no
+        app do device). MESMA fila/maquinaria dos jobs de auto-follow: 1 Run 'iniciando' por conta,
+        job pendente que o agente pega 1 por vez (GET /emulador/jobs). bot='auto-follow' (bot-veículo
+        de emulador) pra o stop/LA reconhecerem o target; params={acao:'login'} é o que o agente lê
+        pra saber que é login.
+
+        A senha vem do APP (`senhas` {user: senha}, credencial salva no aparelho — 20/10: conta
+        adicionada no app já loga sozinha no emulador) ou, se não veio, do contas.json do
+        story-poster. Viaja SÓ na CONTA do job (que o agente recebe no /emulador/jobs) — NUNCA em
+        run.params (o /runs expõe params) nem no log. Fila = uma por vez.
+        Devolve {emulador, login, total, contas, run_ids}."""
+        usuarios = [str(u).strip().lstrip("@") for u in (usernames or []) if str(u).strip()]
+        if not usuarios:
+            raise ValueError("sem contas pro login no emulador")
+        do_app = {str(k).strip().lstrip("@").lower(): str(v) for k, v in (senhas or {}).items() if v}
+        senhas = story_contas_svc.carregar_senhas()     # {user: senha} — não logar
+        # conta que JÁ tem login na fila (pendente/executando) não entra de novo — tocar em
+        # "verificar e sincronizar" duas vezes não pode logar a mesma conta 2x no device
+        na_fila = set()
+        for j in self._fila_emulador:
+            if (j.get("params") or {}).get("acao") == "login" and j.get("estado") in ("pendente", "em_execucao"):
+                na_fila.update(str(x).lower() for x in ((j.get("params") or {}).get("contas") or []))
+                na_fila.add(((j.get("conta") or {}).get("label") or "").lower())
+        usuarios = [u for u in usuarios if u.lower() not in na_fila]
+        if not usuarios:
+            return {"emulador": True, "login": True, "total": 0, "contas": [], "run_ids": []}
+        # UMA run só pra todas as contas (lote, igual os outros): o agente loga uma por vez.
+        # params LIMPOS (acao + os @) → o /runs/{id} nunca vaza senha; as senhas vão SÓ na conta
+        # do job (que só o agente recebe).
+        run = Run("auto-follow", {"acao": "login", "contas": usuarios})
+        run._log_path = os.path.join(self._LOG_DIR, f"{run.id}.log")
+        try:
+            open(run._log_path, "w", encoding="utf-8").close()   # começa LIMPO (não herda id antigo)
+        except Exception:
+            pass
+        self.runs[run.id] = run
+        run.conta = usuarios[0] if len(usuarios) == 1 else f"{len(usuarios)} contas"
+        logins = [{"user": u, "senha": do_app.get(u.lower()) or senhas.get(u) or ""} for u in usuarios]
+        conta = {"id": usuarios[0], "label": usuarios[0], "senha": logins[0]["senha"], "logins": logins}
+        self._fila_emulador.append({
+            "run_id": run.id, "bot": "auto-follow", "conta": conta,
+            "params": {"acao": "login", "contas": usuarios}, "estado": "pendente", "parar": False,
+        })
+        await run.emitir(f"[backend] login no emulador enfileirado · {', '.join(usuarios)}")  # só os @
+        asyncio.create_task(self.empurrar_la(forcar=True))
+        return {"emulador": True, "login": True, "total": len(usuarios),
+                "contas": usuarios, "run_ids": [run.id]}
+
+    async def _start_story_lote(self, bot_id, base_params, usernames):
+        """LOTE do story-repost = UMA run só (UM processo) rodando o story_poster.py pros usernames
+        selecionados. A FILA (uma conta por vez, com pausa humana entre contas) é o loop INTERNO do
+        próprio story_poster — não precisa de N runs nem de coordenador. Os usernames viram
+        --contas u1,u2,… ; o app vê 1 run (1 log, 1 balão, 1 barra) e parar mata o processo = para
+        tudo. Diferente do lote de cookie (IG_LOTE_CONTAS): aqui são contas-vitrine por instagrapi."""
+        usuarios = [str(u).strip().lstrip("@") for u in (usernames or []) if str(u).strip()]
+        if not usuarios:
+            raise ValueError("sem contas-vitrine pro lote")
+        params = {**dict(base_params or {}), "story_contas": usuarios,
+                  "lote": True, "lote_total": len(usuarios)}
+        run = await self.start(bot_id, params)   # cai no ramo story-repost do start() → _start_story_poster
+        return {"lote": True, "story": True, "bot": bot_id, "total": len(usuarios),
+                "contas": usuarios, "run_id": run.id}
+
+    async def processar_linha(self, run, linha):
+        """Processa UMA linha de saída do bot: marcadores [espera]/[progress]/[saldo], detecção
+        de bloqueio/proxy/conta, atualização da LA e persistência via run.emitir. COMPARTILHADO
+        pelo _pump (bot no server, lê do stdout) e pelos logs do agente do emulador (POST
+        /emulador/jobs/{id}/log) — assim a run de emulador passa pelo MESMO pipeline (marcadores,
+        LA, WS, cabeçalho, arquivo) de uma run normal."""
+        if linha.startswith("[espera]"):
+            e = _parse_espera(linha)
+            if e:
+                run.espera = {"ate": time.time() + e[0], "restam": e[0], "motivo": e[1]}
+                await self._maybe_push_progresso(run)   # atualiza a LA com a contagem
+                run.emitir_efemero(linha)               # a tela da run vê a contagem (WS)
+            return   # marcador de pausa: não vai pro log nem vira status_log
+        if run.espera is not None:
+            run.espera = None       # qualquer outra linha = a pausa acabou
+            run.emitir_efemero("[espera-fim]")
+        if linha.startswith("[progress]"):
+            p = _parse_progress(linha)
+            if p:
+                run.progress = p
+                await self._maybe_push_progresso(run)
+        elif "[saldo]" in linha:
+            s = _parse_saldo(linha)
+            if s:
+                run.saldo = s
+        else:
+            # ainda sem [progress] → reflete o status na LA pra não ficar parada
+            await self._maybe_status_la(run, linha)
+        if "⛔" in linha or "BLOQUEIO" in linha:
+            run.bloqueio = True
+        if "[proxy]" in linha:
+            run.proxy_instavel = True
+        if run.conta is None and "Conta:" in linha:   # "Conta: @quasenadasegue3 (...)"
+            m = re.search(r"Conta:\s*@?([A-Za-z0-9._]+)", linha)
+            if m:
+                run.conta = m.group(1)
+        await run.emitir(linha)
+
     async def _pump(self, run):
         try:
             async for raw in run.proc.stdout:
                 linha = raw.decode("utf-8", "replace").rstrip("\r\n")
-                if linha.startswith("[espera]"):
-                    e = _parse_espera(linha)
-                    if e:
-                        run.espera = {"ate": time.time() + e[0], "restam": e[0], "motivo": e[1]}
-                        await self._maybe_push_progresso(run)   # atualiza a LA com a contagem
-                        run.emitir_efemero(linha)               # a tela da run vê a contagem (WS)
-                    continue   # marcador de pausa: não vai pro log nem vira status_log
-                if run.espera is not None:
-                    run.espera = None       # qualquer outra linha = a pausa acabou
-                    run.emitir_efemero("[espera-fim]")
-                if linha.startswith("[progress]"):
-                    p = _parse_progress(linha)
-                    if p:
-                        run.progress = p
-                        await self._maybe_push_progresso(run)
-                elif "[saldo]" in linha:
-                    s = _parse_saldo(linha)
-                    if s:
-                        run.saldo = s
-                else:
-                    # ainda sem [progress] → reflete o status na LA pra não ficar parada
-                    await self._maybe_status_la(run, linha)
-                if "⛔" in linha or "BLOQUEIO" in linha:
-                    run.bloqueio = True
-                if "[proxy]" in linha:
-                    run.proxy_instavel = True
-                if run.conta is None and "Conta:" in linha:   # "Conta: @quasenadasegue3 (...)"
-                    m = re.search(r"Conta:\s*@?([A-Za-z0-9._]+)", linha)
-                    if m:
-                        run.conta = m.group(1)
-                await run.emitir(linha)
+                await self.processar_linha(run, linha)
         except Exception as e:
             await run.emitir(f"[backend] erro lendo saída: {e}")
         run.returncode = await run.proc.wait()
@@ -684,6 +1214,10 @@ class RunManager:
             "status": run.status, "bloqueio": run.bloqueio,
             "conta": run.conta,
             "saldo": run.saldo or {},
+            # o bot de login/verificar é o "auto-follow" (veículo do job de emulador) — o título e
+            # a ação é que dizem o que foi de verdade (o app mostra isto, não "Auto Follow")
+            "titulo": run.titulo, "acao": run.params.get("acao"),
+            "motivo": getattr(run, "motivo", None),
         })
 
     async def _push_inicio(self, run):
@@ -696,6 +1230,8 @@ class RunManager:
         if run.params.get("cronograma"):
             return
         nome = bots.BOTS.get(run.bot, {}).get("nome", run.bot)
+        if run.params.get("acao") == "login":
+            nome = "Reconectar no app"   # job de login no emulador: não é "Auto Follow começou"
         try:
             await asyncio.to_thread(
                 notify.enviar, f"{nome} · começou",
@@ -764,7 +1300,26 @@ class RunManager:
 
     async def stop(self, run_id):
         run = self.runs.get(run_id)
-        if not run or not run.proc:
+        if not run:
+            return False
+        # ── bot de emulador: não há proc local pra matar. Marca parado, sinaliza o agente (flag
+        # que ele consulta em GET /emulador/jobs/{id}/parar) e, se o job ainda estava PENDENTE
+        # (agente nunca pegou → não virá /fim), finaliza aqui mesmo (LA/history/push/fila). Se já
+        # estava EM EXECUÇÃO, só sinaliza: o agente aborta e manda /fim, que fecha tudo respeitando
+        # o 'parado'. (import_cookies não é emulador — cai no fluxo de proc abaixo.)
+        if bots.target(run.bot) == "emulador" and not run.params.get("import_cookies"):
+            job = self._job_de(run_id)
+            pendente = bool(job and job.get("estado") == "pendente")
+            if run.status in ("rodando", "iniciando"):
+                run.status = "parado"
+                if run.ended_at is None:
+                    run.ended_at = time.time()
+            if job:
+                job["parar"] = True
+            if pendente:
+                await self.finalizar_emulador(run, ok=False, motivo="parado antes de rodar")
+            return True
+        if not run.proc:
             return False
         # o lote agora é 1 processo só rodando todas as contas → matar esse processo (abaixo)
         # já para o lote inteiro. Nada de coordenador pra cancelar.

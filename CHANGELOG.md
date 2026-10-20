@@ -3,6 +3,29 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [2.0.0] — 2026-10-20
+
+Os bots saíram do servidor: agora rodam **no emulador** (o app real do Instagram num Android no PC),
+pelo agente do `quase-nada-bots-device`. O backend virou uma fila de jobs e o app ficou só do emulador.
+
+### Adicionado
+- feat: backend roda os bots no emulador (fila de jobs pro agente do PC) — login com a senha do app, várias contas numa run só, verificação de sessões, código do IG pelo app
+- feat: app só do emulador — tela inicial com Rodando agora, contas e bots; a tela do servidor (Hub) saiu
+- feat: Contas com o estado de cada conta no emulador; "Verificar" já sincroniza (loga as que faltam, traz pro app as que estavam lá); conta adicionada loga sozinha
+- feat: Story Repost no emulador, numa instância só da conta do brechó (liga só na hora)
+- feat: log sem info técnica, com a conta rodando em destaque e o saldo resumido; histórico com o nome certo de login/verificar
+- feat: criar conta nova pelo app — automático no PC (Chromium + código do Gmail + bio/foto) e WebView no iPhone
+
+### Modificado
+- update: cadeado agora deixa a conta fora da sincronização (e do cronograma)
+- update: skeleton no formato da tela no lugar do loader de tela cheia (Chats, Cronograma)
+
+### Corrigido
+- fix: botão voltar em JS (o nativo trava no iOS 26)
+
+### Documentação
+- docs: README da v2.0.0 (bots no emulador)
+
 ## [1.9.0] — 2026-10-13
 
 ### Adicionado

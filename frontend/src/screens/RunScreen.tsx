@@ -11,7 +11,7 @@ import { api, logsWsUrl } from '@/lib/api';
 import { colors, statusCor } from '@/theme';
 import { BarraProgresso, Botao, Pill, Pulsar } from '@/ui/components';
 import { Contagem } from '@/ui/Contagem';
-import { LoadingDog } from '@/ui/LoadingDog';
+import { EsqueletoLinha } from '@/ui/Esqueleto';
 import type { Progresso, Espera } from '@/lib/api';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
@@ -19,6 +19,8 @@ type Rt = RouteProp<RootStackParamList, 'Run'>;
 
 // Log inteligente: detecta arte de terminal e renderiza como UI adaptável ao celular.
 type Parsed =
+  | { tipo: 'oculta' }
+  | { tipo: 'conta'; user: string; pos: string }
   | { tipo: 'divisor' }
   | { tipo: 'titulo'; texto: string }
   | { tipo: 'kv'; label: string; valor: string }
@@ -44,10 +46,27 @@ function corEvento(nivel: string, low: string): { cor: string; forte: boolean } 
   return { cor, forte };
 }
 
+// linhas TÉCNICAS (id do job/run, serial do device, fila do backend) — não interessam no log do app
+// (pedido do Vinicius 20/10). O agente novo nem manda mais; isto limpa também os logs antigos.
+const TECNICAS = [
+  /^\[backend\]/, /^=== JOB /, /^device conectado/, /^não conectou em /, /^ação=/,
+  /^aviso: não consegui garantir o IG aberto/,
+];
+
 function parseLinha(raw: string): Parsed {
-  if (raw.startsWith('[backend]')) {
-    return { tipo: 'texto', hora: '', texto: raw.replace(/^\[backend\]\s*/, '• '), cor: colors.textoFraco, forte: false };
+  if (TECNICAS.some((re) => re.test(raw))) return { tipo: 'oculta' };
+  // conta rodando agora (marcador do agente "[conta] user i/N") → faixa em destaque
+  const ct = raw.match(/^\[conta\]\s+@?([A-Za-z0-9._]+)\s*(\d+\/\d+)?/);
+  if (ct) return { tipo: 'conta', user: ct[1], pos: ct[2] ?? '' };
+  // fecho do job: "=== SALDO: X follows, Y posts — resumo ===" → só o resumo legível
+  const saldo = raw.match(/^=== SALDO:\s*(\d+) follows, (\d+) posts\s*[—-]\s*(.*?)\s*===$/);
+  if (saldo) {
+    const [, f, ps, resumo] = saldo;
+    const nums = f !== '0' || ps !== '0' ? `${f} follows · ${ps} posts` : '';
+    return { tipo: 'titulo', texto: [nums, resumo].filter(Boolean).join('  —  ') || 'fim' };
   }
+  const fim = raw.match(/^===\s*(.+?)\s*===$/);   // "=== LOTE FIM: … ===" etc.
+  if (fim) return { tipo: 'titulo', texto: fim[1] };
   const m = raw.match(/^\d{4}-\d{2}-\d{2}\s+(\d{2}:\d{2}:\d{2})\s+(\w+)\s+([\s\S]*)$/);
   const hora = m ? m[1] : '';
   const nivel = m ? m[2] : '';
@@ -95,8 +114,17 @@ function LogLinha({ raw, onCopiar }: { raw: string; onCopiar: (t: string) => voi
     transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }],
   };
 
+  if (p.tipo === 'oculta') return null;
   let el;
-  if (p.tipo === 'divisor') {
+  if (p.tipo === 'conta') {
+    el = (
+      <Animated.View style={[wrapStyle, styles.contaFaixa]}>
+        <Ionicons name="person-circle" size={16} color={colors.marca} />
+        <Text style={styles.contaUser}>@{p.user}</Text>
+        {p.pos ? <Text style={styles.contaPos}>{p.pos}</Text> : null}
+      </Animated.View>
+    );
+  } else if (p.tipo === 'divisor') {
     el = <Animated.View style={[wrapStyle, styles.divisorWrap]}><View style={styles.divisor} /></Animated.View>;
   } else if (p.tipo === 'titulo') {
     el = <Animated.View style={wrapStyle}><Text style={styles.titulo}>{p.texto}</Text></Animated.View>;
@@ -155,6 +183,9 @@ function parseEspera(txt: string): Espera | null {
   const restam = parseInt(m[1], 10);
   return { ate: Date.now() / 1000 + restam, restam, motivo: m[2].trim() };
 }
+
+// larguras fake das linhas do skeleton do log — irregulares de propósito pra lembrar log de verdade
+const LARGURAS_LOG = ['38%', '72%', '55%', '66%', '44%', '80%', '50%', '63%', '35%', '70%', '58%', '48%'] as const;
 
 export function RunScreen() {
   const { runId } = useRoute<Rt>().params;
@@ -310,9 +341,10 @@ export function RunScreen() {
         </View>
       )}
       {conectando && linhas.length === 0 ? (
-        <View style={[styles.logBox, styles.loadingBox, { marginBottom: insets.bottom + 12 }]}>
-          <LoadingDog size={56} />
-          <Text style={styles.loadingTxt}>Carregando logs…</Text>
+        // skeleton no formato do log (linhas monoespaçadas de larguras variadas) em vez do dog de
+        // tela cheia — assim quando o log real começa a pipocar a troca é suave, sem "flash".
+        <View style={[styles.logBox, { marginBottom: insets.bottom + 12, padding: 12, gap: 9 }]}>
+          {LARGURAS_LOG.map((w, i) => <EsqueletoLinha key={i} width={w} height={11} />)}
         </View>
       ) : (
         <ScrollView
@@ -374,6 +406,12 @@ const styles = StyleSheet.create({
   kvLabel: { color: colors.textoFraco, fontSize: 13, flexShrink: 1 },
   kvValor: { color: colors.texto, fontSize: 13, fontWeight: '600' },
   dmhead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 9, marginBottom: 1 },
+  // faixa da CONTA rodando agora (marcador [conta]): destaque no log
+  contaFaixa: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 12, marginBottom: 4,
+    paddingVertical: 7, paddingHorizontal: 10, borderRadius: 10, backgroundColor: colors.card2,
+    borderLeftWidth: 3, borderLeftColor: colors.marca },
+  contaUser: { color: colors.texto, fontSize: 15, fontWeight: '800', flex: 1 },
+  contaPos: { color: colors.textoFraco, fontSize: 12, fontWeight: '700' },
   dmuser: { color: colors.texto, fontSize: 13.5, fontWeight: '700' },
   mensagem: { fontFamily: 'monospace', fontSize: 11, lineHeight: 16, color: colors.textoFraco, fontStyle: 'italic', paddingLeft: 18, opacity: 0.8 },
   sleep: { color: '#5A5A5A', fontSize: 10.5, fontStyle: 'italic', paddingLeft: 18, paddingVertical: 1 },

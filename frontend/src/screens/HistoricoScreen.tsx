@@ -13,7 +13,7 @@ import { cmpTexto } from '@/lib/ordenar';
 import { bucketData } from '@/lib/datas';
 import { colors } from '@/theme';
 import { Aparece, Botao, Card } from '@/ui/components';
-import { TelaCarregando } from '@/ui/LoadingDog';
+import { Esqueleto, EsqueletoLinha } from '@/ui/Esqueleto';
 import { useDogRefresh } from '@/ui/DogRefresh';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
@@ -65,8 +65,19 @@ function resultado(r: RunHistorico): { icon: keyof typeof Ionicons.glyphMap; lab
   return { icon: 'checkmark-circle', label: 'ok', cor: colors.ok };
 }
 
+// login/verificar do emulador usam o "auto-follow" como veículo — a AÇÃO é que diz o que foi
+// (senão aparecia "Auto Follow" no histórico). A chave separa no filtro também.
+const NOMES_ACAO: Record<string, string> = {
+  'acao:login': 'Reconectar no app',
+  'acao:verificar': 'Verificar sessões',
+};
+function chaveRun(r: RunHistorico): string {
+  return r.acao ? `acao:${r.acao}` : r.bot;
+}
+
 function saldoTxt(r: RunHistorico): string {
   const s = r.saldo || {};
+  if (r.acao) return r.motivo || NOMES_ACAO[chaveRun(r)] || r.acao;
   if (r.bot === 'auto-follow') {
     return `${s.seguidos ?? 0} seguidos · ${s.pedidos ?? 0} pedidos · ${s.pulados ?? 0} pulados`;
   }
@@ -80,6 +91,7 @@ export function HistoricoScreen() {
   const nav = useNavigation<Nav>();
   const [regs, setRegs] = useState<RunHistorico[] | null>(null);
   const [nomes, setNomes] = useState<Record<string, string>>({});
+  const nomeDe = (k: string) => NOMES_ACAO[k] ?? nomes[k] ?? k;
   const [fBot, setFBot] = useState<FiltroBot>('todos');
   const [fConta, setFConta] = useState<string>('todos');
   const [fRes, setFRes] = useState<FiltroRes>('todos');
@@ -108,7 +120,7 @@ export function HistoricoScreen() {
     if (!regs) return [];
     const [ini, fim] = janelaPeriodo(periodo);
     return regs.filter((r) => {
-      if (fBot !== 'todos' && r.bot !== fBot) return false;
+      if (fBot !== 'todos' && chaveRun(r) !== fBot) return false;
       if (fConta !== 'todos' && r.conta !== fConta) return false;
       const t = r.ended_at ?? 0;
       if (t < ini || t >= fim) return false;
@@ -124,6 +136,7 @@ export function HistoricoScreen() {
     let acoes = 0;
     for (const r of filtrados) {
       const s = r.saldo || {};
+      if (r.acao) continue;   // login/verificar não são ações de bot
       acoes += r.bot === 'auto-follow'
         ? Number(s.seguidos ?? 0) + Number(s.pedidos ?? 0)
         : Number(s.enviadas ?? 0);
@@ -134,8 +147,8 @@ export function HistoricoScreen() {
   // listagens SEMPRE ordenadas: bots pelo nome de exibição, contas em ordem natural
   // (@segue2 antes de @segue10) — antes vinham na ordem de aparição nas runs (aleatória).
   const botsDisponiveis = useMemo(
-    () => Array.from(new Set((regs ?? []).map((r) => r.bot)))
-      .sort((a, b) => cmpTexto(nomes[a] ?? a, nomes[b] ?? b)), [regs, nomes]);
+    () => Array.from(new Set((regs ?? []).map(chaveRun)))
+      .sort((a, b) => cmpTexto(nomeDe(a), nomeDe(b))), [regs, nomes]);
   const contasDisponiveis = useMemo(
     () => (Array.from(new Set((regs ?? []).map((r) => r.conta).filter(Boolean))) as string[])
       .sort(cmpTexto), [regs]);
@@ -157,7 +170,7 @@ export function HistoricoScreen() {
   // filtros ATIVOS (fora do padrão) → viram chips removíveis na barra; o resto mora no sheet
   const chipsAtivos = useMemo(() => {
     const cs: { key: string; label: string; clear: () => void }[] = [];
-    if (fBot !== 'todos') cs.push({ key: 'bot', label: nomes[fBot] ?? fBot, clear: () => setFBot('todos') });
+    if (fBot !== 'todos') cs.push({ key: 'bot', label: nomeDe(fBot), clear: () => setFBot('todos') });
     if (fConta !== 'todos') cs.push({ key: 'conta', label: `@${fConta}`, clear: () => setFConta('todos') });
     if (fRes !== 'todos') cs.push({ key: 'res', label: RES_LABEL[fRes] ?? fRes, clear: () => setFRes('todos') });
     if (periodo !== 'tudo') cs.push({ key: 'per', label: PER_LABEL[periodo] ?? periodo, clear: () => setPeriodo('tudo') });
@@ -165,7 +178,41 @@ export function HistoricoScreen() {
   }, [fBot, fConta, fRes, periodo, nomes]);
   const limparTudo = () => { setFBot('todos'); setFConta('todos'); setFRes('todos'); setPeriodo('tudo'); };
 
-  if (!regs) return <TelaCarregando />;
+  // 1ª carga (ainda sem registros): skeleton no formato do histórico — card de resumo, barra de
+  // filtro e alguns cards de run — em vez do loader de tela cheia, pra não "piscar" ao preencher.
+  if (!regs) {
+    return (
+      <View style={styles.tela}>
+        <View style={{ padding: 16, gap: 12 }}>
+          <Card style={styles.resumo}>
+            <View style={{ gap: 7 }}>
+              <Esqueleto width={42} height={26} radius={8} />
+              <EsqueletoLinha width={34} height={10} />
+            </View>
+            <View style={styles.divisor} />
+            <View style={{ gap: 7 }}>
+              <Esqueleto width={42} height={26} radius={8} />
+              <EsqueletoLinha width={120} height={10} />
+            </View>
+          </Card>
+          <View style={styles.filtroBar}>
+            <Esqueleto width={104} height={36} radius={999} />
+            <EsqueletoLinha width={90} height={13} />
+          </View>
+          {[0, 1, 2, 3].map((i) => (
+            <Card key={i} style={{ gap: 8 }}>
+              <View style={styles.topoLinha}>
+                <EsqueletoLinha width="45%" height={15} />
+                <Esqueleto width={70} height={22} radius={999} />
+              </View>
+              <EsqueletoLinha width="72%" height={12} />
+              <EsqueletoLinha width="55%" height={11} />
+            </Card>
+          ))}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.tela}>
@@ -245,11 +292,11 @@ export function HistoricoScreen() {
             {/* tocar no card abre o log daquele run (funciona pras runs que o server ainda
                 tem em memória; as importadas antigas mostram só o saldo). */}
             <TouchableOpacity activeOpacity={0.7} disabled={item.backfill}
-              onPress={() => nav.navigate('Run', { runId: item.id, nome: nomes[item.bot] ?? item.bot })}>
+              onPress={() => nav.navigate('Run', { runId: item.id, nome: item.titulo ?? nomeDe(chaveRun(item)) })}>
             <Card style={{ gap: 6 }}>
               <View style={styles.topoLinha}>
                 <Text style={styles.botNome}>
-                  {nomes[item.bot] ?? item.bot}{item.dry_run ? '  ·  simulação' : ''}
+                  {item.titulo ?? nomeDe(chaveRun(item))}{item.dry_run ? '  ·  simulação' : ''}
                 </Text>
                 <View style={[styles.badge, { borderColor: res.cor }]}>
                   <Ionicons name={res.icon} size={13} color={res.cor} />
@@ -300,7 +347,7 @@ export function HistoricoScreen() {
             ops={[['tudo', 'Tudo'], ['hoje', 'Hoje'], ['ontem', 'Ontem'], ['7d', '7 dias'], ['30d', '30 dias']]} />
           {botsDisponiveis.length > 1 && (
             <FiltroGrupo titulo="Bot" valor={fBot} onSel={setFBot}
-              ops={[['todos', 'Todos'], ...botsDisponiveis.map((b) => [b, nomes[b] ?? b] as [string, string])]} />
+              ops={[['todos', 'Todos'], ...botsDisponiveis.map((b) => [b, nomeDe(b)] as [string, string])]} />
           )}
           {contasDisponiveis.length > 1 && (
             <FiltroGrupo titulo="Conta" valor={fConta} onSel={setFConta}

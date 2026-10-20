@@ -6,21 +6,22 @@ import * as Notifications from 'expo-notifications';
 import { colors } from '@/theme';
 import { registrarPush } from '@/lib/push';
 import { BarraBotsGlobal } from '@/ui/BarraBotsGlobal';
+import { BotaoVoltar } from '@/ui/BotaoVoltar';
 import { interacaoBus } from '@/ui/interacaoBus';
-import { HubScreen } from '@/screens/HubScreen';
 import { BotScreen } from '@/screens/BotScreen';
 import { RunScreen } from '@/screens/RunScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
 import { ChatsScreen } from '@/screens/ChatsScreen';
 import { EditModoScreen } from '@/screens/EditModoScreen';
 import { InstagramLoginScreen } from '@/screens/InstagramLoginScreen';
+import { CriarContaScreen } from '@/screens/CriarContaScreen';
 import { ContasIgScreen } from '@/screens/ContasIgScreen';
+import { EmuladorScreen } from '@/screens/EmuladorScreen';
 import { CronogramaScreen } from '@/screens/CronogramaScreen';
 import { VerificandoContaScreen } from '@/screens/VerificandoContaScreen';
 import { HistoricoScreen } from '@/screens/HistoricoScreen';
 
 export type RootStackParamList = {
-  Hub: undefined;
   Bot: { botId: string; nome: string };
   Run: { runId: string; nome: string };
   Settings: undefined;
@@ -28,9 +29,11 @@ export type RootStackParamList = {
   Chats: { botId: string };
   EditModo: { botId: string; modoNome: string; criar?: boolean };
   ContasIg: undefined;
+  Emulador: undefined;
   Cronograma: undefined;
   VerificandoConta: { contaId?: string; label?: string; botId: string; nome: string };
   InstagramLogin: { label?: string; senha?: string } | undefined;
+  CriarConta: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -49,7 +52,7 @@ function aoTocarNotif(data: unknown) {
   if (!navigationRef.isReady()) return;
   if (d.tipo === 'cronograma') {
     // começa na Home (base) e empilha a tela de verificação — a validação (e o feedback) vive lá
-    navigationRef.reset({ index: 0, routes: [{ name: 'Hub' }] });
+    navigationRef.reset({ index: 0, routes: [{ name: 'Emulador' }] });
     navigationRef.navigate('VerificandoConta', {
       contaId: d.conta_id, label: d.conta,
       botId: d.botId || 'human-warmup', nome: d.nome || 'Aquecimento Humano',
@@ -97,12 +100,18 @@ export function RootNavigator() {
         style={{ flex: 1 }}
         onStartShouldSetResponderCapture={() => { interacaoBus.emitir(); return false; }}>
       <Stack.Navigator
+        initialRouteName="Emulador"
         screenOptions={{
           headerStyle: { backgroundColor: colors.card },
           headerTintColor: colors.texto,
           contentStyle: { backgroundColor: colors.bg },
+          // Botão de voltar em JS (chama goBack()) no lugar do nativo, que trava no iOS 26
+          // — ver BotaoVoltar. Só aparece quando dá pra voltar; o gesto de arrastar segue
+          // funcionando normal.
+          headerLeft: (props) => (props.canGoBack ? <BotaoVoltar {...props} /> : undefined),
         }}>
-        <Stack.Screen name="Hub" component={HubScreen} options={{ title: 'Quase Nada Bots' }} />
+        {/* tela inicial = Emulador (sem header nativo: a BarraTopo é a barra de cima). A tela do
+            servidor (Hub) saiu em 20/10/2026 — tudo roda no emulador. */}
         <Stack.Screen name="Bot" component={BotScreen} options={({ route }) => ({ title: route.params.nome })} />
         <Stack.Screen name="Run" component={RunScreen} options={({ route }) => ({ title: route.params.nome })} />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Configurações' }} />
@@ -112,12 +121,16 @@ export function RootNavigator() {
           options={({ route }) => ({ title: `Modo: ${route.params.modoNome}` })} />
         <Stack.Screen name="ContasIg" component={ContasIgScreen}
           options={{ title: 'Contas do Instagram' }} />
+        <Stack.Screen name="Emulador" component={EmuladorScreen}
+          options={{ headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="Cronograma" component={CronogramaScreen}
           options={{ title: 'Cronograma' }} />
         <Stack.Screen name="VerificandoConta" component={VerificandoContaScreen}
           options={{ title: 'Verificando conta' }} />
         <Stack.Screen name="InstagramLogin" component={InstagramLoginScreen}
           options={{ title: 'Conectar Instagram' }} />
+        <Stack.Screen name="CriarConta" component={CriarContaScreen}
+          options={{ title: 'Criar Conta' }} />
       </Stack.Navigator>
       </View>
       <BarraBotsGlobal onAbrir={(runId, titulo) => {

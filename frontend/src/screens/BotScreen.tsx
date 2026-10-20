@@ -1,9 +1,9 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { api, Account, Chat, Grupo, RunInfo, RunHistorico } from '@/lib/api';
+import { api, Account, Chat, Grupo, RunInfo, RunHistorico, locaisDe } from '@/lib/api';
 import { cmpTexto } from '@/lib/ordenar';
 import { bucketData, fmtHora } from '@/lib/datas';
 import { garantirLA } from '@/lib/la';
@@ -49,10 +49,20 @@ export function BotScreen() {
   // grupos: tocar num grupo marca SÓ as contas dele (com sessão viva); dá pra ajustar conta a conta
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [grupoSel, setGrupoSel] = useState<string | null>(null);
+  // ── pool vitrine (emulador / story-repost): lista de USERNAMES (não ids do accounts.json) ──
+  const [vitrineContas, setVitrineContas] = useState<string[] | null>(null);
+  const [vitrineSel, setVitrineSel] = useState<Set<string>>(new Set());
+  const [verVitrine, setVerVitrine] = useState(false);
 
   const temChats = botId === 'auto-follow';
   const temPostInicial = botId === 'like-repost';
-  const temLote = botId === 'like-repost' || botId === 'story-repost';
+  const temLote = botId === 'like-repost' || botId === 'story-repost';   // lote por COOKIE (accounts.json)
+  // Bots do EMULADOR usam o pool de contas logadas no device (por username): auto-follow e, desde
+  // 19/10, o DM (roda em toques no emulador). O story-repost segue como bot de cookie (Servidor).
+  const ehVitrine = botId === 'auto-follow' || botId === 'dm-followers';
+  // story do BRECHÓ: roda sempre na conta do brechó, no emulador SÓ dela (o agente liga, posta e desliga)
+  const ehStoryBrecho = botId === 'story-brecho';
+  const fonteVitrine: 'emulador' | 'story' = 'emulador';
   const precisaChat = temChats && chats.length === 0;
 
   // checagem leve (só as runs) — usada no polling pra atualizar o botão ao vivo
@@ -70,10 +80,37 @@ export function BotScreen() {
     api.getAccounts().then((cs) => setContaAtiva(cs.find((c) => c.ativa) ?? null)).catch(() => {});
   }, []);
 
+  // pool VITRINE conforme o bot: emulador → contas logadas no device (/emulador/status);
+  // story-repost → contas do server (/story/contas). Pré-seleciona todas. (story bate no IG,
+  // por isso só força no "atualizar".)
+  // marca se o pool já veio POPULADO — o auto-refresh (poll) só re-busca enquanto estiver VAZIO,
+  // pra parar de resetar a seleção depois que as contas aparecem.
+  const vitrineCheioRef = useRef(false);
+  const carregarVitrine = useCallback(async (force = false) => {
+    setVerVitrine(true);
+    try {
+      let us: string[] = [];
+      if (fonteVitrine === 'emulador') {
+        us = (await api.emuladorStatus()).contas_logadas ?? [];
+        // só as contas marcadas pro EMULADOR (locais); conta que o app ainda não conhece fica
+        const cs = await api.getAccounts().catch(() => null);
+        if (cs) {
+          const porLabel = new Map(cs.map((a) => [(a.label || '').toLowerCase(), a]));
+          us = us.filter((u) => { const a = porLabel.get(u.toLowerCase()); return !a || locaisDe(a).includes('emulador'); });
+        }
+      }
+      else us = (await api.storyContas(force)).map((c) => c.username);
+      us = [...new Set(us)].sort(cmpTexto);
+      vitrineCheioRef.current = us.length > 0;
+      setVitrineContas(us);
+      setVitrineSel(new Set(us));
+    } catch { setVitrineContas([]); vitrineCheioRef.current = false; } finally { setVerVitrine(false); }
+  }, [fonteVitrine]);
+
   const carregar = useCallback(() => {
     api.getModos(botId).then((m) => setModos(Object.keys(m).sort(cmpTexto))).catch(() => {});
     checarRun();
-    carregarContaAtiva();
+    if (ehVitrine) carregarVitrine(); else carregarContaAtiva();
     // últimas runs deste bot (pra listinha "últimas contas que rodaram")
     api.getHistorico(botId).then(setHistorico).catch(() => setHistorico([]));
     if (temChats) {
@@ -82,14 +119,19 @@ export function BotScreen() {
         setChat((atual) => (atual && c.some((x) => x.nome === atual) ? atual : c[0]?.nome ?? null));
       }).catch(() => {});
     }
-  }, [botId, temChats, checarRun, carregarContaAtiva]);
+  }, [botId, temChats, ehVitrine, checarRun, carregarContaAtiva, carregarVitrine]);
 
   useFocusEffect(useCallback(() => {
     setIniciando(false);   // voltou pra esta tela → não está mais "iniciando" (mata o spinner preso)
+    vitrineCheioRef.current = false;   // ao abrir, deixa o poll re-buscar até popular
     carregar();
     const id = setInterval(checarRun, 2500);   // atualiza o "Já está rodando" ao vivo
-    return () => clearInterval(id);
-  }, [carregar, checarRun]));
+    // VITRINE (ex: auto-follow no emulador): as contas logadas podem demorar a aparecer (o agente
+    // navega pro perfil/seletor). Enquanto a lista está VAZIA, re-busca sozinho a cada 5s — assim
+    // elas surgem sem você tocar "atualizar". Para de re-buscar quando popula (não reseta seleção).
+    const idv = ehVitrine ? setInterval(() => { if (!vitrineCheioRef.current) carregarVitrine(); }, 5000) : null;
+    return () => { clearInterval(id); if (idv) clearInterval(idv); };
+  }, [carregar, checarRun, ehVitrine, carregarVitrine]));
 
   // 10 últimas runs DESTE bot, mais novas primeiro, com cabeçalhos de data (igual o Histórico).
   // Ignora run-FANTASMA: a que nem chegou a rodar (sem conta E sem saldo) — ex: DM que caiu
@@ -115,7 +157,8 @@ export function BotScreen() {
     setVerContas(true);
     try {
       // BASE: contas cadastradas (rápido e confiável) — a lista nunca esvazia à toa.
-      const base = (await api.getAccounts()).filter((a) => a.id);
+      // só as contas marcadas pro SERVIDOR (locais) — as do emulador rodam pela aba dele
+      const base = (await api.getAccounts()).filter((a) => a.id && locaisDe(a).includes('servidor'));
       // OVERLAY: sessão viva é best-effort. A checagem bate no IG conta por conta pelo túnel
       // único e, sob congestão, pode voltar tudo falso — nesse caso NÃO zeramos a lista;
       // a sessão fica "?" e o worker pula conta morta na hora de rodar.
@@ -146,6 +189,10 @@ export function BotScreen() {
     setSelec((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
+  function toggleVitrine(u: string) {
+    setVitrineSel((prev) => { const n = new Set(prev); n.has(u) ? n.delete(u) : n.add(u); return n; });
+  }
+
   // escolhe um grupo (ou "todas" = null): marca só as contas vivas dele
   function escolherGrupo(nome: string | null) {
     setGrupoSel(nome);
@@ -162,6 +209,12 @@ export function BotScreen() {
         modos.length ? 'Toque num modo antes de rodar.' : 'Crie um modo pra poder rodar.');
       return;
     }
+    if (ehVitrine) {   // emulador / story-repost: roda por username, em fila (via run-lote)
+      const us = [...vitrineSel];
+      if (!us.length) { Alert.alert('Escolha as contas', 'Marque ao menos uma conta pra rodar.'); return; }
+      iniciarLote(dry, us);
+      return;
+    }
     if (lote) {
       const ids = [...selec];
       if (!ids.length) { Alert.alert('Escolha as contas', 'Marque ao menos uma conta pro lote.'); return; }
@@ -175,6 +228,7 @@ export function BotScreen() {
     setIniciando(true);
     try {
       const params: Record<string, unknown> = { dry_run: dry, modo };
+      if (temChats && chat) params.chat = chat;   // auto-follow (vitrine) precisa do chat no lote
       if (temPostInicial && postInicial.trim()) params.start_from = postInicial.trim();
       const r = await api.runLote(botId, params, ids);
       garantirLA(nome);   // barra viva no lock screen (vale pro lote todo)
@@ -265,24 +319,67 @@ export function BotScreen() {
     <TecladoView>
     <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ padding: 16, gap: 16 }}
       keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+      {ehVitrine ? (
+      <Aparece>
+      <Card>
+        <View style={styles.loteHead}>
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <Text style={styles.label}>Contas</Text>
+            <Text style={styles.loteDica}>Roda uma de cada vez (o app troca de conta sozinho).</Text>
+          </View>
+          <TouchableOpacity onPress={() => carregarVitrine(true)} disabled={verVitrine} hitSlop={8} style={styles.linkInline}>
+            <Ionicons name="sync" size={14} color={verVitrine ? colors.textoFraco : colors.marca} />
+            <Text style={styles.linkTxt}>atualizar</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={{ marginTop: 12 }}>
+          <Text style={styles.loteSubTxt}>
+            {verVitrine ? 'carregando…' : `${vitrineSel.size}/${(vitrineContas ?? []).length} selecionadas`}
+          </Text>
+          {(vitrineContas ?? []).map((u) => {
+            const on = vitrineSel.has(u);
+            return (
+              <TouchableOpacity key={u} style={styles.contaRow} onPress={() => toggleVitrine(u)}>
+                <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20} color={on ? colors.marca : colors.textoFraco} />
+                <Text style={styles.contaRowTxt} numberOfLines={1}>@{u}</Text>
+              </TouchableOpacity>
+            );
+          })}
+          {vitrineContas !== null && vitrineContas.length === 0 && !verVitrine && (
+            <Text style={styles.loteDica}>
+              Nenhuma conta logada ainda. Adicione em Contas e toque em "verificar" — o agente loga sozinho.
+            </Text>
+          )}
+        </View>
+      </Card>
+      </Aparece>
+      ) : (
       <Aparece>
       <Card>
         <View style={styles.contaAtivaRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>Conta</Text>
-            {contaAtiva ? (
+            {ehStoryBrecho ? (
+              <>
+                <Text style={styles.contaAtivaNome} numberOfLines={1}>@brechoquasenadaa</Text>
+                <Text style={styles.contaAtivaVazia}>no emulador próprio dela — liga só na hora do story e desliga no fim</Text>
+              </>
+            ) : contaAtiva ? (
               <Text style={styles.contaAtivaNome} numberOfLines={1}>@{contaAtiva.label}</Text>
             ) : (
               <Text style={styles.contaAtivaVazia}>nenhuma conta ativa</Text>
             )}
           </View>
-          <TouchableOpacity onPress={() => setAbrirSeletor(true)} style={styles.trocarBtn} hitSlop={8}>
-            <Ionicons name="swap-horizontal" size={16} color={colors.marca} />
-            <Text style={styles.linkTxt}>trocar</Text>
-          </TouchableOpacity>
+          {!ehStoryBrecho ? (
+            <TouchableOpacity onPress={() => setAbrirSeletor(true)} style={styles.trocarBtn} hitSlop={8}>
+              <Ionicons name="swap-horizontal" size={16} color={colors.marca} />
+              <Text style={styles.linkTxt}>trocar</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </Card>
       </Aparece>
+      )}
       <Aparece delay={40}>
       <Card>
         <Text style={styles.label}>Modo</Text>
@@ -462,9 +559,11 @@ export function BotScreen() {
           </>
         ) : (
           <>
-            <Botao title={lote ? 'Rodar lote' : (contaAtiva ? `Rodar com @${contaAtiva.label}` : 'Rodar')}
+            <Botao title={ehVitrine ? `Rodar em ${vitrineSel.size} conta${vitrineSel.size !== 1 ? 's' : ''}`
+                : ehStoryBrecho ? 'Postar no story do brechó'
+                : lote ? 'Rodar lote' : (contaAtiva ? `Rodar com @${contaAtiva.label}` : 'Rodar')}
               onPress={() => rodar(false)} loading={iniciando} />
-            <Botao title={lote ? 'Simular lote' : 'Simular (dry-run)'} cor={colors.card2} txtCor={colors.texto}
+            <Botao title={ehVitrine || lote ? 'Simular' : 'Simular (dry-run)'} cor={colors.card2} txtCor={colors.texto}
               onPress={() => rodar(true)} disabled={iniciando} />
           </>
         )}

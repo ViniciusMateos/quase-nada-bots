@@ -7,22 +7,29 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { api, Account, Grupo } from '@/lib/api';
+import { api, Account, Grupo, locaisDe } from '@/lib/api';
+import { ehUsername, sincronizarEmulador } from '@/lib/syncEmulador';
 import { cmpTexto } from '@/lib/ordenar';
 import { Credencial, lerCredenciais, salvarCredencial, removerCredencial } from '@/lib/credenciais';
 import { colors } from '@/theme';
-import { Botao, Card } from '@/ui/components';
-import { LoadingDog, TelaCarregando } from '@/ui/LoadingDog';
+import { Botao, Card, Pulsar } from '@/ui/components';
+import { LoadingDog } from '@/ui/LoadingDog';
+import { Esqueleto, EsqueletoCartao } from '@/ui/Esqueleto';
 import { useDogRefresh } from '@/ui/DogRefresh';
 import { MenuContexto } from '@/ui/MenuContexto';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-// uma linha da tela = credencial salva (user+senha) e/ou conta conectada (backend), casadas por @user
+// uma linha da tela = credencial salva (user+senha) e/ou conta cadastrada (backend), casadas por
+// @user, com o estado dela no emulador. Desde 20/10/2026 o app é SÓ emulador (a tela do servidor saiu).
 type Entry = {
-  usuario: string; senha?: string; id?: string; ativa?: boolean; criadaEm?: number; pendente?: boolean;
+  usuario: string; senha?: string; id?: string; criadaEm?: number; pendente?: boolean;
   grupos?: string[]; travada?: boolean;
+  // conta FORA do emulador das segue = a do brechó (o Story Repost roda no emulador próprio dela)
+  propria?: boolean;
+  emulLogada?: boolean;          // logada no app do IG dentro do emulador?
+  emulSessao?: 'ok' | 'bloqueada' | 'desconhecida';   // última verificação profunda
 };
 
 function idadeTxt(criadaEm?: number): string | null {
@@ -33,17 +40,29 @@ function idadeTxt(criadaEm?: number): string | null {
   return `há ${dias} dias`;
 }
 
+// selo do estado da conta (sessão ok, bloqueada, não sincronizada…) com o dot na cor do estado.
+// `carregando` → enquanto a sessão ainda NÃO foi verificada, o selo pulsa (loading de verdade),
+// pra não parecer um estado final estático quando na real ainda não sabemos.
+function Selo({ texto, cor, carregando }: { texto: string; cor: string; carregando?: boolean }) {
+  const conteudo = (
+    <View style={styles.selo}>
+      <View style={[styles.seloDot, { backgroundColor: cor }]} />
+      <Text style={[styles.seloTxt, { color: cor }]}>{texto}</Text>
+    </View>
+  );
+  return carregando ? <Pulsar>{conteudo}</Pulsar> : conteudo;
+}
+
 export function ContasIgScreen() {
   const nav = useNavigation<Nav>();
   const [contas, setContas] = useState<Account[] | null>(null);
   const [creds, setCreds] = useState<Credencial[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [sincronizando, setSincronizando] = useState(false);
   const [modal, setModal] = useState({ aberto: false, editando: false, usuario: '', senha: '' });
   const [verSenha, setVerSenha] = useState(false);
-  // status de sessão igual o Hub: id → sessão viva? (true/false/undefined=não checou ainda)
-  const [sessoes, setSessoes] = useState<Record<string, boolean>>({});
-  const [verificando, setVerificando] = useState(false);
-  const jaValidou = useRef(false);
+  const [emul, setEmul] = useState<string[]>([]);           // @usernames logados no emulador
+  const [emulSess, setEmulSess] = useState<Record<string, 'ok' | 'bloqueada' | 'desconhecida'>>({});
   const sincronizouPend = useRef(false);
   // ── grupos ──
   const [grupos, setGrupos] = useState<Grupo[]>([]);
@@ -53,23 +72,34 @@ export function ContasIgScreen() {
   // modal de nome do grupo (novo/renomear) — usa o MESMO <Modal> da conta (nunca dois Modals juntos)
   const [modalGrupo, setModalGrupo] = useState<{ aberto: boolean; original: string | null; nome: string }>(
     { aberto: false, original: null, nome: '' });
+  // modal de CÓDIGO de verificação (quando o IG desafia no reconectar) — usa o MESMO <Modal>
+  const [modalCodigo, setModalCodigo] = useState<{ aberto: boolean; user: string; codigo: string }>(
+    { aberto: false, user: '', codigo: '' });
 
   const carregar = useCallback(async () => {
-    let [cs, cr, gs] = await Promise.all([
+    let [cs, cr, gs, es] = await Promise.all([
       api.getAccounts().catch(() => [] as Account[]),
       lerCredenciais().catch(() => [] as Credencial[]),
       api.getGrupos().catch(() => [] as Grupo[]),
+      api.emuladorStatus().catch(() => null),                   // conta(s) logada(s) no emulador
     ]);
     setGrupos(gs);
-    // contas ADICIONADAS mas ainda não conectadas (credencial local sem conta no backend) →
-    // registra um placeholder PENDENTE no server pra elas já entrarem no cronograma. A senha
-    // NÃO vai (só o @). Idempotente; roda uma vez por abertura da tela.
+    setEmul(es?.contas_logadas ?? []);
+    setEmulSess(es?.sessoes ?? {});
+    // conta salva só no aparelho (credencial sem conta no backend) e conta logada no emulador que o
+    // app não conhece → entram como PENDENTE (só o @, a senha NÃO vai). Idempotente; 1x por abertura.
     if (!sincronizouPend.current) {
       sincronizouPend.current = true;
       const temBackend = new Set(cs.map((c) => (c.label || '').toLowerCase()));
-      const faltando = cr.filter((c) => !temBackend.has(c.usuario.toLowerCase()));
+      const faltando = cr.filter((c) => !temBackend.has(c.usuario.toLowerCase())).map((c) => c.usuario);
+      const doCred = new Set(cr.map((c) => c.usuario.toLowerCase()));
+      for (const u of es?.contas_logadas ?? []) {
+        if (!ehUsername(u)) continue;   // título de tela/lixo lido pelo agente nunca vira conta
+        const l = u.toLowerCase();
+        if (!temBackend.has(l) && !doCred.has(l) && !faltando.some((f) => f.toLowerCase() === l)) faltando.push(u);
+      }
       if (faltando.length) {
-        await Promise.all(faltando.map((c) => api.adicionarContaPendente(c.usuario).catch(() => {})));
+        await Promise.all(faltando.map((u) => api.adicionarContaPendente(u, ['emulador']).catch(() => {})));
         cs = await api.getAccounts().catch(() => cs);
       }
     }
@@ -77,55 +107,38 @@ export function ContasIgScreen() {
     setCreds(cr);
   }, []);
 
-  // checa (via túnel) se a sessão de cada conta ainda está viva — pesado-ish, só no abrir/refresh
-  const validar = useCallback(async (force = false) => {
-    setVerificando(true);
-    try {
-      const r = await api.validarContas(force);
-      const m: Record<string, boolean> = {};
-      for (const a of r) if (a.id) m[a.id] = !!a.sessao_ok;
-      setSessoes(m);
-    } catch { /* offline */ } finally { setVerificando(false); }
-  }, []);
-
-  useFocusEffect(useCallback(() => {
-    carregar();
-    if (!jaValidou.current) { jaValidou.current = true; validar(); }   // abrir usa cache (instantâneo)
-  }, [carregar, validar]));
-  const { scrollProps, dog, spacerEl } = useDogRefresh(async () => { await carregar(); await validar(true); });
+  useFocusEffect(useCallback(() => { carregar(); }, [carregar]));
+  const { scrollProps, dog, spacerEl } = useDogRefresh(carregar);
 
   const entries = useMemo<Entry[]>(() => {
     const map = new Map<string, Entry>();
-    for (const c of creds) map.set(c.usuario.toLowerCase(), { usuario: c.usuario, senha: c.senha });
+    // casa TUDO por @username (lowercase): a mesma conta vem da credencial salva, do backend e do
+    // emulador. Uma linha só, agregando o estado.
+    const ensure = (u: string): Entry => {
+      const k = u.toLowerCase();
+      let e = map.get(k);
+      if (!e) { e = { usuario: u }; map.set(k, e); }
+      return e;
+    };
+    for (const c of creds) { ensure(c.usuario).senha = c.senha; }
     for (const a of contas ?? []) {
-      const k = (a.label || '').toLowerCase();
-      const prev = map.get(k);
-      map.set(k, {
-        usuario: prev?.usuario || a.label, senha: prev?.senha,
-        id: a.id, ativa: a.ativa, criadaEm: a.criada_em, pendente: a.pendente, grupos: a.grupos,
-        travada: a.travada,
-      });
+      const e = ensure(a.label);
+      e.id = a.id; e.criadaEm = a.criada_em; e.pendente = a.pendente;
+      e.grupos = a.grupos; e.travada = a.travada; e.propria = !locaisDe(a).includes('emulador');
+    }
+    for (const u of emul) {
+      if (!ehUsername(u)) continue;
+      const e = ensure(u); e.emulLogada = true; e.emulSessao = emulSess[u];
     }
     return [...map.values()].sort((a, b) => cmpTexto(a.usuario, b.usuario));
-  }, [creds, contas]);
+  }, [creds, contas, emul, emulSess]);
 
-  function conectar(e: Entry) {
-    nav.navigate('InstagramLogin', { label: e.usuario, senha: e.senha });
-  }
-
-  function ativar(e: Entry) {
-    if (!e.id || e.ativa || busy) return;
-    setBusy(e.usuario);
-    api.ativarConta(e.id).then(carregar).catch(() => Alert.alert('Ops', 'Não consegui ativar essa conta.'))
-      .finally(() => setBusy(null));
-  }
-
-  // trava = nada automático roda nessa conta (o cronograma tira ela do plano na hora)
+  // cadeado = a conta NÃO loga sozinha na sincronização (o verificar pula ela)
   function travar(e: Entry) {
     if (!e.id || busy) return;
     const nova = !e.travada;
     setBusy(e.usuario);
-    api.travarConta(e.id, nova).then(carregar)
+    api.travarConta(e.id, nova).then(() => carregar())
       .catch(() => Alert.alert('Ops', 'Não consegui mudar a trava dessa conta.'))
       .finally(() => setBusy(null));
   }
@@ -145,6 +158,64 @@ export function ContasIgScreen() {
     ]);
   }
 
+  // senha salva no aparelho pra mandar junto no login (sem ela o server usa a dele)
+  function senhaSalva(usuario: string): Record<string, string> | undefined {
+    const c = creds.find((x) => x.usuario.toLowerCase() === usuario.toLowerCase());
+    return c?.senha ? { [usuario]: c.senha } : undefined;
+  }
+
+  // reconectar = o agente loga a conta no app do IG (digita user/senha)
+  function reconectar(e: Entry) {
+    if (busy) return;
+    Alert.alert('Reconectar', `Logar @${e.usuario} de novo no app do Instagram?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Reconectar', onPress: async () => {
+        setBusy(e.usuario);
+        try {
+          const r = await api.reconectarEmulador([e.usuario], senhaSalva(e.usuario));
+          const rid = r?.run_ids?.[0];
+          // abre o log do login no device; se o IG pedir código, toca na chave da conta (abrirCodigo)
+          if (rid) nav.navigate('Run', { runId: rid, nome: `Reconectar @${e.usuario}` });
+          else Alert.alert('Reconectando', 'Acompanhe em "Rodando agora". Se pedir código, toque na chave da conta.');
+        } catch {
+          Alert.alert('Ops', 'Não consegui iniciar o reconectar.');
+        } finally { setBusy(null); }
+      } },
+    ]);
+  }
+
+  // VERIFICAR E SINCRONIZAR (mesma rotina da tela inicial): conta logada que o app não tem entra
+  // no app; conta sem cadeado que não está logada vai pra fila de login (senha do aparelho); e a
+  // verificação das sessões entra na fila depois dos logins.
+  async function sincronizarEVerificar() {
+    if (sincronizando) return;
+    setSincronizando(true);
+    try {
+      const r = await sincronizarEmulador();
+      await api.verificarSessoes().catch(() => {});
+      await carregar();
+      const partes: string[] = [];
+      if (r.adicionadas.length) partes.push(`Entraram no app: ${r.adicionadas.map((u) => '@' + u).join(', ')}`);
+      if (r.logando.length) partes.push(`Logando: ${r.logando.map((u) => '@' + u).join(', ')}`);
+      if (r.semSenha.length) partes.push(`Sem senha salva (edite a conta e ponha a senha): ${r.semSenha.map((u) => '@' + u).join(', ')}`);
+      partes.push('A verificação das sessões entrou na fila — acompanhe na tela inicial.');
+      Alert.alert('Sincronizado', partes.join('\n\n'));
+    } catch { Alert.alert('Ops', 'Não consegui sincronizar.'); }
+    finally { setSincronizando(false); }
+  }
+
+  function abrirCodigo(e: Entry) { setModalCodigo({ aberto: true, user: e.usuario, codigo: '' }); }
+
+  async function enviarCodigo() {
+    const u = modalCodigo.user; const cod = modalCodigo.codigo.trim();
+    if (!cod) { Alert.alert('Falta o código', 'Digite o código que o Instagram pediu.'); return; }
+    try {
+      await api.enviarCodigo(u, cod);
+      setModalCodigo((m) => ({ ...m, aberto: false }));
+      Alert.alert('Código enviado', `Mandei o código da @${u}. O login continua sozinho.`);
+    } catch { Alert.alert('Ops', 'Não consegui enviar o código.'); }
+  }
+
   function abrirAdd() { setVerSenha(false); setModal({ aberto: true, editando: false, usuario: '', senha: '' }); }
   function abrirEdit(e: Entry) { setVerSenha(false); setModal({ aberto: true, editando: true, usuario: e.usuario, senha: e.senha || '' }); }
   function fecharModal() { setModal((m) => ({ ...m, aberto: false })); }
@@ -155,8 +226,20 @@ export function ContasIgScreen() {
     if (!modal.senha) { Alert.alert('Falta a senha', 'Põe a senha (fica só neste aparelho).'); return; }
     try {
       await salvarCredencial({ usuario: u, senha: modal.senha });
-      await api.adicionarContaPendente(u).catch(() => {});   // já entra na lista/cronograma (sem conectar)
+      await api.adicionarContaPendente(u).catch(() => {});   // já entra na lista (sem logar ainda)
+      // não está logada, sem cadeado (e não é a do brechó) → já manda o agente logar (fila), com a
+      // senha recém-salva
+      const logada = emul.some((x) => x.toLowerCase() === u.toLowerCase());
+      const existente = entries.find((x) => x.usuario.toLowerCase() === u.toLowerCase());
+      let logando = false;
+      if (!logada && !existente?.propria && !existente?.travada) {
+        logando = !!(await api.reconectarEmulador([u], { [u]: modal.senha }).catch(() => null));
+      }
       fecharModal(); await carregar();
+      if (logando) {
+        Alert.alert('Logando',
+          `@${u} ainda não estava logada — mandei o agente logar. Se o Instagram pedir código, toque na chave da conta.`);
+      }
     } catch { Alert.alert('Ops', 'Não consegui salvar a credencial.'); }
   }
 
@@ -205,7 +288,20 @@ export function ContasIgScreen() {
     ]);
   }
 
-  if (!contas) return <TelaCarregando />;
+  // loading inicial → skeleton no formato da tela, em vez de dog de tela cheia
+  if (!contas) {
+    return (
+      <View style={styles.tela}>
+        <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+          <Esqueleto width="92%" height={12} />
+          <Esqueleto width="70%" height={12} />
+          <Esqueleto height={46} radius={12} style={{ marginTop: 4 }} />
+          <EsqueletoCartao linhas={2} />
+          {[0, 1, 2, 3].map((i) => <EsqueletoCartao key={i} linhas={2} />)}
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.tela}>
@@ -213,14 +309,21 @@ export function ContasIgScreen() {
       <ScrollView style={styles.tela} contentContainerStyle={{ padding: 16, gap: 12 }} {...scrollProps}>
         {spacerEl}
         <Text style={styles.dica}>
-          Salve suas contas (user + senha) e conecte num toque — o app preenche o login sozinho.
-          A senha fica <Text style={styles.forte}>só neste aparelho</Text>, nunca vai pro servidor.
-          Só <Text style={styles.forte}>uma</Text> fica ativa por vez (a que os bots usam).
-          O <Text style={styles.forte}>cadeado</Text> tranca a conta pro automático (o cronograma não roda nada nela).
+          Salve suas contas (user + senha) — o agente loga elas no app do Instagram sozinho. A senha
+          fica <Text style={styles.forte}>só neste aparelho</Text> e vai junto só na hora de logar. O
+          <Text style={styles.forte}> cadeado</Text> deixa a conta fora da sincronização: o verificar não loga
+          ela sozinho.
         </Text>
 
-        {/* botão de adicionar no TOPO (primeiro), não no fim da lista */}
+        {/* botões no TOPO (primeiro), não no fim da lista */}
         <Botao title="Adicionar conta" cor={colors.marca} txtCor="#fff" onPress={abrirAdd} />
+        {/* Criar Conta: no PC (web) é automático (Chromium + lê o Gmail + bio/foto); no celular abre
+            o cadastro num WebView e você digita o código na mão */}
+        <Botao title="Criar conta nova" cor={colors.card2} txtCor={colors.texto}
+          onPress={() => nav.navigate('CriarConta')} />
+        {/* verificar + sincronizar (mesma rotina do botão da tela inicial) */}
+        <Botao title={sincronizando ? 'Sincronizando…' : 'Verificar e sincronizar'}
+          cor={colors.card2} txtCor={colors.texto} onPress={sincronizarEVerificar} />
 
         {/* grupos: tocar edita quem está nele; segurar renomeia/apaga */}
         <Card style={{ gap: 10 }}>
@@ -264,18 +367,17 @@ export function ContasIgScreen() {
         {entries.length === 0 ? (
           <Text style={styles.vazio}>Nenhuma conta ainda. Adicione uma aí em cima.</Text>
         ) : entries.map((e, i) => {
-          const sess = e.id ? sessoes[e.id] : undefined;      // true/false/undefined(=não checou)
-          const checando = verificando && !!e.id && !e.pendente && sess === undefined;
-          const caiu = !!e.id && !e.pendente && sess === false;   // pendente não é "caiu" (nunca conectou)
-          // mesmo esquema de cor do Hub: verde SÓ na conta ativa; sessão ok = branco;
-          // problema = vermelho; verificando = cinza.
-          let status: string, cor: string;
-          if (e.pendente) { status = 'não conectada · conecta pra rodar'; cor = colors.erro; }
-          else if (!e.id) { status = 'sem sessão'; cor = colors.erro; }
-          else if (checando) { status = 'verificando…'; cor = colors.textoFraco; }
-          else if (caiu) { status = 'sessão caiu'; cor = colors.erro; }
-          else if (e.ativa) { status = 'ativa · em uso'; cor = colors.ok; }
-          else { status = 'sessão ok'; cor = colors.texto; }
+          // estado da conta: sessão ok / bloqueada (verificação), logada, não sincronizada ou cadeado.
+          // A do brechó (propria) roda no emulador próprio do Story Repost — não entra no verificar.
+          let txt: string, cor: string;
+          if (e.propria) { txt = 'Story Repost (emulador próprio)'; cor = colors.textoFraco; }
+          else if (e.emulLogada) {
+            if (e.emulSessao === 'ok') { txt = 'sessão ok'; cor = colors.ok; }
+            else if (e.emulSessao === 'bloqueada') { txt = 'bloqueada'; cor = colors.erro; }
+            else { txt = 'logada'; cor = colors.ok; }
+          }
+          else if (e.travada) { txt = 'fora da sincronização'; cor = colors.textoFraco; }
+          else { txt = 'não sincronizada'; cor = colors.laranja; }
           const idade = e.id && !e.pendente ? idadeTxt(e.criadaEm) : null;
           return (
           <Animated.View key={e.usuario}
@@ -292,16 +394,16 @@ export function ContasIgScreen() {
                 <View style={[styles.dot, { backgroundColor: cor }]} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.label}>@{e.usuario}</Text>
-                  <View style={styles.subRow}>
-                    <Text style={[styles.sub, { color: cor, fontWeight: '700' }]}>{status}</Text>
-                    {idade ? <Text style={styles.sub}> · {idade}</Text> : null}
+                  <View style={styles.selosRow}>
+                    <Selo texto={txt} cor={cor} />
+                    {idade ? <Text style={styles.idadeTxt}>{idade}</Text> : null}
                   </View>
-                  {e.grupos?.length || e.travada ? (
+                  {e.grupos?.length || (e.travada && !e.propria) ? (
                     <View style={styles.tagsRow}>
-                      {e.travada ? (
+                      {e.travada && !e.propria ? (
                         <View style={[styles.tag, styles.tagTrava]}>
                           <Ionicons name="lock-closed" size={10} color={colors.laranja} />
-                          <Text style={[styles.tagTxt, { color: colors.laranja }]}>sem automático</Text>
+                          <Text style={[styles.tagTxt, { color: colors.laranja }]}>fora da sincronização</Text>
                         </View>
                       ) : null}
                       {[...(e.grupos ?? [])].sort(cmpTexto).map((g) => (
@@ -310,23 +412,23 @@ export function ContasIgScreen() {
                     </View>
                   ) : null}
                 </View>
-                {e.ativa ? <View style={styles.badge}><Text style={styles.badgeTxt}>ATIVA</Text></View> : null}
               </View>
 
               <View style={styles.acoesRow}>
                 <View style={{ flex: 1 }}>
-                  <Botao title={caiu ? 'Reconectar' : 'Conectar'} onPress={() => conectar(e)} />
+                  {/* reconectar = o agente loga a conta no app (a do brechó não: emulador próprio) */}
+                  {!e.propria ? <Botao title="Reconectar" onPress={() => reconectar(e)} /> : null}
                 </View>
                 {busy === e.usuario ? (
                   <View style={styles.spin}><LoadingDog size={22} /></View>
                 ) : (
                   <>
-                    {e.id && !e.pendente && !e.ativa && !caiu ? (
-                      <TouchableOpacity onPress={() => ativar(e)} style={styles.icon} hitSlop={6}>
-                        <Ionicons name="power" size={20} color={colors.texto} />
+                    {!e.propria ? (
+                      <TouchableOpacity onPress={() => abrirCodigo(e)} style={styles.icon} hitSlop={6}>
+                        <Ionicons name="key-outline" size={20} color={colors.marca} />
                       </TouchableOpacity>
                     ) : null}
-                    {e.id ? (
+                    {e.id && !e.propria ? (
                       <TouchableOpacity onPress={() => travar(e)} style={styles.icon} hitSlop={6}>
                         <Ionicons name={e.travada ? 'lock-closed' : 'lock-open-outline'} size={20}
                           color={e.travada ? colors.laranja : colors.textoFraco} />
@@ -348,12 +450,26 @@ export function ContasIgScreen() {
       </ScrollView>
 
       {/* UM <Modal> só, pra conta OU pra nome de grupo (dois Modals juntos = crash no iOS) */}
-      <Modal visible={modal.aberto || modalGrupo.aberto} transparent animationType="fade"
-        onRequestClose={() => { fecharModal(); setModalGrupo((m) => ({ ...m, aberto: false })); }}>
+      <Modal visible={modal.aberto || modalGrupo.aberto || modalCodigo.aberto} transparent animationType="fade"
+        onRequestClose={() => { fecharModal(); setModalGrupo((m) => ({ ...m, aberto: false })); setModalCodigo((m) => ({ ...m, aberto: false })); }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalWrap}>
           <Pressable style={StyleSheet.absoluteFill}
-            onPress={() => { fecharModal(); setModalGrupo((m) => ({ ...m, aberto: false })); }} />
-          {modalGrupo.aberto ? (
+            onPress={() => { fecharModal(); setModalGrupo((m) => ({ ...m, aberto: false })); setModalCodigo((m) => ({ ...m, aberto: false })); }} />
+          {modalCodigo.aberto ? (
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitulo}>Código de @{modalCodigo.user}</Text>
+            <Text style={styles.modalDica}>O Instagram mandou um código (e-mail/SMS). Digite aqui pra o login continuar.</Text>
+            <TextInput style={styles.input} placeholder="código (ex: 123456)" placeholderTextColor={colors.textoFraco}
+              keyboardType="number-pad" autoFocus value={modalCodigo.codigo}
+              onChangeText={(t) => setModalCodigo((m) => ({ ...m, codigo: t }))}
+              onSubmitEditing={enviarCodigo} returnKeyType="done" />
+            <View style={styles.modalBtns}>
+              <View style={{ flex: 1 }}><Botao title="Cancelar" cor={colors.card2} txtCor={colors.texto}
+                onPress={() => setModalCodigo((m) => ({ ...m, aberto: false }))} /></View>
+              <View style={{ flex: 1 }}><Botao title="Enviar" onPress={enviarCodigo} /></View>
+            </View>
+          </View>
+          ) : modalGrupo.aberto ? (
           <View style={styles.modalCard}>
             <Text style={styles.modalTitulo}>{modalGrupo.original ? `Renomear "${modalGrupo.original}"` : 'Novo grupo'}</Text>
             <TextInput style={styles.input} placeholder="nome (ex: Vitrine)" placeholderTextColor={colors.textoFraco}
@@ -413,6 +529,13 @@ const styles = StyleSheet.create({
   label: { color: colors.texto, fontSize: 16, fontWeight: '700' },
   subRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2, flexWrap: 'wrap' },
   sub: { color: colors.textoFraco, fontSize: 12 },
+  // selos de localização (app/server/emulador)
+  selosRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' },
+  selo: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.card2,
+    borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3, borderWidth: 1, borderColor: colors.border },
+  seloDot: { width: 7, height: 7, borderRadius: 999 },
+  seloTxt: { fontSize: 11, fontWeight: '700' },
+  idadeTxt: { color: colors.textoFraco, fontSize: 11, marginLeft: 2 },
   badge: { borderWidth: 1, borderColor: colors.ok, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 3 },
   badgeTxt: { color: colors.ok, fontSize: 11, fontWeight: '800' },
   acoesRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

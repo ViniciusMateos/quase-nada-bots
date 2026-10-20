@@ -66,17 +66,9 @@ export function SettingsScreen() {
       <Aparece>
         <Card style={{ gap: 12 }}>
           <Text style={styles.label}>Instagram</Text>
-          <Text style={styles.dica}>Conecte uma ou mais contas e escolha qual fica ativa (a que os bots rodam). Dá pra trocar num toque, sem relogar.</Text>
+          <Text style={styles.dica}>Adicione e gerencie as contas. Ao verificar, o agente loga sozinho as que faltam.</Text>
           <Botao title="Contas do Instagram" cor={colors.marca} txtCor="#fff"
             onPress={() => nav.navigate('ContasIg')} />
-        </Card>
-      </Aparece>
-
-      <Aparece delay={60}>
-        <Card style={{ gap: 12 }}>
-          <Text style={styles.label}>Cronograma</Text>
-          <Text style={styles.dica}>Lembretes na hora certa de rodar cada bot, seguindo o ciclo de drops. Toca pra ver o plano de hoje e ligar/desligar.</Text>
-          <Botao title="Ver cronograma" onPress={() => nav.navigate('Cronograma')} />
         </Card>
       </Aparece>
 

@@ -24,6 +24,7 @@ function corDoBot(bot: string): string {
 function iconeDoBot(bot: string): keyof typeof Ionicons.glyphMap {
   if (bot === 'auto-follow') return 'person-add';
   if (bot === 'dm-followers') return 'paper-plane';
+  if (bot === 'story-brecho' || bot === 'story-repost') return 'images';
   return 'flash';
 }
 

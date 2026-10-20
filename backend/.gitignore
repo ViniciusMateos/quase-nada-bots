@@ -5,6 +5,12 @@
 # push tokens dos devices (gerado em runtime)
 devices.json
 
+# contas de Gmail + senhas de app (criar conta) — credencial, nunca versionar
+gmail_config.json
+
+# última foto de perfil usada (criar conta) — runtime
+ultima_foto.txt
+
 # python
 __pycache__/
 *.pyc

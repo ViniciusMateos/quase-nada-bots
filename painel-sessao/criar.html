@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Criar conta — Quase Nada Bots</title>
+<link rel="icon" type="image/png" href="/app-icon.png">
+<style>
+  :root{
+    --bg:#09090b; --card:#131316; --card2:#1b1b1f; --border:#242428;
+    --txt:#f4f4f5; --fraco:#8a8f99; --mag:#ff2e88; --ok:#3ecf8e; --caiu:#ff5c3d; --warn:#ffcf5c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:15px;
+    display:flex;justify-content:center}
+  .wrap{width:100%;max-width:560px;padding:18px 16px 60px}
+  .topo{display:flex;align-items:center;gap:10px;padding:8px 2px 16px}
+  .topo h1{margin:0;font-size:22px;font-weight:800;flex:1}
+  a.volta{color:var(--mag);font-weight:700;text-decoration:none;font-size:14px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:14px}
+  .card h2{margin:0 0 12px;font-size:13px;font-weight:700;letter-spacing:.06em;color:var(--fraco);text-transform:uppercase}
+  label.f{display:block;margin:10px 0 4px;font-size:12.5px;color:var(--fraco);font-weight:600}
+  input,select{width:100%;background:var(--card2);border:1px solid var(--border);color:var(--txt);
+    border-radius:10px;padding:10px 12px;font-size:15px;font-family:inherit}
+  input:focus,select:focus{outline:none;border-color:var(--mag)}
+  .row{display:flex;gap:10px}.row>*{flex:1}
+  .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border:1px solid var(--border);
+    background:var(--card2);color:var(--txt);padding:13px;border-radius:12px;font-size:15px;font-weight:700;
+    cursor:pointer;font-family:inherit;transition:.15s;margin-top:14px}
+  .btn.acc{background:var(--mag);border-color:var(--mag);color:#1a0511}
+  .btn.acc:hover{background:#ff4f9c}
+  .btn:disabled{opacity:.5;cursor:default}
+  .btn.ghost{background:transparent}
+  .dica{color:var(--fraco);font-size:12.5px;line-height:1.5;margin:8px 0 0}
+  .gerado label.f{color:var(--mag)}
+  .passos{list-style:none;padding:0;margin:4px 0 0}
+  .passos li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13.5px;color:var(--fraco);line-height:1.45}
+  .passos li:last-child{border-bottom:0}
+  .passos .n{width:21px;height:21px;border-radius:50%;background:var(--card2);border:1px solid var(--border);
+    flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--txt)}
+  .estado{display:flex;align-items:center;gap:9px;padding:11px 13px;border-radius:11px;margin-top:12px;
+    font-size:13.5px;font-weight:600;background:var(--card2);border:1px solid var(--border);color:var(--fraco)}
+  .estado.ok{background:#10231a;border-color:#1d4a35;color:var(--ok)}
+  .estado.warn{background:#241c10;border-color:#4a3f18;color:var(--warn)}
+  .estado.ruim{background:#2a1416;border-color:#5a2a2c;color:var(--caiu)}
+  .hide{display:none}
+  .copia{cursor:pointer}
+  .spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--card2);
+    border:1px solid var(--border);padding:12px 18px;border-radius:12px;font-weight:600;display:none;z-index:60}
+  .toast.on{display:block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topo">
+    <a class="volta" href="/">‹ app</a>
+    <h1>Criar conta no IG</h1>
+  </div>
+
+  <!-- 1. config + gerar -->
+  <div class="card">
+    <h2>1 · Dados da conta</h2>
+    <div class="row">
+      <div>
+        <label class="f">Prefixo do @</label>
+        <input id="prefixo" placeholder="quasenadasegue" />
+      </div>
+      <div>
+        <label class="f">Grupo</label>
+        <select id="grupo"></select>
+      </div>
+    </div>
+    <label class="f">Email base (Gmail) — usa +alias por conta</label>
+    <input id="baseEmail" placeholder="seuemail@gmail.com" />
+    <label class="f">App password do Gmail <span style="color:var(--fraco);font-weight:400">· pra ele pegar o código sozinho (opcional)</span></label>
+    <input id="appPw" type="password" placeholder="xxxx xxxx xxxx xxxx" autocomplete="off" />
+    <div id="gmailStatus" class="dica"></div>
+    <button class="btn acc" id="bGerar">Gerar dados</button>
+    <p class="dica">O email de cada conta vira <b>base+username@gmail.com</b> — todos caem na sua caixa, então os códigos de verificação chegam num lugar só. Com o <b>app password</b> (senha de app do Google, com 2FA + IMAP ligado), ele <b>lê o código no Gmail e preenche sozinho</b>.</p>
+  </div>
+
+  <!-- 2. dados gerados (editáveis) -->
+  <div class="card gerado hide" id="cardDados">
+    <h2>2 · Confere e ajusta</h2>
+    <label class="f">Usuário (@)</label>
+    <input id="username" />
+    <label class="f">Senha <span class="copia" id="copySenha" style="color:var(--fraco);font-weight:400">· copiar</span></label>
+    <input id="senha" />
+    <label class="f">Email</label>
+    <input id="email" />
+    <label class="f">Nome de exibição</label>
+    <input id="nome" />
+    <label class="f">Nascimento (pra você preencher na tela do aniversário)</label>
+    <div class="row">
+      <input id="dia" placeholder="dia" />
+      <input id="mes" placeholder="mês (nº)" />
+      <input id="ano" placeholder="ano" />
+    </div>
+    <button class="btn acc" id="bAbrir">Abrir cadastro preenchido</button>
+  </div>
+
+  <!-- 3. cadastro em andamento -->
+  <div class="card hide" id="cardFluxo">
+    <h2>3 · Cadastro</h2>
+    <ol class="passos">
+      <li><span class="n">1</span><span>Abriu uma janela do navegador no <b>cadastro do Instagram</b>, já preenchido. Confere os campos e clica em <b>Inscreva-se</b>.</span></li>
+      <li><span class="n">2</span><span>No <b>aniversário</b>, use os valores gerados acima. Resolve o <b>captcha</b> se pedir.</span></li>
+      <li><span class="n">3</span><span>O IG manda um <b>código por email</b> — pega no Gmail (caixa do email base) e digita. Finaliza até cair no feed.</span></li>
+      <li><span class="n">4</span><span>Quando estiver <b>dentro da conta</b>, volta aqui e clica em <b>Salvar conta</b>.</span></li>
+    </ol>
+    <div class="estado" id="estado"><span>abrindo o cadastro…</span></div>
+    <button class="btn acc" id="bSalvar">Salvar conta</button>
+    <button class="btn ghost" id="bRecomecar">Recomeçar do zero (limpar)</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=(s)=>document.querySelector(s);
+const CRED_KEY='ig_credenciais_v1';      // mesma chave do app (localStorage, mesma origem)
+let LABEL=null, pollTimer=null, GRUPOS=[];
+let codigoTimer=null, gmailOn=false, codigoFeito=false;
+
+function toast(m){const t=$('#toast');t.textContent=m;t.className='toast on';clearTimeout(t._t);t._t=setTimeout(()=>t.className='toast',3500);}
+
+async function api(path,body){
+  const r=await fetch(path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.detail||r.statusText);
+  return d;
+}
+
+// ── credenciais no localStorage (o app lê a mesma chave) ──
+function salvarCredencial(usuario,senha){
+  try{
+    let arr=[]; try{arr=JSON.parse(localStorage.getItem(CRED_KEY)||'[]');}catch(e){}
+    if(!Array.isArray(arr))arr=[];
+    arr=arr.filter(x=>(x.usuario||'').toLowerCase()!==usuario.toLowerCase());
+    arr.push({usuario,senha});
+    localStorage.setItem(CRED_KEY,JSON.stringify(arr));
+  }catch(e){}
+}
+
+// ── geração ──
+const NOMES=['Ana','Bruna','Carla','Dani','Elaine','Fernanda','Gabi','Helena','Isa','Julia','Kelly','Larissa','Marina','Nina','Paula','Rafa','Sara','Tais','Vivi','Yara','Bia','Lia','Duda','Manu'];
+const SOBRE=['Souza','Lima','Costa','Alves','Rocha','Melo','Dias','Pires','Ramos','Teixeira','Moraes','Barros','Nunes','Freitas','Cardoso','Campos','Pinto','Vieira'];
+function rnd(a){return a[Math.floor(Math.random()*a.length)];}
+function gerarSenha(){
+  const L='abcdefghjkmnpqrstuvwxyz',U='ABCDEFGHJKLMNPQRSTUVWXYZ',D='23456789',S='!@#$';
+  function pick(s,n){let o='';for(let i=0;i<n;i++)o+=s[Math.floor(Math.random()*s.length)];return o;}
+  const base=(pick(U,1)+pick(L,6)+pick(D,3)+pick(S,1)+pick(L,2));
+  return base.split('').sort(()=>Math.random()-.5).join('');  // embaralha (mas garante 1 de cada tipo)
+}
+function gerarNasc(){
+  const ano=new Date().getFullYear()-(20+Math.floor(Math.random()*15)); // 20–34 anos
+  const mes=1+Math.floor(Math.random()*12);
+  const dia=1+Math.floor(Math.random()*28);
+  return {dia,mes,ano};
+}
+async function proximoUsuario(prefixo){
+  let n=1;
+  try{
+    const contas=await api('/api/contas');
+    const re=new RegExp('^'+prefixo.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(\\d+)$','i');
+    for(const c of contas){const m=(c.label||'').match(re); if(m)n=Math.max(n,parseInt(m[1],10));}
+    n=n+1;
+  }catch(e){ n=2; }
+  return prefixo+n;
+}
+
+async function carregarGrupos(){
+  try{ GRUPOS=await api('/api/grupos'); }catch(e){ GRUPOS=[]; }
+  const sel=$('#grupo'); sel.innerHTML='<option value="">Nenhum</option>'+GRUPOS.map(g=>`<option value="${g.nome}">${g.nome}</option>`).join('');
+  // sugere prefixo a partir das contas existentes (prefixo mais comum antes do número)
+  try{
+    const contas=await api('/api/contas'); const freq={};
+    for(const c of contas){const m=(c.label||'').match(/^(.*?)(\d+)$/); if(m)freq[m[1]]=(freq[m[1]]||0)+1;}
+    const top=Object.keys(freq).sort((a,b)=>freq[b]-freq[a])[0];
+    if(top && !$('#prefixo').value) $('#prefixo').value=top;
+  }catch(e){}
+  // email base lembrado
+  try{ const be=localStorage.getItem('qn_criar_base_email'); if(be)$('#baseEmail').value=be; }catch(e){}
+}
+
+async function carregarGmailStatus(){
+  try{
+    const s=await api('/api/gmail/status');
+    gmailOn=!!s.configurado;
+    const el=$('#gmailStatus');
+    if(s.configurado){ el.textContent='Código automático ligado'+(s.user?(' ('+s.user+')'):'')+'.'; el.style.color='var(--ok)'; if(s.user && !$('#baseEmail').value)$('#baseEmail').value=s.user; }
+    else { el.textContent='Sem app password → você digita o código na mão na janela.'; el.style.color='var(--fraco)'; }
+  }catch(e){}
+}
+async function salvarGmail(){
+  const user=($('#baseEmail').value||'').trim();
+  const senha_app=($('#appPw').value||'').trim();
+  if(!user||!senha_app) return;
+  try{ await api('/api/gmail/config',{user,senha_app}); $('#appPw').value=''; await carregarGmailStatus(); toast('Gmail conectado'); }
+  catch(e){ toast('Gmail: '+(e.message||'erro')); }
+}
+
+function pollCodigo(){
+  clearTimeout(codigoTimer); codigoFeito=false;
+  const alias=$('#email').value;
+  const tick=async()=>{
+    if(!LABEL||codigoFeito)return;
+    try{
+      const r=await api('/api/gmail/codigo?alias='+encodeURIComponent(alias));
+      if(r.code){
+        const res=await api('/api/criar/codigo',{label:LABEL,code:r.code});
+        if(res.ok){ codigoFeito=true; toast('código '+r.code+' preenchido'); setEstado('ok','código '+r.code+' pego do email e preenchido — confere e finaliza.',false); return; }
+      }
+    }catch(e){ /* sem código ainda */ }
+    codigoTimer=setTimeout(tick,6000);
+  };
+  codigoTimer=setTimeout(tick,8000);   // dá um tempo pro email do IG chegar
+}
+
+$('#bGerar').onclick=async()=>{
+  const prefixo=($('#prefixo').value||'quasenadasegue').trim();
+  const base=($('#baseEmail').value||'').trim();
+  if(!base||base.indexOf('@')<0){ toast('Põe o email base (Gmail).'); return; }
+  try{ localStorage.setItem('qn_criar_base_email',base); }catch(e){}
+  $('#bGerar').disabled=true; $('#bGerar').textContent='Gerando…';
+  const user=await proximoUsuario(prefixo);
+  const [loc,dom]=base.split('@');
+  $('#username').value=user;
+  $('#senha').value=gerarSenha();
+  $('#email').value=`${loc}+${user}@${dom}`;
+  $('#nome').value=`${rnd(NOMES)} ${rnd(SOBRE)}`;
+  const nb=gerarNasc(); $('#dia').value=nb.dia; $('#mes').value=nb.mes; $('#ano').value=nb.ano;
+  $('#cardDados').classList.remove('hide');
+  $('#bGerar').disabled=false; $('#bGerar').textContent='Gerar outros dados';
+  $('#cardDados').scrollIntoView({behavior:'smooth'});
+};
+
+$('#copySenha').onclick=()=>{ navigator.clipboard?.writeText($('#senha').value); toast('senha copiada'); };
+
+$('#bAbrir').onclick=async()=>{
+  const username=($('#username').value||'').trim().replace(/^@/,'');
+  const senha=$('#senha').value||'';
+  if(!username||!senha){ toast('Falta usuário ou senha.'); return; }
+  LABEL=username;
+  salvarCredencial(username,senha);                 // salva já (o app passa a autofillar)
+  if(($('#appPw').value||'').trim()) await salvarGmail();   // liga o código automático se preencheu
+  $('#bAbrir').disabled=true;
+  setEstado('warn','abrindo o cadastro…',true);
+  $('#cardFluxo').classList.remove('hide');
+  $('#cardFluxo').scrollIntoView({behavior:'smooth'});
+  try{
+    await api('/api/criar/abrir',{username,senha,email:$('#email').value,nome:$('#nome').value,dia:$('#dia').value,mes:$('#mes').value,ano:$('#ano').value});
+    setEstado('warn', gmailOn?'faça o cadastro; o código vem do email sozinho…':'faça o cadastro na janela que abriu…', true);
+    poll();
+    if(gmailOn) pollCodigo();
+  }catch(e){ setEstado('ruim',e.message||'erro ao abrir',false); }
+  $('#bAbrir').disabled=false;
+};
+
+function setEstado(tipo,txt,spin){
+  const el=$('#estado'); el.className='estado '+(tipo||'');
+  el.innerHTML=(spin?'<svg class="spin" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>':'')+'<span>'+txt+'</span>';
+}
+function poll(){
+  clearTimeout(pollTimer);
+  const tick=async()=>{
+    if(!LABEL)return;
+    try{
+      const s=await api('/api/status?label='+encodeURIComponent(LABEL));
+      if(!s.aberto){ setEstado('ruim','a janela foi fechada. Clique em Recomeçar.',false); return; }
+      if(s.sessionid){ setEstado('ok','conta logada — pode clicar em Salvar conta.',false); }
+      else setEstado('warn','faça o cadastro na janela que abriu…',true);
+    }catch(e){}
+    pollTimer=setTimeout(tick,2500);
+  };
+  pollTimer=setTimeout(tick,2000);
+}
+
+$('#bSalvar').onclick=async()=>{
+  if(!LABEL)return;
+  const b=$('#bSalvar'); b.disabled=true;
+  setEstado('warn','capturando a sessão e registrando a conta…',true);
+  try{
+    const res=await api('/api/conectar',{label:LABEL,senha:$('#senha').value});
+    const id=res.conta&&res.conta.id;
+    const grupo=$('#grupo').value;
+    if(id&&grupo){ try{ await api('/api/grupo-add',{nome:grupo,id}); }catch(e){} }
+    clearTimeout(pollTimer); clearTimeout(codigoTimer);
+    setEstado('ok','conta @'+LABEL+' criada e registrada'+(grupo?(' no grupo '+grupo):'')+'.',false);
+    toast('conta salva — já aparece no app');
+    LABEL=null;
+  }catch(e){ setEstado('ruim',e.message||'erro ao salvar',false); b.disabled=false; }
+};
+
+$('#bRecomecar').onclick=async()=>{
+  if(!LABEL)return;
+  setEstado('warn','reabrindo o cadastro do zero…',true);
+  try{
+    await api('/api/criar/abrir',{username:LABEL,senha:$('#senha').value,email:$('#email').value,nome:$('#nome').value,dia:$('#dia').value,mes:$('#mes').value,ano:$('#ano').value});
+    setEstado('warn','faça o cadastro na janela que abriu…',true); poll(); if(gmailOn) pollCodigo();
+  }catch(e){ setEstado('ruim',e.message||'erro',false); }
+};
+
+$('#appPw').onchange=salvarGmail;
+carregarGrupos();
+carregarGmailStatus();
+</script>
+</body>
+</html>

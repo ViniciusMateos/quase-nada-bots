@@ -42,7 +42,8 @@ module.exports = {
     version: '1.2.1',
     // fixo (não segue a versão): mantém o OTA compatível com os builds já instalados;
     // só sobe quando uma mudança NATIVA quebra a compatibilidade com o bundle JS.
-    runtimeVersion: '1.0.0',
+    // 1.1.0: entrou o expo-image-picker (Criar Conta nativo) — módulo nativo novo → build novo.
+    runtimeVersion: '1.1.0',
     // EMBUTE todos os assets no binário. Sem isto, os PNG required (splash.png,
     // apenas-cachorro.png do LoadingDog) não renderizavam no build standalone — o native
     // splash mostrava o cachorro (cópia própria), mas o <Image require> no JS ficava vazio,
@@ -76,7 +77,8 @@ module.exports = {
       usesCleartextTraffic: isDev,
       adaptiveIcon: { foregroundImage: current.icon, backgroundColor: '#8114B0' },
     },
-    plugins: ['expo-secure-store', 'expo-notifications', 'expo-font', 'expo-asset', '@bacons/apple-targets'],
+    plugins: ['expo-secure-store', 'expo-notifications', 'expo-font', 'expo-asset', '@bacons/apple-targets',
+      ['expo-image-picker', { photosPermission: 'O Criar Conta usa suas fotos pra escolher a foto de perfil da conta nova.' }]],
     extra,
   },
 };

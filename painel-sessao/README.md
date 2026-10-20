@@ -24,6 +24,31 @@ Abre sozinho em **http://127.0.0.1:8777** — o app completo.
 5. Os cookies vão pro backend (mesmo endpoint do app, `POST /instagram/session`), a conta vira
    ativa e o servidor valida. Toque em **sincronizar** pra ver o status verde.
 
+## Criar conta nova no Instagram (`/criar`)
+
+Facilitador pra criar contas: `http://127.0.0.1:8777/criar` (ou o link "+ Criar conta no IG"
+no `/painel`). Ele:
+
+1. **Gera os dados** — usuário (próximo número do seu padrão, ex: `quasenadasegue13`), senha
+   forte, **email Gmail +alias** (`seuemail+usuario@gmail.com` — todos os códigos caem na mesma
+   caixa), nome e um aniversário adulto. Tudo editável.
+2. **Abre o cadastro do IG já preenchido** num Chromium (mesmo esquema do login: perfil
+   persistente + automação mascarada). Você resolve **captcha** e **aniversário** na mão.
+3. **Pega o código do email sozinho** (opcional) — com um **app password** do Gmail configurado,
+   o painel lê a caixa por IMAP, acha o código de verificação do IG e **preenche sozinho** (e
+   tenta avançar). Sem app password, você digita o código na janela.
+4. **Salva a conta** — quando estiver dentro da conta, clica em *Salvar conta*: captura a sessão
+   e registra a conta no backend (mesmo endpoint do login), guarda a credencial (user+senha, no
+   mesmo storage do app → o login passa a autofillar) e põe no **grupo** escolhido.
+
+A senha/credencial da conta IG fica só no navegador (localStorage, mesma origem do app).
+
+**Setup do código automático (uma vez):** no Gmail, ligue a **verificação em 2 etapas** e o
+**IMAP** (Gmail → Config → "Encaminhamento e POP/IMAP" → Ativar IMAP). Gere uma **senha de app**
+em `myaccount.google.com/apppasswords` (16 letras) e cole no campo *App password do Gmail* do
+`/criar` (o email base = seu Gmail). Fica salva local em `gmail_config.json` (gitignored) ou nas
+envs `QN_GMAIL_USER`/`QN_GMAIL_APP_PASSWORD`. O painel lê por IMAP só pra achar o código do IG.
+
 ## Atualizar o app (depois de mudar o código do app)
 
 O app servido na web é um **build** (pasta `frontend/dist-web`). Quando você mexer no código do

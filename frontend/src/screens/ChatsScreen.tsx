@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { api, Chat } from '@/lib/api';
 import { colors } from '@/theme';
 import { Aparece, Botao, Card } from '@/ui/components';
+import { EsqueletoCirculo, EsqueletoLinha } from '@/ui/Esqueleto';
 import { TecladoView } from '@/ui/TecladoView';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
@@ -17,9 +18,12 @@ export function ChatsScreen() {
   const [modo, setModo] = useState<Modo>('thread');
   const [valor, setValor] = useState('');
   const [adicionando, setAdicionando] = useState(false);
+  // 1ª carga: sem isso a lista mostrava "Nenhum chat salvo ainda" por um instante antes dos
+  // dados chegarem (parecia vazia mesmo tendo chats). Enquanto não carregou, mostra skeleton.
+  const [carregado, setCarregado] = useState(false);
 
   const carregar = useCallback(() => {
-    api.getChats(botId).then(setChats).catch(() => {});
+    api.getChats(botId).then(setChats).catch(() => {}).finally(() => setCarregado(true));
   }, [botId]);
   useFocusEffect(useCallback(() => { carregar(); }, [carregar]));
 
@@ -109,7 +113,22 @@ export function ChatsScreen() {
         contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 24 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        ListEmptyComponent={<Text style={styles.vazio}>Nenhum chat salvo ainda.</Text>}
+        ListEmptyComponent={carregado
+          ? <Text style={styles.vazio}>Nenhum chat salvo ainda.</Text>
+          : (
+            // skeleton no formato da linha de chat (ícone redondo + nome + id) enquanto carrega
+            <View style={{ gap: 8 }}>
+              {[0, 1, 2].map((i) => (
+                <Card key={i} style={styles.linha}>
+                  <EsqueletoCirculo size={26} />
+                  <View style={{ flex: 1, gap: 7 }}>
+                    <EsqueletoLinha width="55%" height={15} />
+                    <EsqueletoLinha width="35%" height={11} />
+                  </View>
+                </Card>
+              ))}
+            </View>
+          )}
         renderItem={({ item, index }) => (
           <Aparece delay={index * 50}>
             <Card style={styles.linha}>

@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { api, Cronograma, CronTarefa } from '@/lib/api';
 import { colors } from '@/theme';
 import { Aparece, Card } from '@/ui/components';
-import { TelaCarregando } from '@/ui/LoadingDog';
+import { Esqueleto, EsqueletoCirculo, EsqueletoLinha } from '@/ui/Esqueleto';
 import { useDogRefresh } from '@/ui/DogRefresh';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
@@ -44,7 +44,42 @@ export function CronogramaScreen() {
     finally { setSalvando(false); }
   }
 
-  if (!cron) return <TelaCarregando />;
+  // 1ª carga (ainda sem cronograma): skeleton no formato da tela — card do toggle, linha do dia e
+  // alguns cards de tarefa — em vez do loader de tela cheia, pra preencher sem "saltar".
+  if (!cron) {
+    return (
+      <View style={styles.tela}>
+        <View style={{ padding: 16, gap: 12 }}>
+          <Card style={{ gap: 12 }}>
+            <View style={styles.linha}>
+              <View style={{ flex: 1, gap: 8 }}>
+                <EsqueletoLinha width="55%" height={16} />
+                <EsqueletoLinha width="92%" height={11} />
+                <EsqueletoLinha width="78%" height={11} />
+              </View>
+              <Esqueleto width={48} height={30} radius={999} />
+            </View>
+          </Card>
+          <View style={styles.hojeRow}>
+            <EsqueletoLinha width={140} height={14} />
+            <EsqueletoLinha width={120} height={11} />
+          </View>
+          {[0, 1, 2, 3].map((i) => (
+            <Card key={i} style={styles.tarefa}>
+              <View style={styles.hora}>
+                <Esqueleto width={40} height={15} radius={6} />
+              </View>
+              <View style={{ flex: 1, gap: 7 }}>
+                <EsqueletoLinha width="70%" height={13} />
+                <EsqueletoLinha width="40%" height={11} />
+              </View>
+              <EsqueletoCirculo size={18} />
+            </Card>
+          ))}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.tela}>

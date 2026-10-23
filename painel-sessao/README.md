@@ -8,11 +8,15 @@ Playwright (porque o navegador não consegue ler o cookie `sessionid`, que é ht
 
 ## Rodar
 
-Duplo-clique em **`iniciar.bat`** (ou `python painel_sessao.py`).
-Abre sozinho em **http://127.0.0.1:8777** — o app completo.
+**Fica sempre no ar:** liga junto com o PC (`QuaseNada-PainelWeb.vbs` na pasta Inicializar do
+Windows roda o `supervisor_painel.py` escondido) e volta sozinho se cair. Endereço:
+**http://quase-nada-bots.localhost** (qualquer `*.localhost` já aponta pro próprio PC, sem mexer
+no hosts; porta 80 — se estiver ocupada, cai na `:8777`). `iniciar.bat` só garante o supervisor
+e abre o endereço.
 
-- App completo: `http://127.0.0.1:8777/`
-- Painel simples só de reconexão (lista enxuta): `http://127.0.0.1:8777/painel`
+- App completo: `http://quase-nada-bots.localhost/`
+- Painel simples só de reconexão (lista enxuta): `http://quase-nada-bots.localhost/painel`
+- Logs: `painel.log` (painel) e `supervisor_painel.log`
 
 ## Reconectar uma conta (login do Instagram)
 
@@ -26,7 +30,7 @@ Abre sozinho em **http://127.0.0.1:8777** — o app completo.
 
 ## Criar conta nova no Instagram (`/criar`)
 
-Facilitador pra criar contas: `http://127.0.0.1:8777/criar` (ou o link "+ Criar conta no IG"
+Facilitador pra criar contas: `http://quase-nada-bots.localhost/criar` (ou o link "+ Criar conta no IG"
 no `/painel`). Ele:
 
 1. **Gera os dados** — usuário (próximo número do seu padrão, ex: `quasenadasegue13`), senha
@@ -72,8 +76,9 @@ O app no celular continua igual (OTA/EAS) — isto é só a versão web.
 ## Config (automática)
 
 Sem configurar nada: lê a URL do backend e o token do `../frontend/.env.local`. Sobrescreve por
-env: `QN_BACKEND_URL` / `QN_TOKEN` / `QN_PANEL_PORT` (padrão `8777`). No app web, o helper de
-login é `EXPO_PUBLIC_PAINEL_URL` (padrão `http://127.0.0.1:8777`, embutido no build).
+env: `QN_BACKEND_URL` / `QN_TOKEN` / `QN_PANEL_PORT` (padrão `80`, reserva `8777`) /
+`QN_PANEL_HOST` (padrão `quase-nada-bots.localhost`). No app web, o helper de login usa o MESMO
+endereço em que o app abriu (ou `EXPO_PUBLIC_PAINEL_URL`, se definido no build).
 
 ## Requisitos (já instalados nesta máquina)
 

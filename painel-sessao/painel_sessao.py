@@ -14,12 +14,12 @@ WebView; aqui a gente resolve com um Chromium dirigido pelo Playwright, que lê 
 inteiro do contexto.
 
 Rodar:   python painel_sessao.py   (ou dê um duplo-clique em iniciar.bat)
-Abre:    http://127.0.0.1:8777
+Abre:    http://quase-nada-bots.localhost  (porta 80; se estiver ocupada, :8777)
 
 Config (resolvida nesta ordem; a 1ª que existir ganha):
   Backend  → env QN_BACKEND_URL  | env EXPO_PUBLIC_API_URL | ../frontend/.env.local | padrão
   Token    → env QN_TOKEN        | env EXPO_PUBLIC_API_TOKEN| ../frontend/.env.local
-  Porta    → env QN_PANEL_PORT (padrão 8777)
+  Porta    → env QN_PANEL_PORT (padrão 80, com 8777 de reserva se a 80 estiver ocupada)
 
 Nada de token no navegador: o painel fala só com ESTE servidor local, que guarda o token e
 fala com o server 2 por baixo.
@@ -97,7 +97,25 @@ BACKEND = (os.environ.get("QN_BACKEND_URL") or os.environ.get("EXPO_PUBLIC_API_U
            or _ENV.get("EXPO_PUBLIC_API_URL") or URL_PADRAO).rstrip("/")
 TOKEN = (os.environ.get("QN_TOKEN") or os.environ.get("EXPO_PUBLIC_API_TOKEN")
          or _ENV.get("EXPO_PUBLIC_API_TOKEN") or "")
-PORTA = int(os.environ.get("QN_PANEL_PORT", "8777"))
+# Endereço bonito: *.localhost já aponta pro próprio PC em qualquer navegador (sem mexer no hosts).
+# Porta 80 = sem ":porta" no endereço; se estiver ocupada, cai na 8777 (21/10/2026).
+NOME_LOCAL = os.environ.get("QN_PANEL_HOST", "quase-nada-bots.localhost")
+
+
+def _porta_livre(p):
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(("127.0.0.1", p))
+        return True
+    except OSError:
+        return False
+    finally:
+        s.close()
+
+
+PORTA = int(os.environ.get("QN_PANEL_PORT") or (80 if _porta_livre(80) else 8777))
+URL_PAINEL = f"http://{NOME_LOCAL}" + ("" if PORTA == 80 else f":{PORTA}")
 
 
 # ───────────────────────── cliente do backend ─────────────────────
@@ -817,7 +835,7 @@ def _abrir_navegador():
     import time
     time.sleep(1.2)
     try:
-        webbrowser.open(f"http://127.0.0.1:{PORTA}")
+        webbrowser.open(URL_PAINEL)
     except Exception:
         pass
 
@@ -827,6 +845,8 @@ if __name__ == "__main__":
     print(f"\n  Painel de Sessão — Quase Nada Bots")
     print(f"  backend : {BACKEND}")
     print(f"  token   : {'ok' if TOKEN else 'FALTANDO (veja o README)'}")
-    print(f"  painel  : http://127.0.0.1:{PORTA}\n")
-    threading.Thread(target=_abrir_navegador, daemon=True).start()
+    print(f"  painel  : {URL_PAINEL}   (ou http://127.0.0.1:{PORTA})\n")
+    # subindo pelo supervisor (boot do PC / religar sozinho) não abre navegador
+    if os.environ.get("QN_PANEL_NO_BROWSER") != "1":
+        threading.Thread(target=_abrir_navegador, daemon=True).start()
     uvicorn.run(app, host="127.0.0.1", port=PORTA, log_level="warning")

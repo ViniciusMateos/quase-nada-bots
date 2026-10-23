@@ -18,7 +18,10 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
  * de verdade pelo Playwright): ele abre a janela do login, você loga na mão, e ele lê os cookies
  * (inclusive httpOnly) e manda pro backend — o MESMO fim do fluxo nativo.
  */
-const PAINEL = (process.env.EXPO_PUBLIC_PAINEL_URL || 'http://127.0.0.1:8777').replace(/\/$/, '');
+// o painel local serve o próprio app → o helper fica no MESMO endereço em que o app abriu
+// (quase-nada-bots.localhost na porta 80, ou 127.0.0.1:8777 de reserva)
+const PAINEL = (process.env.EXPO_PUBLIC_PAINEL_URL
+  || (typeof window !== 'undefined' && window.location?.origin) || 'http://127.0.0.1:8777').replace(/\/$/, '');
 
 type Fase = 'abrindo' | 'logando' | 'detectado' | 'enviando' | 'erro';
 

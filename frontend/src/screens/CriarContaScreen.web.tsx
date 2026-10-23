@@ -11,7 +11,10 @@ import { salvarCredencial } from '@/lib/credenciais';
  * aplica bio + foto no perfil e registra a conta. Os dados (senha, nome, nascimento, bio, foto)
  * são lembrados: na 1ª vez você preenche, nas próximas já vêm sugeridos com o último valor.
  */
-const PAINEL = (process.env.EXPO_PUBLIC_PAINEL_URL || 'http://127.0.0.1:8777').replace(/\/$/, '');
+// o painel local serve o próprio app → o helper fica no MESMO endereço em que o app abriu
+// (quase-nada-bots.localhost na porta 80, ou 127.0.0.1:8777 de reserva)
+const PAINEL = (process.env.EXPO_PUBLIC_PAINEL_URL
+  || (typeof window !== 'undefined' && window.location?.origin) || 'http://127.0.0.1:8777').replace(/\/$/, '');
 
 type Fase = 'idle' | 'abrindo' | 'logando' | 'detectado' | 'enviando' | 'salvo' | 'erro';
 type Grupo = { nome: string; contas: string[] };

@@ -8,7 +8,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { api, Account, Grupo, locaisDe } from '@/lib/api';
-import { ehUsername, sincronizarEmulador } from '@/lib/syncEmulador';
+import { CONTA_BRECHO, ehUsername, sincronizarEmulador } from '@/lib/syncEmulador';
 import { cmpTexto } from '@/lib/ordenar';
 import { Credencial, lerCredenciais, salvarCredencial, removerCredencial } from '@/lib/credenciais';
 import { colors } from '@/theme';
@@ -25,11 +25,11 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 // @user, com o estado dela no emulador. Desde 20/10/2026 o app é SÓ emulador (a tela do servidor saiu).
 type Entry = {
   usuario: string; senha?: string; id?: string; criadaEm?: number; pendente?: boolean;
-  grupos?: string[]; travada?: boolean;
+  grupos?: string[];
   // conta FORA do emulador das segue = a do brechó (o Story Repost roda no emulador próprio dela)
   propria?: boolean;
   emulLogada?: boolean;          // logada no app do IG dentro do emulador?
-  emulSessao?: 'ok' | 'bloqueada' | 'desconhecida';   // última verificação profunda
+  emulSessao?: 'ok' | 'bloqueada' | 'desconhecida' | 'deslogada' | 'senha_incorreta';   // última verificação
 };
 
 function idadeTxt(criadaEm?: number): string | null {
@@ -62,7 +62,7 @@ export function ContasIgScreen() {
   const [modal, setModal] = useState({ aberto: false, editando: false, usuario: '', senha: '' });
   const [verSenha, setVerSenha] = useState(false);
   const [emul, setEmul] = useState<string[]>([]);           // @usernames logados no emulador
-  const [emulSess, setEmulSess] = useState<Record<string, 'ok' | 'bloqueada' | 'desconhecida'>>({});
+  const [emulSess, setEmulSess] = useState<Record<string, 'ok' | 'bloqueada' | 'desconhecida' | 'deslogada' | 'senha_incorreta'>>({});
   const sincronizouPend = useRef(false);
   // ── grupos ──
   const [grupos, setGrupos] = useState<Grupo[]>([]);
@@ -124,7 +124,9 @@ export function ContasIgScreen() {
     for (const a of contas ?? []) {
       const e = ensure(a.label);
       e.id = a.id; e.criadaEm = a.criada_em; e.pendente = a.pendente;
-      e.grupos = a.grupos; e.travada = a.travada; e.propria = !locaisDe(a).includes('emulador');
+      e.grupos = a.grupos;
+      e.propria = (a.label || '').toLowerCase() === CONTA_BRECHO || !locaisDe(a).includes('emulador');
+      if (e.propria) e.emulSessao = emulSess[a.label] ?? emulSess[CONTA_BRECHO];   // emulador dela
     }
     for (const u of emul) {
       if (!ehUsername(u)) continue;
@@ -133,15 +135,16 @@ export function ContasIgScreen() {
     return [...map.values()].sort((a, b) => cmpTexto(a.usuario, b.usuario));
   }, [creds, contas, emul, emulSess]);
 
-  // cadeado = a conta NÃO loga sozinha na sincronização (o verificar pula ela)
-  function travar(e: Entry) {
-    if (!e.id || busy) return;
-    const nova = !e.travada;
-    setBusy(e.usuario);
-    api.travarConta(e.id, nova).then(() => carregar())
-      .catch(() => Alert.alert('Ops', 'Não consegui mudar a trava dessa conta.'))
-      .finally(() => setBusy(null));
-  }
+  // a lista em duas partes: PRINCIPAL (a conta do brechó) e AUXILIARES (as outras)
+  const lista = useMemo<(Entry | { _h: string })[]>(() => {
+    const ehPrincipal = (e: Entry) => !!e.propria || e.usuario.toLowerCase() === CONTA_BRECHO;
+    const pri = entries.filter(ehPrincipal);
+    const aux = entries.filter((e) => !ehPrincipal(e));
+    return [
+      ...(pri.length ? [{ _h: 'Principal' }, ...pri] : []),
+      ...(aux.length ? [{ _h: 'Auxiliares' }, ...aux] : []),
+    ];
+  }, [entries]);
 
   function apagar(e: Entry) {
     Alert.alert('Apagar conta', `Apagar "@${e.usuario}"? Some a credencial salva e a sessão.`, [
@@ -167,7 +170,9 @@ export function ContasIgScreen() {
   // reconectar = o agente loga a conta no app do IG (digita user/senha)
   function reconectar(e: Entry) {
     if (busy) return;
-    Alert.alert('Reconectar', `Logar @${e.usuario} de novo no app do Instagram?`, [
+    Alert.alert('Reconectar', e.propria
+      ? `Logar @${e.usuario} no emulador próprio dela? (ele liga, loga e desliga)`
+      : `Logar @${e.usuario} de novo no app do Instagram?`, [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Reconectar', onPress: async () => {
         setBusy(e.usuario);
@@ -185,7 +190,8 @@ export function ContasIgScreen() {
   }
 
   // VERIFICAR E SINCRONIZAR (mesma rotina da tela inicial): conta logada que o app não tem entra
-  // no app; conta sem cadeado que não está logada vai pra fila de login (senha do aparelho); e a
+  // no app; conta que não está logada vai pra fila de login (senha do aparelho; o brechó no
+  // emulador dele); e a
   // verificação das sessões entra na fila depois dos logins.
   async function sincronizarEVerificar() {
     if (sincronizando) return;
@@ -198,6 +204,7 @@ export function ContasIgScreen() {
       if (r.adicionadas.length) partes.push(`Entraram no app: ${r.adicionadas.map((u) => '@' + u).join(', ')}`);
       if (r.logando.length) partes.push(`Logando: ${r.logando.map((u) => '@' + u).join(', ')}`);
       if (r.semSenha.length) partes.push(`Sem senha salva (edite a conta e ponha a senha): ${r.semSenha.map((u) => '@' + u).join(', ')}`);
+      if (r.senhaIncorreta.length) partes.push(`Senha incorreta (o Instagram recusou; edite a conta e corrija): ${r.senhaIncorreta.map((u) => '@' + u).join(', ')}`);
       partes.push('A verificação das sessões entrou na fila — acompanhe na tela inicial.');
       Alert.alert('Sincronizado', partes.join('\n\n'));
     } catch { Alert.alert('Ops', 'Não consegui sincronizar.'); }
@@ -227,12 +234,12 @@ export function ContasIgScreen() {
     try {
       await salvarCredencial({ usuario: u, senha: modal.senha });
       await api.adicionarContaPendente(u).catch(() => {});   // já entra na lista (sem logar ainda)
-      // não está logada, sem cadeado (e não é a do brechó) → já manda o agente logar (fila), com a
-      // senha recém-salva
+      // não está logada → já manda o agente logar (fila), com a senha recém-salva. A do brechó
+      // sempre loga (no emulador próprio dela; se já estiver logada, ele só confere e desliga)
       const logada = emul.some((x) => x.toLowerCase() === u.toLowerCase());
       const existente = entries.find((x) => x.usuario.toLowerCase() === u.toLowerCase());
       let logando = false;
-      if (!logada && !existente?.propria && !existente?.travada) {
+      if (existente?.propria || u.toLowerCase() === CONTA_BRECHO || !logada) {
         logando = !!(await api.reconectarEmulador([u], { [u]: modal.senha }).catch(() => null));
       }
       fecharModal(); await carregar();
@@ -310,9 +317,8 @@ export function ContasIgScreen() {
         {spacerEl}
         <Text style={styles.dica}>
           Salve suas contas (user + senha) — o agente loga elas no app do Instagram sozinho. A senha
-          fica <Text style={styles.forte}>só neste aparelho</Text> e vai junto só na hora de logar. O
-          <Text style={styles.forte}> cadeado</Text> deixa a conta fora da sincronização: o verificar não loga
-          ela sozinho.
+          fica <Text style={styles.forte}>só neste aparelho</Text> e vai junto só na hora de logar. Toda
+          conta sincroniza: o verificar loga as que faltam (a do brechó no emulador próprio dela).
         </Text>
 
         {/* botões no TOPO (primeiro), não no fim da lista */}
@@ -366,17 +372,25 @@ export function ContasIgScreen() {
 
         {entries.length === 0 ? (
           <Text style={styles.vazio}>Nenhuma conta ainda. Adicione uma aí em cima.</Text>
-        ) : entries.map((e, i) => {
-          // estado da conta: sessão ok / bloqueada (verificação), logada, não sincronizada ou cadeado.
-          // A do brechó (propria) roda no emulador próprio do Story Repost — não entra no verificar.
+        ) : lista.map((item, i) => {
+          if ('_h' in item) {
+            return <Text key={`h:${item._h}`} style={styles.grupoLista}>{item._h}</Text>;
+          }
+          const e = item;
+          // estado da conta: sessão ok / bloqueada (verificação), logada ou não sincronizada.
+          // A do brechó (propria) vive no emulador próprio do Story Repost (desligado): o estado é o
+          // último que os jobs dela reportaram.
           let txt: string, cor: string;
-          if (e.propria) { txt = 'Story Repost (emulador próprio)'; cor = colors.textoFraco; }
+          if (e.propria) {
+            if (e.emulSessao === 'ok') { txt = 'logada · emulador do brechó'; cor = colors.ok; }
+            else if (e.emulSessao === 'senha_incorreta') { txt = 'senha incorreta · edite e corrija'; cor = colors.erro; }
+            else { txt = 'não sincronizada · emulador do brechó'; cor = colors.laranja; }
+          }
           else if (e.emulLogada) {
             if (e.emulSessao === 'ok') { txt = 'sessão ok'; cor = colors.ok; }
             else if (e.emulSessao === 'bloqueada') { txt = 'bloqueada'; cor = colors.erro; }
             else { txt = 'logada'; cor = colors.ok; }
           }
-          else if (e.travada) { txt = 'fora da sincronização'; cor = colors.textoFraco; }
           else { txt = 'não sincronizada'; cor = colors.laranja; }
           const idade = e.id && !e.pendente ? idadeTxt(e.criadaEm) : null;
           return (
@@ -398,14 +412,8 @@ export function ContasIgScreen() {
                     <Selo texto={txt} cor={cor} />
                     {idade ? <Text style={styles.idadeTxt}>{idade}</Text> : null}
                   </View>
-                  {e.grupos?.length || (e.travada && !e.propria) ? (
+                  {e.grupos?.length ? (
                     <View style={styles.tagsRow}>
-                      {e.travada && !e.propria ? (
-                        <View style={[styles.tag, styles.tagTrava]}>
-                          <Ionicons name="lock-closed" size={10} color={colors.laranja} />
-                          <Text style={[styles.tagTxt, { color: colors.laranja }]}>fora da sincronização</Text>
-                        </View>
-                      ) : null}
                       {[...(e.grupos ?? [])].sort(cmpTexto).map((g) => (
                         <View key={g} style={styles.tag}><Text style={styles.tagTxt}>{g}</Text></View>
                       ))}
@@ -416,24 +424,16 @@ export function ContasIgScreen() {
 
               <View style={styles.acoesRow}>
                 <View style={{ flex: 1 }}>
-                  {/* reconectar = o agente loga a conta no app (a do brechó não: emulador próprio) */}
-                  {!e.propria ? <Botao title="Reconectar" onPress={() => reconectar(e)} /> : null}
+                  {/* reconectar = o agente loga a conta no app (a do brechó loga no emulador próprio dela) */}
+                  <Botao title="Reconectar" onPress={() => reconectar(e)} />
                 </View>
                 {busy === e.usuario ? (
                   <View style={styles.spin}><LoadingDog size={22} /></View>
                 ) : (
                   <>
-                    {!e.propria ? (
-                      <TouchableOpacity onPress={() => abrirCodigo(e)} style={styles.icon} hitSlop={6}>
-                        <Ionicons name="key-outline" size={20} color={colors.marca} />
-                      </TouchableOpacity>
-                    ) : null}
-                    {e.id && !e.propria ? (
-                      <TouchableOpacity onPress={() => travar(e)} style={styles.icon} hitSlop={6}>
-                        <Ionicons name={e.travada ? 'lock-closed' : 'lock-open-outline'} size={20}
-                          color={e.travada ? colors.laranja : colors.textoFraco} />
-                      </TouchableOpacity>
-                    ) : null}
+                    <TouchableOpacity onPress={() => abrirCodigo(e)} style={styles.icon} hitSlop={6}>
+                      <Ionicons name="key-outline" size={20} color={colors.marca} />
+                    </TouchableOpacity>
                     <TouchableOpacity onPress={() => abrirEdit(e)} style={styles.icon} hitSlop={6}>
                       <Ionicons name="create-outline" size={20} color={colors.textoFraco} />
                     </TouchableOpacity>
@@ -551,6 +551,8 @@ const styles = StyleSheet.create({
   modalBtns: { flexDirection: 'row', gap: 10, marginTop: 4 },
   // grupos
   secao: { color: colors.texto, fontSize: 15, fontWeight: '800' },
+  grupoLista: { color: colors.textoFraco, fontSize: 12, fontWeight: '800', marginTop: 6, marginLeft: 4,
+    textTransform: 'uppercase', letterSpacing: 0.5 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   // mesmos chips do BotScreen (modos) — mesmo visual no app todo
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: colors.border,

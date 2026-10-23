@@ -529,7 +529,7 @@ async def emulador_sessoes(payload: dict):
     body {user, status: "ok"|"bloqueada"|"desconhecida"}. Guarda em memória; o GET /emulador/status
     devolve o acumulado em 'sessoes'."""
     p = payload or {}
-    if not mgr.guardar_sessao(p.get("user") or "", p.get("status") or ""):
+    if not mgr.guardar_sessao(p.get("user") or "", p.get("status") or "", p.get("fonte")):
         raise HTTPException(400, "informe 'user'")
     return {"ok": True}
 

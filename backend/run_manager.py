@@ -284,7 +284,9 @@ class RunManager:
         # {user: {status: "ok"|"bloqueada"|"desconhecida", ts}}. O agente reporta conta a conta
         # (POST /emulador/sessoes, incremental pra UI atualizar ao vivo); status_emulador() devolve
         # isto em "sessoes". Estar na gavetinha do IG NÃO prova sessão sã — só entrar na conta prova.
-        self._sessoes_emulador = {}
+        # Persistido em disco (20/10/2026): a conta do brechó vive num emulador que fica DESLIGADO —
+        # o único jeito de saber se ela está logada lá é o que os jobs dela reportaram por último.
+        self._sessoes_emulador = self._ler_sessoes()
         try:
             os.makedirs(self._LOG_DIR, exist_ok=True)
         except Exception:
@@ -872,15 +874,38 @@ class RunManager:
             "verificando_sessoes": verificando,
         }
 
-    def guardar_sessao(self, user, status):
-        """Guarda o último resultado da verificação PROFUNDA de sessão de UMA conta (o agente reporta
-        incremental via POST /emulador/sessoes, pra a UI atualizar ao vivo). status ∈ {ok, bloqueada,
-        desconhecida}; qualquer outro valor vira 'desconhecida'. Devolve True se guardou."""
+    _SESSOES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "emulador_sessoes.json")
+
+    def _ler_sessoes(self):
+        try:
+            with open(self._SESSOES_PATH, encoding="utf-8") as f:
+                d = json.load(f)
+            return d if isinstance(d, dict) else {}
+        except Exception:
+            return {}
+
+    def guardar_sessao(self, user, status, fonte=None):
+        """Guarda o último resultado de sessão de UMA conta (o agente reporta incremental via POST
+        /emulador/sessoes, pra a UI atualizar ao vivo). status ∈ {ok, bloqueada, desconhecida,
+        deslogada}; 'deslogada' = a conta não está logada no emulador dela (hoje: o brechó, que a
+        sincronização então manda logar). Outro valor vira 'desconhecida'. Devolve True se guardou."""
         u = (user or "").strip().lstrip("@")
         if not u:
             return False
-        st = status if status in ("ok", "bloqueada", "desconhecida") else "desconhecida"
+        st = status if status in ("ok", "bloqueada", "desconhecida", "deslogada", "senha_incorreta") \
+            else "desconhecida"
+        if (fonte == "story" and st == "deslogada"
+                and (self._sessoes_emulador.get(u) or {}).get("status") == "senha_incorreta"):
+            st = "senha_incorreta"   # um STORY achando a conta deslogada não apaga o aviso da senha
+                                     # (um LOGIN manda: senha nova que passou e travou depois → deslogada)
         self._sessoes_emulador[u] = {"status": st, "ts": time.time()}
+        try:
+            tmp = self._SESSOES_PATH + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(self._sessoes_emulador, f, ensure_ascii=False)
+            os.replace(tmp, self._SESSOES_PATH)
+        except Exception:
+            pass
         return True
 
     async def enfileirar_verificar(self):

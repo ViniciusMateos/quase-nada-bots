@@ -79,7 +79,7 @@ export type EmuladorStatus = {
   sessao?: 'viva' | 'desconhecida' | null;
   // verificação PROFUNDA (sob demanda): o agente entra em cada conta e marca ok/bloqueada.
   // Último resultado por conta + se um verificar está rodando agora.
-  sessoes?: Record<string, 'ok' | 'bloqueada' | 'desconhecida'>;
+  sessoes?: Record<string, 'ok' | 'bloqueada' | 'desconhecida' | 'deslogada' | 'senha_incorreta'>;
   verificando_sessoes?: boolean;
 };
 

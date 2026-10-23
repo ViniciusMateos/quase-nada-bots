@@ -4,7 +4,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { Account, api, Bot, EmuladorStatus, locaisDe, RunInfo } from '@/lib/api';
-import { ehUsername, sincronizarEmulador } from '@/lib/syncEmulador';
+import { CONTA_BRECHO, ehUsername, sincronizarEmulador } from '@/lib/syncEmulador';
 import { cmpTexto } from '@/lib/ordenar';
 import { colors } from '@/theme';
 import { Aparece, Card, CartaoTocavel, Pill, Pulsar } from '@/ui/components';
@@ -69,8 +69,8 @@ export function EmuladorScreen() {
   }, [puxarStatus, puxarRuns, puxarContas]);
 
   // VERIFICAR = sincroniza com o emulador E verifica a fundo (20/10). Primeiro a sincronização:
-  // conta do emulador que o app não tem entra no app; conta marcada pro emulador, sem cadeado e
-  // fora dele vai pra fila de login. Depois enfileira a verificação profunda — a fila é uma por
+  // conta do emulador que o app não tem entra no app; conta do app fora do emulador vai pra fila
+  // de login (o brechó no emulador dele). Depois enfileira a verificação profunda — a fila é uma por
   // vez, então ela roda DEPOIS dos logins e já pega as contas novas. O poll de 5s acompanha.
   const verificar = useCallback(async () => {
     if (status?.verificando_sessoes || sincronizando) return;
@@ -80,11 +80,12 @@ export function EmuladorScreen() {
     try { await api.verificarSessoes(); } catch { /* backend pode não expor ainda */ }
     setSincronizando(false);
     puxarStatus(); puxarContas();
-    if (r && (r.adicionadas.length || r.logando.length || r.semSenha.length)) {
+    if (r && (r.adicionadas.length || r.logando.length || r.semSenha.length || r.senhaIncorreta.length)) {
       const partes: string[] = [];
       if (r.adicionadas.length) partes.push(`Entraram no app: ${r.adicionadas.map((u) => '@' + u).join(', ')}`);
       if (r.logando.length) partes.push(`Logando: ${r.logando.map((u) => '@' + u).join(', ')}`);
       if (r.semSenha.length) partes.push(`Sem senha salva (edite a conta e ponha a senha): ${r.semSenha.map((u) => '@' + u).join(', ')}`);
+      if (r.senhaIncorreta.length) partes.push(`Senha incorreta (o Instagram recusou; edite a conta e corrija): ${r.senhaIncorreta.map((u) => '@' + u).join(', ')}`);
       Alert.alert('Sincronizado', partes.join('\n\n'));
     }
   }, [status?.verificando_sessoes, sincronizando, puxarStatus, puxarContas]);
@@ -131,7 +132,15 @@ export function EmuladorScreen() {
     const a = porLabel.get(u.toLowerCase());
     if (ehUsername(u) && (!a || locaisDe(a).includes('emulador'))) nomesEmu.add(u);
   }
-  const contasEmu = [...nomesEmu].sort(cmpTexto);
+  const contasEmu = [...nomesEmu].filter((u) => u.toLowerCase() !== CONTA_BRECHO).sort(cmpTexto);
+  // PRINCIPAL = a conta do brechó (emulador próprio, desligado): o estado é o último que os jobs
+  // dela reportaram; AUXILIARES = as outras (emulador das segue)
+  const temBrecho = (contas ?? []).some((a) => (a.label || '').toLowerCase() === CONTA_BRECHO);
+  const stBrecho = status?.sessoes?.[CONTA_BRECHO];
+  const brechoTxt = stBrecho === 'ok' ? 'logada' : stBrecho === 'senha_incorreta' ? 'senha incorreta'
+    : stBrecho === 'bloqueada' ? 'bloqueada' : 'não sincronizada';
+  const brechoCor = stBrecho === 'ok' ? colors.ok
+    : stBrecho === 'senha_incorreta' || stBrecho === 'bloqueada' ? colors.erro : colors.laranja;
   const ativos = runs.filter((r) => ['rodando', 'iniciando'].includes(r.status)).reverse();
 
   return (
@@ -192,24 +201,35 @@ export function EmuladorScreen() {
                   <Esqueleto width={130} height={12} />
                 </View>
               ))
-            ) : contasEmu.length === 0 ? (
+            ) : contasEmu.length === 0 && !temBrecho ? (
               <Text style={styles.vazio}>
                 {semStatus ? 'sem status do PC agora.'
                   : 'Nenhuma conta ainda. Adicione em "gerenciar" — ao verificar, o agente loga sozinho.'}
               </Text>
-            ) : contasEmu.map((u) => {
+            ) : (
+              <>
+              {temBrecho ? (
+                <>
+                  <Text style={styles.grupoTitulo}>Principal</Text>
+                  <View style={styles.contaLinha}>
+                    <View style={[styles.contaDot, { backgroundColor: brechoCor }]} />
+                    <Text style={styles.contaNome} numberOfLines={1}>@{CONTA_BRECHO}</Text>
+                    <Text style={[styles.contaStatus, { color: brechoCor }]}>{brechoTxt}</Text>
+                  </View>
+                  <Text style={styles.grupoSub}>emulador próprio — liga só na hora do story</Text>
+                </>
+              ) : null}
+              {contasEmu.length ? <Text style={styles.grupoTitulo}>Auxiliares</Text> : null}
+              {contasEmu.map((u) => {
               const st = status?.sessoes?.[u];
-              const conta = porLabel.get(u.toLowerCase());
-              const trancada = !!conta?.travada;
               const noDevice = logadas.has(u.toLowerCase());
               // enquanto verifica, as do device ficam "verificando" — nunca mostra o status velho
               // em cache (ok/desconhecida/etc.) de uma checagem anterior.
               const checando = verificando && noDevice;
               let txt: string, cor: string;
               if (!noDevice) {
-                // fora do emulador: com cadeado não loga sozinha; sem, o verificar loga
-                if (trancada) { txt = 'fora da sincronização'; cor = colors.textoFraco; }
-                else { txt = 'não sincronizada'; cor = colors.laranja; }
+                // fora do emulador: o verificar loga ela
+                txt = 'não sincronizada'; cor = colors.laranja;
               }
               else if (checando) { txt = 'verificando…'; cor = colors.textoFraco; }
               else if (st === 'ok') { txt = 'sessão ok'; cor = colors.ok; }
@@ -222,14 +242,16 @@ export function EmuladorScreen() {
                   <Text style={styles.contaNome} numberOfLines={1}>
                     @{u}{u === status?.conta_ativa ? ' · ativa' : ''}
                   </Text>
-                  {trancada ? <Ionicons name="lock-closed" size={12} color={colors.laranja} /> : null}
                   <Text style={[styles.contaStatus, { color: cor }]}>{txt}</Text>
                 </View>
               );
             })}
+              </>
+            )}
             <Text style={styles.dica}>
-              "Verificar" já sincroniza: loga as contas que faltam (menos as com cadeado), traz pro
-              app as que já estavam logadas e entra em cada uma pra confirmar quem está ok ou bloqueada.
+              "Verificar" já sincroniza: loga as contas que faltam (a do brechó no emulador dela), traz
+              pro app as que já estavam logadas e entra em cada auxiliar pra confirmar quem está ok ou
+              bloqueada.
             </Text>
           </Card>
         </Aparece>
@@ -277,6 +299,8 @@ const styles = StyleSheet.create({
   verBtn: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   verTxt: { color: colors.marca, fontSize: 12, fontWeight: '700' },
   contaLinha: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 6 },
+  grupoTitulo: { color: colors.textoFraco, fontSize: 11, fontWeight: '700', marginTop: 8, marginBottom: 2 },
+  grupoSub: { color: colors.textoFraco, fontSize: 11, marginLeft: 18, marginTop: -4, marginBottom: 2 },
   contaDot: { width: 9, height: 9, borderRadius: 999 },
   contaNome: { color: colors.texto, fontSize: 14, fontWeight: '700', flex: 1 },
   contaStatus: { fontSize: 11, fontWeight: '600' },

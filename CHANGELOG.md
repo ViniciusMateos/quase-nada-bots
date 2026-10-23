@@ -3,6 +3,22 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [2.1.0] — 2026-10-22
+
+O brechó e as outras contas rodam juntos no emulador (cada um no seu), a raspagem do brechó saiu
+do servidor e o app web ganhou endereço fixo, sempre no ar.
+
+### Adicionado
+- feat: modos dos bots do emulador reformulados (auto follow, DM e story), com os campos novos na tela de editar modo
+- feat: modos padrão do emulador semeiam o perfis.json dos bots
+- feat: Story Repost do brechó e das segue ao mesmo tempo, cada um no seu emulador; lote na ordem em que as contas foram marcadas
+- feat: conta do brechó vira a Principal (Principal/Auxiliares) e sincroniza no emulador dela; o cadeado saiu e as sessões ficam salvas no backend (deslogada, senha incorreta)
+- feat: raspagem do brechó no emulador (bot brecho-scraper) com o painel de prontidão (`GET /emulador/raspagem/prontidao`)
+- feat: app web em http://quase-nada-bots.localhost, sempre no ar (liga com o PC e volta se cair)
+
+### Documentação
+- docs: README com o paralelo brechó/segue, raspagem e app web
+
 ## [2.0.0] — 2026-10-20
 
 Os bots saíram do servidor: agora rodam **no emulador** (o app real do Instagram num Android no PC),

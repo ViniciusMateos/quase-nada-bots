@@ -523,6 +523,14 @@ async def emulador_verificar(payload: dict = None):
     return await mgr.enfileirar_verificar()
 
 
+@app.get("/emulador/raspagem/prontidao", dependencies=[Depends(auth)])
+async def emulador_prontidao_raspagem():
+    """Tá tudo certo pra raspar o brechó? {pronto, resumo, agente_online, emulador_ocupado,
+    proxima, contas:[{conta, estado: apta|descansando|bloqueada, motivo, ate?, ultima_raspagem}]}.
+    Mesma regra do rodízio do agente. O app do Brechó mostra isso no lugar da conta antiga."""
+    return mgr.prontidao_raspagem()
+
+
 @app.post("/emulador/sessoes", dependencies=[Depends(auth)])
 async def emulador_sessoes(payload: dict):
     """O agente reporta o status de UMA conta verificada (incremental, pra a UI atualizar ao vivo).

@@ -844,6 +844,56 @@ class RunManager:
             est["sessao"] = s if s in ("viva", "desconhecida") else None
         if "device" in info:
             est["device"] = info.get("device") or None
+        # prontidão da raspagem do brechó: soft-blocks e uso do rodízio (só existem no PC)
+        for k in ("softblocks", "uso_raspagem"):
+            if isinstance(info.get(k), dict):
+                est[k] = {str(u): float(t) for u, t in info[k].items() if t}
+        if info.get("cooldown_softblock_h"):
+            try:
+                est["cooldown_softblock_h"] = float(info["cooldown_softblock_h"])
+            except Exception:
+                pass
+
+    def prontidao_raspagem(self):
+        """Tá tudo certo pra raspar o brechó? Agente online + cada auxiliar logada no emulador das
+        segue com o estado dela, na MESMA regra do rodízio do agente (_auxiliares_para_raspar):
+        fora a loja; "bloqueada" na verificação; soft-block nas últimas N h (descansando até…).
+        As aptas vêm na ordem do rodízio (a menos usada na raspagem primeiro)."""
+        agora = time.time()
+        st = self.status_emulador()
+        est = self._agente_estado
+        sb = est.get("softblocks") or {}
+        uso = est.get("uso_raspagem") or {}
+        cool = float(est.get("cooldown_softblock_h") or 12) * 3600
+        sess = st.get("sessoes") or {}
+        contas = []
+        for u in dict.fromkeys(str(x).strip().lstrip("@") for x in (st.get("contas_logadas") or []) if x):
+            if u.lower() == "brechoquasenadaa":
+                continue
+            c = {"conta": u, "ultima_raspagem": uso.get(u)}
+            if sess.get(u) == "bloqueada":
+                c.update(estado="bloqueada", motivo="sessão bloqueada na última verificação")
+            elif sb.get(u) and agora - sb[u] < cool:
+                c.update(estado="descansando", motivo="soft-block recente", ate=sb[u] + cool)
+            else:
+                c.update(estado="apta", motivo="")
+            contas.append(c)
+        aptas = sorted([c for c in contas if c["estado"] == "apta"],
+                       key=lambda c: (c.get("ultima_raspagem") or 0, c["conta"]))
+        outras = [c for c in contas if c["estado"] != "apta"]
+        ocupada = any(j.get("estado") == "em_execucao" and "principal" in self.instancias_do_job(j.get("bot"), j.get("params"))
+                      for j in self._fila_emulador)
+        pronto = bool(st.get("online")) and bool(aptas)
+        if not st.get("online"):
+            resumo = "o PC do emulador está offline"
+        elif not aptas:
+            resumo = "nenhuma conta auxiliar apta agora"
+        else:
+            resumo = f"{len(aptas)} conta(s) apta(s) — a próxima é @{aptas[0]['conta']}"
+        return {"pronto": pronto, "resumo": resumo, "agente_online": bool(st.get("online")),
+                "ultimo_ping_ha_s": st.get("ha_segundos"), "emulador_ocupado": ocupada,
+                "proxima": aptas[0]["conta"] if aptas else None,
+                "contas": aptas + outras}
 
     def status_emulador(self):
         """Estado do agente/fila: se o agente está online (viu nos últimos 90s), o tamanho da fila

@@ -45,6 +45,15 @@ BOTS = {
         "tem_modos": True, "tem_chats": False, "tem_ig": False,
         "descricao": "Posta as peças disponíveis no story do brechó pelo app (repost do post + fundo, etiqueta e chamada).",
     },
+    # 21/10/2026: raspagem do brechó saiu do server (o login do brechó por IP de datacenter levou a
+    # conta pra verificação). Uma conta AUXILIAR lê o perfil público do brechó no app (instância 0)
+    # e o device manda os posts pro backend do brechó (:8020), que reconcilia. Quem dispara é o app
+    # do Brechó (POST /runs com params livres). Módulo: quase-nada-bots-device/bots/brecho_scraper.
+    "brecho-scraper": {
+        "nome": "Raspagem do brechó", "dir": "brecho-scraper-emulador", "target": "emulador",
+        "tem_modos": False, "tem_chats": False, "tem_ig": False,
+        "descricao": "Lê os posts do brechó com uma conta auxiliar no emulador e atualiza as peças (vendidas, preço, novas).",
+    },
     "story-repost": {
         "nome": "Story Repost (antigo)", "dir": "story-repost-instagram", "target": "server",
         "tem_modos": True, "tem_chats": False, "tem_ig": True,

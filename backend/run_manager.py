@@ -760,11 +760,12 @@ class RunManager:
         return run
 
     def _expandir_modo_emulador(self, bot_id, params):
-        """O agente do PC não lê o perfis.json (vive aqui no server) → copia os knobs do MODO
-        escolhido pra dentro dos params do job. Params explícitos ganham. Só pro DM por enquanto
-        (o auto-follow do emulador ignora o modo hoje; expandir mudaria o comportamento dele)."""
+        """O agente do PC não lê o perfis.json (vive aqui no server) → copia os campos do MODO
+        escolhido pra dentro dos params do job. Params explícitos ganham. Vale pros 3 bots do
+        emulador (20/10/2026: os modos foram reformulados pro emulador; o agente lê os campos novos
+        e ainda aceita os nomes antigos)."""
         p = dict(params or {})
-        if bot_id not in ("dm-followers", "story-brecho") or not p.get("modo"):
+        if bot_id not in ("auto-follow", "dm-followers", "story-brecho") or not p.get("modo"):
             return p
         try:
             modo = bots.ler_modos(bot_id).get(p["modo"]) or {}

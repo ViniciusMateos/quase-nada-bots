@@ -13,8 +13,8 @@ import type { RootStackParamList } from '@/navigation/RootNavigator';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Rt = RouteProp<RootStackParamList, 'EditModo'>;
 type Modos = Record<string, Record<string, unknown>>;
-type Valor = number | boolean | number[] | string;
-type Tipo = 'bool' | 'cap' | 'range' | 'text' | 'opcao';
+type Valor = number | boolean | number[] | string | string[];
+type Tipo = 'bool' | 'cap' | 'range' | 'text' | 'opcao' | 'lista';
 
 // ── categorias (ordem de exibição) ──────────────────────────────────────────
 const CATS: { key: string; titulo: string }[] = [
@@ -31,6 +31,7 @@ const CATS: { key: string; titulo: string }[] = [
 // tipo 'range' → toggle; ligado abre "de X até Y"; desligado = [0,0] (sem)
 // tipo 'bool'  → só o interruptor
 // tipo 'opcao' → escolhe UMA das `opcoes` (chips); sempre tem valor (sem toggle)
+// tipo 'lista' → vários textos (ex: as mensagens do DM); vazio = o padrão do bot (sem toggle)
 type Opcao = { valor: string; label: string };
 type MetaF = { label: string; cat: string; tipo: Tipo; sug?: Valor; dica?: string; opcoes?: Opcao[] };
 const META: Record<string, MetaF> = {
@@ -101,6 +102,72 @@ const META: Record<string, MetaF> = {
     dica: 'Link opcional (sticker). Exige conta elegível a link no story.' },
 };
 
+// ── campos dos modos reformulados pro EMULADOR (20/10/2026) ──
+const META_EMULADOR: Record<string, MetaF> = {
+  // auto follow
+  limite_follows_conta: { label: 'Máx. follows por conta', cat: 'limites', tipo: 'cap', sug: 80,
+    dica: 'Teto em cada conta. Desligado = segue até o Instagram dar soft-block (~73 a 85 por conta).' },
+  max_posts_conta: { label: 'Máx. posts por conta', cat: 'limites', tipo: 'cap', sug: 3,
+    dica: 'Quantos posts do chat cada conta processa. Desligado = até acabar ou bater o teto.' },
+  teto_follows_lote: { label: 'Teto de follows do lote', cat: 'limites', tipo: 'cap', sug: 400,
+    dica: 'Soma de todas as contas do lote. ~420 follows em pouco tempo já travou o aparelho.' },
+  parar_lote_apos_softblocks: { label: 'Parar o lote após N soft-blocks', cat: 'limites', tipo: 'cap', sug: 2,
+    dica: 'N contas seguidas em soft-block (a última sem nenhum follow) = provável limite do aparelho: para o lote.' },
+  cooldown_softblock_h: { label: 'Descanso após soft-block (h)', cat: 'limites', tipo: 'cap', sug: 12,
+    dica: 'A conta que tomou soft-block fica de fora do lote por essas horas (só tempo cura o teto).' },
+  pausa_entre_contas: { label: 'Pausa entre contas (s)', cat: 'ritmo', tipo: 'range', sug: [90, 240],
+    dica: 'Respiro entre uma conta e outra no lote — espalha a carga do aparelho.' },
+  // dm followers
+  max_dms_por_conta: { label: 'Máx. DMs por conta', cat: 'limites', tipo: 'cap', sug: 10,
+    dica: 'Por run, contando só DM que saiu (pulado não gasta).' },
+  primeira_vez_n: { label: 'Na 1ª vez, só os N mais recentes', cat: 'alvo', tipo: 'cap', sug: 20,
+    dica: 'Na primeira run de uma conta, manda só pros N que seguiram mais recentemente; o resto fica sem DM.' },
+  idade_max_dias: { label: 'Seguiu há no máximo (dias)', cat: 'alvo', tipo: 'cap', sug: 7,
+    dica: 'Quem seguiu há mais tempo que isso não recebe (agradecer 3 semanas depois fica estranho).' },
+  ordem: { label: 'Ordem', cat: 'alvo', tipo: 'opcao', sug: 'recentes',
+    opcoes: [{ valor: 'recentes', label: 'Recentes primeiro' }, { valor: 'antigos', label: 'Antigos primeiro' }] },
+  mensagens: { label: 'Mensagens', cat: 'alvo', tipo: 'lista',
+    dica: 'Vazio = as 5 padrão (com o desconto de 10%). {username} vira o @ da pessoa. Toda mensagem tem que ter @brechoquasenadaa — sem ela o bot não reconhece quem já recebeu.' },
+  pausa_humana_cada: { label: 'Navegar no feed a cada N pessoas', cat: 'ritmo', tipo: 'cap', sug: 6,
+    dica: 'De vez em quando sai, rola o feed e volta — quebra o padrão de rajada.' },
+  resfriar_conta_h: { label: 'Descanso após falha (h)', cat: 'limites', tipo: 'cap', sug: 24,
+    dica: 'Depois de "Falha ao enviar", soft-block ou bloqueio, a conta fica de fora por essas horas.' },
+  // story repost
+  fundo: { label: 'Fundo', cat: 'alvo', tipo: 'opcao', sug: 'laranja',
+    opcoes: [{ valor: 'laranja', label: 'Laranja do brechó' }, { valor: 'instagram', label: 'Do Instagram' }],
+    dica: 'Laranja: pinta com o conta-gotas. Do Instagram: o fundo que o IG gera pro post — bem mais rápido.' },
+  chamada: { label: 'Chamada embaixo do card', cat: 'alvo', tipo: 'text', sug: '',
+    dica: 'Vira maiúsculas, até 3 linhas. Vazio = COMENTE “FILA” PARA GARANTIR A SUA!' },
+  pausa_story: { label: 'Pausa entre stories (s)', cat: 'ritmo', tipo: 'range', sug: [3, 8] },
+  tentativas_por_peca: { label: 'Tentativas por peça', cat: 'outros', tipo: 'cap', sug: 2,
+    dica: 'Se a conferência barrar o story, tenta a mesma peça de novo até N vezes.' },
+  manter_ligado: { label: 'Deixar o emulador ligado no fim', cat: 'outros', tipo: 'bool',
+    dica: 'Pra rodar de novo em seguida sem esperar ligar (gasta memória do PC enquanto isso).' },
+};
+Object.assign(META, META_EMULADOR);
+
+// o mesmo campo muda de sentido/sugestão conforme o bot
+const META_BOT: Record<string, Record<string, Partial<MetaF>>> = {
+  'auto-follow': {
+    delay_follow: { sug: [2, 5] },
+    pausa_longa_cada: { label: 'Pausa longa a cada N follows', sug: 15 },
+    pausa_longa: { sug: [30, 90] },
+    delay_post: { sug: [120, 300] },
+  },
+  'dm-followers': {
+    max_dms_hora: { dica: 'Contado pelas DMs que já saíram na última hora (o IG limita DM).' },
+    max_dms_dia: { dica: 'Contado pelas DMs das últimas 24h.' },
+    delay_dm: { sug: [20, 60] },
+    pausa_longa_cada: { label: 'Pausa longa a cada N DMs enviadas', sug: 5 },
+    pausa_longa: { sug: [180, 420] },
+  },
+  'story-brecho': {
+    quantos_posts: { label: 'Stories por run', dica: 'Quantas peças postar no story a cada run.' },
+    mostrar_preco: { dica: 'A etiqueta com o preço e o tamanho no canto do card.' },
+    video_intro: { dica: 'Antes das peças, posta o vídeo "confiram as peças disponíveis no destaque". Feito pro brechó; nas outras contas deixa desligado.' },
+  },
+};
+
 // campos ESCONDIDOS do editor (o bot já cuida deles; não faz sentido mexer)
 const OCULTOS = new Set([
   'pular_ja_seguidos', 'pular_pendentes', 'seguir_privados', 'start_from_oldest_se_vazio',
@@ -108,24 +175,26 @@ const OCULTOS = new Set([
 
 // valores dos ocultos gravados SEMPRE (garante o comportamento certo sem depender do worker):
 // seguir privados LIGADO por padrão, pula quem já seguiu/pediu, e não age sozinho se vazio.
-const OCULTOS_DEFAULT: Record<string, Record<string, Valor>> = {
-  'auto-follow': {
-    pular_ja_seguidos: true, pular_pendentes: true, seguir_privados: true,
-    start_from_oldest_se_vazio: false,
-  },
-  'dm-followers': {},
-};
+const OCULTOS_DEFAULT: Record<string, Record<string, Valor>> = {};
+
+// bots com o esquema NOVO (emulador): ao editar, a tela mostra exatamente estes campos (os antigos
+// que não fazem mais sentido somem ao salvar)
+const ESQUEMA_NOVO = new Set(['auto-follow', 'dm-followers', 'story-brecho']);
 
 // campos de um modo NOVO (zerado), por bot — a fonte da verdade quando não há template
 const CAMPOS_NOVO: Record<string, string[]> = {
   'auto-follow': [
-    'aplicar_caps', 'max_follows_dia', 'max_follows_hora', 'max_posts_por_run',
-    'limite_follows_run', 'limite_interacoes_run', 'pausa_longa_cada', 'delay_follow', 'delay_post', 'delay_acao_ui',
-    'pausa_longa', 'usar_delay_entre_chats', 'delay_entre_chats', 'humanizar', 'pausa_cada', 'active_hours',
+    'limite_follows_conta', 'max_posts_conta', 'teto_follows_lote', 'parar_lote_apos_softblocks',
+    'cooldown_softblock_h', 'delay_follow', 'pausa_longa_cada', 'pausa_longa', 'delay_post', 'pausa_entre_contas',
   ],
   'dm-followers': [
-    'aplicar_caps', 'max_dms_dia', 'max_dms_hora', 'max_dms_por_run', 'pausa_longa_cada',
-    'delay_dm', 'delay_acao_ui', 'pausa_longa', 'humanizar', 'pausa_cada', 'active_hours',
+    'primeira_vez_n', 'idade_max_dias', 'ordem', 'mensagens', 'max_dms_por_conta', 'max_dms_hora',
+    'max_dms_dia', 'resfriar_conta_h', 'delay_dm', 'delay_acao_ui', 'pausa_longa_cada', 'pausa_longa',
+    'pausa_humana_cada', 'pausa_entre_contas',
+  ],
+  'story-brecho': [
+    'quantos_posts', 'video_intro', 'fundo', 'mostrar_preco', 'chamada', 'pausa_story', 'tentativas_por_peca',
+    'manter_ligado',
   ],
   'human-warmup': [
     'aplicar_caps', 'duracao_min', 'max_curtidas', 'prob_curtir', 'ver_stories', 'max_stories',
@@ -141,21 +210,24 @@ const CAMPOS_NOVO: Record<string, string[]> = {
   ],
 };
 
-function metaDe(k: string, v: unknown): MetaF {
-  if (META[k]) return META[k];
+function metaDe(k: string, v: unknown, botId?: string): MetaF {
+  const extra = botId ? META_BOT[botId]?.[k] : undefined;
+  if (META[k]) return extra ? { ...META[k], ...extra } : META[k];
   const tipo: Tipo = typeof v === 'boolean' ? 'bool' : typeof v === 'string' ? 'text'
     : Array.isArray(v) ? 'range' : 'cap';
   return { label: k, cat: 'outros', tipo };
 }
 
 const zerado = (tipo: Tipo): Valor =>
-  (tipo === 'bool' ? false : tipo === 'text' || tipo === 'opcao' ? '' : tipo === 'range' ? [0, 0] : 0);
+  (tipo === 'bool' ? false : tipo === 'text' || tipo === 'opcao' ? '' : tipo === 'range' ? [0, 0]
+    : tipo === 'lista' ? [] : 0);
 
-// tipos que guardam STRING (não têm toggle: o valor é editado direto)
-const ehString = (tipo: Tipo) => tipo === 'text' || tipo === 'opcao';
+// tipos SEM toggle (o valor é editado direto): textos, opção e lista
+const ehString = (tipo: Tipo) => tipo === 'text' || tipo === 'opcao' || tipo === 'lista';
 
 function temValor(tipo: Tipo, v: Valor): boolean {
   if (tipo === 'bool') return Boolean(v);
+  if (tipo === 'lista') return Array.isArray(v) && v.length > 0;
   if (ehString(tipo)) return Boolean(String(v ?? '').trim());
   if (tipo === 'range') { const a = v as number[]; return (a?.[0] || 0) > 0 || (a?.[1] || 0) > 0; }
   return (v as number) > 0;
@@ -185,20 +257,21 @@ export function EditModoScreen() {
         // modo que ainda não foi salvo (o "padrão" virtual) usa o template completo — senão
         // a tela vinha VAZIA (Object.keys de um modo inexistente = [], sem campos pra configurar).
         const usarTemplate = criar || !existente;
-        const campos = usarTemplate
+        // esquema novo (emulador): sempre os campos atuais do bot, mesmo editando um modo antigo
+        const campos = usarTemplate || ESQUEMA_NOVO.has(botId)
           ? (CAMPOS_NOVO[botId] ?? Object.keys(Object.values(m)[0] ?? {}))
           : Object.keys(existente);
         const base: Record<string, Valor> = {};
         const on = new Set<string>();
         const passa: Record<string, unknown> = {};
         campos.filter((k) => !OCULTOS.has(k)).forEach((k) => {
-          const orig = existente?.[k];
-          const meta = metaDe(k, orig);
+          const orig = criar ? undefined : existente?.[k];
+          const meta = metaDe(k, orig, botId);
           // string SEM meta 'text' (não editável) → passthrough: preserva e não renderiza
           if (!usarTemplate && typeof orig === 'string' && !ehString(meta.tipo)) { passa[k] = orig; return; }
-          const v = usarTemplate
-            ? (ehString(meta.tipo) ? ((meta.sug as string) ?? '') : zerado(meta.tipo))
-            : (orig ?? (meta.tipo === 'opcao' ? (meta.sug as string) : zerado(meta.tipo)));
+          const v = usarTemplate || orig === undefined
+            ? (meta.tipo === 'lista' ? [] : ehString(meta.tipo) ? ((meta.sug as string) ?? '') : zerado(meta.tipo))
+            : orig;
           base[k] = v;
           if (!ehString(meta.tipo) && temValor(meta.tipo, v)) on.add(k);   // já vem ligado se tinha valor
         });
@@ -215,7 +288,7 @@ export function EditModoScreen() {
   function alternar(k: string, tipo: Tipo, on: boolean) {
     if (tipo === 'bool') { setCampo(k, on); return; }
     setLigados((prev) => { const n = new Set(prev); on ? n.add(k) : n.delete(k); return n; });
-    if (on && !temValor(tipo, modo[k])) setCampo(k, META[k]?.sug ?? (tipo === 'range' ? [1, 1] : 1));
+    if (on && !temValor(tipo, modo[k])) setCampo(k, metaDe(k, modo[k], botId).sug ?? (tipo === 'range' ? [1, 1] : 1));
   }
 
   // monta o modo final: campo ligado usa o valor; desligado vira 0 / [0,0]
@@ -224,8 +297,9 @@ export function EditModoScreen() {
       ...(OCULTOS_DEFAULT[botId] ?? {}), ...(passthrough as Record<string, Valor>),
     };
     Object.keys(modo).forEach((k) => {
-      const tipo = metaDe(k, modo[k]).tipo;
+      const tipo = metaDe(k, modo[k], botId).tipo;
       if (tipo === 'bool') out[k] = Boolean(modo[k]);
+      else if (tipo === 'lista') out[k] = ((modo[k] as string[]) ?? []).map((t) => String(t).trim()).filter(Boolean);
       else if (tipo === 'text') {
         // só a conta-alvo tira o "@" na frente; texto/link ficam como digitados
         const s = String(modo[k] ?? '').trim();
@@ -274,7 +348,7 @@ export function EditModoScreen() {
 
   const porCat = CATS.map((c) => ({
     ...c,
-    campos: Object.keys(modo).filter((k) => metaDe(k, modo[k]).cat === c.key),
+    campos: Object.keys(modo).filter((k) => metaDe(k, modo[k], botId).cat === c.key),
   })).filter((c) => c.campos.length > 0);
 
   return (
@@ -300,7 +374,7 @@ export function EditModoScreen() {
             <Card style={{ gap: 4 }}>
               <Text style={styles.secaoTitulo}>{c.titulo}</Text>
               {c.campos.map((k) => {
-                const meta = metaDe(k, modo[k]);
+                const meta = metaDe(k, modo[k], botId);
                 const on = meta.tipo === 'bool' ? Boolean(modo[k]) : ligados.has(k);
                 return (
                   <Campo key={k} meta={meta} valor={modo[k]} on={on}
@@ -359,6 +433,25 @@ function Campo({ meta, valor, on, onToggle, onChange }: {
           })}
         </View>
       )}
+      {meta.tipo === 'lista' && (
+        <View style={{ gap: 8, marginTop: 8 }}>
+          {((valor as string[]) ?? []).map((t, i) => (
+            <View key={i} style={styles.listaLinha}>
+              <TextInput style={[styles.input, styles.listaInput]} multiline autoCapitalize="none"
+                placeholder="oii {username}! ... @brechoquasenadaa ..." placeholderTextColor={colors.textoFraco}
+                value={t}
+                onChangeText={(novo) => onChange(((valor as string[]) ?? []).map((x, j) => (j === i ? novo : x)))} />
+              <TouchableOpacity hitSlop={8} style={styles.listaRemover}
+                onPress={() => onChange(((valor as string[]) ?? []).filter((_x, j) => j !== i))}>
+                <Text style={styles.listaRemoverTxt}>remover</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+          <TouchableOpacity hitSlop={6} onPress={() => onChange([...((valor as string[]) ?? []), ''])}>
+            <Text style={styles.listaAdd}>+ adicionar mensagem</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       {meta.tipo === 'cap' && on && (
         <Animated.View entering={FadeInDown.duration(200)} exiting={FadeOutUp.duration(160)}>
           <TextInput style={styles.input} keyboardType="numeric" placeholder="0"
@@ -401,4 +494,10 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: colors.laranja, borderColor: colors.laranja },
   chipTxt: { color: colors.texto },
   chipTxtOn: { color: '#0F0F0F', fontWeight: '700' },
+  // tipo lista (mensagens do DM)
+  listaLinha: { gap: 4 },
+  listaInput: { marginTop: 0, minHeight: 64, textAlignVertical: 'top' },
+  listaRemover: { alignSelf: 'flex-end' },
+  listaRemoverTxt: { color: colors.erro, fontSize: 12, fontWeight: '700' },
+  listaAdd: { color: colors.marca, fontSize: 13, fontWeight: '700' },
 });

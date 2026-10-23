@@ -123,6 +123,56 @@ def _gravar_json(bot_id, nome, data):
     f.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+# Modos padrão dos bots do EMULADOR (20/10/2026 — reformulados pro bot que navega no app real).
+# Semeiam o perfis.json quando ele não existe; o agente do PC usa os mesmos valores como default.
+MODOS_PADRAO_EMULADOR = {
+    "auto-follow": {
+        "padrão": {"limite_follows_conta": 80, "max_posts_conta": 0, "delay_follow": [2, 5],
+                   "pausa_longa_cada": 15, "pausa_longa": [30, 90], "delay_post": [120, 300],
+                   "pausa_entre_contas": [90, 240], "teto_follows_lote": 0,
+                   "parar_lote_apos_softblocks": 2, "cooldown_softblock_h": 12},
+        "calmo": {"limite_follows_conta": 40, "max_posts_conta": 3, "delay_follow": [5, 12],
+                  "pausa_longa_cada": 10, "pausa_longa": [60, 180], "delay_post": [240, 480],
+                  "pausa_entre_contas": [300, 600], "teto_follows_lote": 250,
+                  "parar_lote_apos_softblocks": 1, "cooldown_softblock_h": 24},
+        "agressivo": {"limite_follows_conta": 0, "max_posts_conta": 0, "delay_follow": [1, 3],
+                      "pausa_longa_cada": 0, "pausa_longa": [0, 0], "delay_post": [60, 150],
+                      "pausa_entre_contas": [0, 0], "teto_follows_lote": 0,
+                      "parar_lote_apos_softblocks": 2, "cooldown_softblock_h": 6},
+    },
+    "dm-followers": {
+        "seguro": {"max_dms_por_conta": 6, "max_dms_hora": 6, "max_dms_dia": 15, "primeira_vez_n": 10,
+                   "idade_max_dias": 3, "ordem": "recentes", "delay_dm": [40, 90], "delay_acao_ui": [1.5, 4],
+                   "pausa_longa_cada": 3, "pausa_longa": [300, 600], "pausa_humana_cada": 4,
+                   "pausa_entre_contas": [180, 420], "resfriar_conta_h": 48, "mensagens": []},
+        "padrão": {"max_dms_por_conta": 10, "max_dms_hora": 10, "max_dms_dia": 30, "primeira_vez_n": 20,
+                   "idade_max_dias": 7, "ordem": "recentes", "delay_dm": [20, 60], "delay_acao_ui": [1.5, 4],
+                   "pausa_longa_cada": 5, "pausa_longa": [180, 420], "pausa_humana_cada": 6,
+                   "pausa_entre_contas": [90, 240], "resfriar_conta_h": 24, "mensagens": []},
+        "manutenção": {"max_dms_por_conta": 15, "max_dms_hora": 12, "max_dms_dia": 40, "primeira_vez_n": 20,
+                       "idade_max_dias": 2, "ordem": "recentes", "delay_dm": [10, 30], "delay_acao_ui": [1.5, 4],
+                       "pausa_longa_cada": 8, "pausa_longa": [120, 300], "pausa_humana_cada": 8,
+                       "pausa_entre_contas": [60, 150], "resfriar_conta_h": 24, "mensagens": []},
+    },
+    # video_intro: abre com o vídeo "confiram as peças disponíveis no destaque" antes das peças
+    # (o do brechó usa; as segue não) — 20/10/2026
+    "story-brecho": {
+        "brechó com abertura": {"quantos_posts": 10, "fundo": "laranja", "mostrar_preco": True,
+                                "chamada": "", "video_intro": True, "pausa_story": [3, 8],
+                                "tentativas_por_peca": 2, "manter_ligado": False},
+        "10 stories": {"quantos_posts": 10, "fundo": "laranja", "mostrar_preco": True, "chamada": "",
+                       "video_intro": False, "pausa_story": [3, 8], "tentativas_por_peca": 2,
+                       "manter_ligado": False},
+        "5 stories": {"quantos_posts": 5, "fundo": "laranja", "mostrar_preco": True, "chamada": "",
+                      "video_intro": False, "pausa_story": [3, 8], "tentativas_por_peca": 2,
+                      "manter_ligado": False},
+        "rápido": {"quantos_posts": 5, "fundo": "instagram", "mostrar_preco": True, "chamada": "",
+                   "video_intro": False, "pausa_story": [0, 0], "tentativas_por_peca": 1,
+                   "manter_ligado": False},
+    },
+}
+
+
 def _seed_modos(bot_id):
     """Modos default do worker (padrao/agressivo/calmo). Reusa o `_default_perfis` do próprio
     worker (sem rodá-lo) pra não duplicar valores nem sair do sincronismo."""

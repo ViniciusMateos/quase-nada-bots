@@ -183,8 +183,10 @@ MODOS_PADRAO_EMULADOR = {
 
 
 def _seed_modos(bot_id):
-    """Modos default do worker (padrao/agressivo/calmo). Reusa o `_default_perfis` do próprio
-    worker (sem rodá-lo) pra não duplicar valores nem sair do sincronismo."""
+    """Modos default. Bot do emulador → MODOS_PADRAO_EMULADOR; worker antigo → `_default_perfis`
+    do próprio worker (sem rodá-lo) pra não duplicar valores nem sair do sincronismo."""
+    if bot_id in MODOS_PADRAO_EMULADOR:
+        return json.loads(json.dumps(MODOS_PADRAO_EMULADOR[bot_id]))
     try:
         import importlib.util
         spec = importlib.util.spec_from_file_location(

@@ -10,6 +10,7 @@ import { garantirLA } from '@/lib/la';
 import { colors } from '@/theme';
 import { Aparece, Botao, Card, CartaoTocavel } from '@/ui/components';
 import { SeletorConta } from '@/ui/SeletorConta';
+import { SeletorContas } from '@/ui/SeletorContas';
 import { MenuContexto } from '@/ui/MenuContexto';
 import { TecladoView } from '@/ui/TecladoView';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
@@ -18,6 +19,35 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Rt = RouteProp<RootStackParamList, 'Bot'>;
 
 // cor do pontinho de resultado da run (verde ok / vermelho erro-bloqueio / cinza parado)
+// conta da loja: no Story Repost ela roda no emulador próprio dela e tem um campo só dela na tela
+const CONTA_BRECHO = 'brechoquasenadaa';
+
+// ordem padrão do lote: tudo marcado, da menor pra maior (segue2 antes de segue10); no Story, o
+// brechó entra no fim
+function ordemPadrao(contas: string[], comBrecho: boolean): string[] {
+  return comBrecho ? [...contas, CONTA_BRECHO] : [...contas];
+}
+
+// Em qual emulador cada conta do Story roda: o brechó tem a instância própria; as outras dividem a
+// das segue. Runs em emuladores DIFERENTES rodam ao mesmo tempo (mesma regra do backend).
+type Emu = 'brecho' | 'principal';
+function emuladoresDe(contas: string[]): Set<Emu> {
+  if (!contas.length) return new Set<Emu>(['brecho']);   // story sem lista = só o brechó
+  return new Set<Emu>(contas.map((c) => (c.toLowerCase() === CONTA_BRECHO ? 'brecho' : 'principal')));
+}
+function contasDaRun(r: RunInfo): string[] {
+  const p = (r.params ?? {}) as { lote_contas?: unknown[]; contas?: unknown[] };
+  return (p.lote_contas ?? p.contas ?? [])
+    .map((c) => (typeof c === 'string' ? c : String((c as { label?: string; id?: string })?.label
+      ?? (c as { id?: string })?.id ?? '')))
+    .map((c) => c.replace(/^@/, '').trim().toLowerCase())
+    .filter(Boolean);
+}
+function cruza(a: Set<Emu>, b: Set<Emu>): boolean {
+  for (const x of a) if (b.has(x)) return true;
+  return false;
+}
+
 function corRun(r: RunHistorico): string {
   if (r.bloqueio || r.status === 'erro') return colors.erro;
   if (r.status === 'parado') return colors.textoFraco;
@@ -36,6 +66,8 @@ export function BotScreen() {
   const [postInicial, setPostInicial] = useState('');      // like-repost: fronteira opcional (1ª vez)
   const [iniciando, setIniciando] = useState(false);
   const [runAtiva, setRunAtiva] = useState<RunInfo | null>(null);
+  // TODAS as runs ativas deste bot (o Story pode ter duas: brechó + segue, cada uma no seu emulador)
+  const [runsAtivas, setRunsAtivas] = useState<RunInfo[]>([]);
   // conta ativa (a que o run normal usa) + popup pra trocar
   const [contaAtiva, setContaAtiva] = useState<Account | null>(null);
   const [abrirSeletor, setAbrirSeletor] = useState(false);
@@ -51,16 +83,17 @@ export function BotScreen() {
   const [grupoSel, setGrupoSel] = useState<string | null>(null);
   // ── pool vitrine (emulador / story-repost): lista de USERNAMES (não ids do accounts.json) ──
   const [vitrineContas, setVitrineContas] = useState<string[] | null>(null);
-  const [vitrineSel, setVitrineSel] = useState<Set<string>>(new Set());
+  // ORDEM de execução do lote (a ordem em que as contas foram marcadas — carrossel do IG)
+  const [ordem, setOrdem] = useState<string[]>([]);
   const [verVitrine, setVerVitrine] = useState(false);
 
   const temChats = botId === 'auto-follow';
   const temPostInicial = botId === 'like-repost';
   const temLote = botId === 'like-repost' || botId === 'story-repost';   // lote por COOKIE (accounts.json)
-  // Bots do EMULADOR usam o pool de contas logadas no device (por username): auto-follow e, desde
-  // 19/10, o DM (roda em toques no emulador). O story-repost segue como bot de cookie (Servidor).
-  const ehVitrine = botId === 'auto-follow' || botId === 'dm-followers';
-  // story do BRECHÓ: roda sempre na conta do brechó, no emulador SÓ dela (o agente liga, posta e desliga)
+  // Bots do EMULADOR: lote pelas contas logadas no device (por username), uma de cada vez, numa run
+  // só, na ORDEM da seleção (20/10/2026: todos os bots com a mesma estrutura).
+  const ehVitrine = botId === 'auto-follow' || botId === 'dm-followers' || botId === 'story-brecho';
+  // Story Repost: além das segue, a conta do BRECHÓ (roda no emulador próprio dela) entra na mesma ordem
   const ehStoryBrecho = botId === 'story-brecho';
   const fonteVitrine: 'emulador' | 'story' = 'emulador';
   const precisaChat = temChats && chats.length === 0;
@@ -68,9 +101,11 @@ export function BotScreen() {
   // checagem leve (só as runs) — usada no polling pra atualizar o botão ao vivo
   const checarRun = useCallback(() => {
     api.listRuns().then((rs) => {
-      const a = rs.find((r) => r.bot === botId && ['rodando', 'iniciando'].includes(r.status)
-        && !(r.params as { import_cookies?: unknown })?.import_cookies) ?? null;
+      const ativas = rs.filter((r) => r.bot === botId && ['rodando', 'iniciando'].includes(r.status)
+        && !(r.params as { import_cookies?: unknown })?.import_cookies);
+      const a = ativas[0] ?? null;
       setRunAtiva(a);
+      setRunsAtivas(ativas);
       if (!a) setIniciando(false);   // sem run ativa → destrava o botão (fim do spinner infinito)
     }).catch(() => {});
   }, [botId]);
@@ -100,12 +135,23 @@ export function BotScreen() {
         }
       }
       else us = (await api.storyContas(force)).map((c) => c.username);
-      us = [...new Set(us)].sort(cmpTexto);
+      us = [...new Set(us)].filter((u) => u.toLowerCase() !== CONTA_BRECHO).sort(cmpTexto);
       vitrineCheioRef.current = us.length > 0;
       setVitrineContas(us);
-      setVitrineSel(new Set(us));
+      let padrao = ordemPadrao(us, ehStoryBrecho);   // padrão: tudo marcado, da menor pra maior
+      if (ehStoryBrecho) {
+        // Story já rodando num emulador → o padrão marca só as contas do OUTRO (ex: o brechó está
+        // postando → volta com as segue marcadas, prontas pra rodar junto com outro modo)
+        const rs = await api.listRuns().catch(() => [] as RunInfo[]);
+        const ocup = new Set<Emu>();
+        rs.filter((r) => r.bot === botId && ['rodando', 'iniciando'].includes(r.status))
+          .forEach((r) => emuladoresDe(contasDaRun(r)).forEach((e) => ocup.add(e)));
+        const livres = padrao.filter((u) => !ocup.has(u === CONTA_BRECHO ? 'brecho' : 'principal'));
+        if (ocup.size && livres.length) padrao = livres;
+      }
+      setOrdem(padrao);
     } catch { setVitrineContas([]); vitrineCheioRef.current = false; } finally { setVerVitrine(false); }
-  }, [fonteVitrine]);
+  }, [fonteVitrine, ehStoryBrecho, botId]);
 
   const carregar = useCallback(() => {
     api.getModos(botId).then((m) => setModos(Object.keys(m).sort(cmpTexto))).catch(() => {});
@@ -189,9 +235,6 @@ export function BotScreen() {
     setSelec((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
 
-  function toggleVitrine(u: string) {
-    setVitrineSel((prev) => { const n = new Set(prev); n.has(u) ? n.delete(u) : n.add(u); return n; });
-  }
 
   // escolhe um grupo (ou "todas" = null): marca só as contas vivas dele
   function escolherGrupo(nome: string | null) {
@@ -202,15 +245,23 @@ export function BotScreen() {
     setSelec(new Set(vivas.map((a) => a.id as string)));
   }
 
+  // o que impede de rodar agora: nos outros bots, qualquer run ativa; no Story, só uma run no MESMO
+  // emulador da seleção (brechó e segue rodam juntos)
+  const emusSel = emuladoresDe(ordem);
+  const bloqueio: RunInfo | null = ehStoryBrecho
+    ? (runsAtivas.find((r) => cruza(emuladoresDe(contasDaRun(r)), emusSel)) ?? null)
+    : runAtiva;
+  const rodandoAoLado = ehStoryBrecho && !bloqueio ? runsAtivas : [];
+
   function rodar(dry: boolean) {
-    if (runAtiva) return;
+    if (bloqueio) return;
     if (!modo) {   // precisa de um modo selecionado — vale pro Rodar E pro dry-run
       Alert.alert('Escolha um modo',
         modos.length ? 'Toque num modo antes de rodar.' : 'Crie um modo pra poder rodar.');
       return;
     }
-    if (ehVitrine) {   // emulador / story-repost: roda por username, em fila (via run-lote)
-      const us = [...vitrineSel];
+    if (ehVitrine) {   // emulador: roda por username, uma de cada vez, NA ORDEM da seleção (run-lote)
+      const us = [...ordem];
       if (!us.length) { Alert.alert('Escolha as contas', 'Marque ao menos uma conta pra rodar.'); return; }
       iniciarLote(dry, us);
       return;
@@ -242,7 +293,9 @@ export function BotScreen() {
       }
     } catch (e) {
       if ((e as { response?: { status?: number } })?.response?.status === 409) {
-        Alert.alert('Já está rodando', 'Esse bot já tem execução em andamento. Espera terminar.');
+        Alert.alert('Já está rodando', ehStoryBrecho
+          ? 'Já tem story rodando nesse emulador. Espera terminar, ou rode as contas do outro emulador (brechó / segue).'
+          : 'Esse bot já tem execução em andamento. Espera terminar.');
       } else if ((e as { response?: { status?: number } })?.response?.status === 400) {
         Alert.alert('Sem contas ativas', 'Nenhuma das contas escolhidas tem sessão viva. Atualiza a lista.');
       } else {
@@ -333,18 +386,28 @@ export function BotScreen() {
           </TouchableOpacity>
         </View>
         <View style={{ marginTop: 12 }}>
-          <Text style={styles.loteSubTxt}>
-            {verVitrine ? 'carregando…' : `${vitrineSel.size}/${(vitrineContas ?? []).length} selecionadas`}
-          </Text>
-          {(vitrineContas ?? []).map((u) => {
-            const on = vitrineSel.has(u);
-            return (
-              <TouchableOpacity key={u} style={styles.contaRow} onPress={() => toggleVitrine(u)}>
-                <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20} color={on ? colors.marca : colors.textoFraco} />
-                <Text style={styles.contaRowTxt} numberOfLines={1}>@{u}</Text>
+          <View style={styles.selecaoHead}>
+            <Text style={styles.loteSubTxt}>
+              {verVitrine ? 'carregando…'
+                : `${ordem.filter((u) => (vitrineContas ?? []).includes(u)).length}/${(vitrineContas ?? []).length} selecionadas`}
+            </Text>
+            <View style={styles.selecaoAcoes}>
+              <TouchableOpacity hitSlop={8} onPress={() => setOrdem([])}>
+                <Text style={styles.linkTxt}>limpar</Text>
               </TouchableOpacity>
-            );
-          })}
+              <TouchableOpacity hitSlop={8} onPress={() => setOrdem((atual) => {
+                // "todas" COMPLETA a seleção: as já marcadas mantêm a vez (e o número); as que faltam
+                // entram depois, da menor pra maior
+                const padrao = ordemPadrao(vitrineContas ?? [], ehStoryBrecho);
+                const ja = atual.filter((u) => padrao.includes(u));
+                return [...ja, ...padrao.filter((u) => !ja.includes(u))];
+              })}>
+                <Text style={styles.linkTxt}>todas</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          <Text style={styles.loteDica}>O número é a vez de cada conta — segue a ordem em que você marca.</Text>
+          <SeletorContas contas={vitrineContas ?? []} ordem={ordem} onChange={setOrdem} />
           {vitrineContas !== null && vitrineContas.length === 0 && !verVitrine && (
             <Text style={styles.loteDica}>
               Nenhuma conta logada ainda. Adicione em Contas e toque em "verificar" — o agente loga sozinho.
@@ -353,33 +416,61 @@ export function BotScreen() {
         </View>
       </Card>
       </Aparece>
-      ) : (
+      ) : null}
+      {ehStoryBrecho ? (
+      <Aparece delay={20}>
+      <Card>
+        <Text style={styles.label}>Conta do brechó</Text>
+        <Text style={styles.loteDica}>
+          Roda no emulador próprio dela (liga só na hora). Entra na mesma ordem das outras; sem nenhuma
+          outra marcada, roda sozinha.
+        </Text>
+        <View style={{ marginTop: 8 }}>
+          <SeletorContas contas={[CONTA_BRECHO]} ordem={ordem} onChange={setOrdem} />
+        </View>
+      </Card>
+      </Aparece>
+      ) : null}
+      {ehStoryBrecho ? (
+      <Aparece delay={30}>
+      <Card>
+        <View style={styles.infoHead}>
+          <Ionicons name="git-branch-outline" size={16} color={colors.marca} />
+          <Text style={styles.label}>Brechó e segue ao mesmo tempo</Text>
+        </View>
+        <Text style={styles.infoTxt}>
+          O brechó roda num emulador só dele, então dá pra rodar ele com um modo e as outras contas com
+          outro, juntos:
+        </Text>
+        <Text style={styles.infoPasso}>1. Marque só a conta do brechó, escolha o modo (ex: "brechó com abertura", que abre com o vídeo) e toque em Rodar.</Text>
+        <Text style={styles.infoPasso}>2. Volte aqui: as outras contas já vêm marcadas. Escolha o outro modo (sem vídeo) e rode também.</Text>
+        <Text style={styles.infoTxt}>
+          Marcando o brechó junto com as outras numa run só, roda tudo em sequência e com o mesmo modo.
+          O vídeo de abertura liga/desliga no modo ("Vídeo de abertura").
+        </Text>
+      </Card>
+      </Aparece>
+      ) : null}
+      {!ehVitrine ? (
       <Aparece>
       <Card>
         <View style={styles.contaAtivaRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>Conta</Text>
-            {ehStoryBrecho ? (
-              <>
-                <Text style={styles.contaAtivaNome} numberOfLines={1}>@brechoquasenadaa</Text>
-                <Text style={styles.contaAtivaVazia}>no emulador próprio dela — liga só na hora do story e desliga no fim</Text>
-              </>
-            ) : contaAtiva ? (
+            {contaAtiva ? (
               <Text style={styles.contaAtivaNome} numberOfLines={1}>@{contaAtiva.label}</Text>
             ) : (
               <Text style={styles.contaAtivaVazia}>nenhuma conta ativa</Text>
             )}
           </View>
-          {!ehStoryBrecho ? (
-            <TouchableOpacity onPress={() => setAbrirSeletor(true)} style={styles.trocarBtn} hitSlop={8}>
-              <Ionicons name="swap-horizontal" size={16} color={colors.marca} />
-              <Text style={styles.linkTxt}>trocar</Text>
-            </TouchableOpacity>
-          ) : null}
+          <TouchableOpacity onPress={() => setAbrirSeletor(true)} style={styles.trocarBtn} hitSlop={8}>
+            <Ionicons name="swap-horizontal" size={16} color={colors.marca} />
+            <Text style={styles.linkTxt}>trocar</Text>
+          </TouchableOpacity>
         </View>
       </Card>
       </Aparece>
-      )}
+      ) : null}
       <Aparece delay={40}>
       <Card>
         <Text style={styles.label}>Modo</Text>
@@ -551,20 +642,29 @@ export function BotScreen() {
       <View style={{ gap: 10 }}>
         {precisaChat ? (
           <Botao title="Configurar um chat primeiro" onPress={() => nav.navigate('Chats', { botId })} />
-        ) : runAtiva ? (
+        ) : bloqueio ? (
           <>
-            <Botao title="Já está rodando" disabled onPress={() => {}} />
+            <Botao title={ehStoryBrecho ? 'Já está rodando nesse emulador' : 'Já está rodando'} disabled onPress={() => {}} />
             <Botao title="Ver execução" cor={colors.card2} txtCor={colors.texto}
-              onPress={() => nav.navigate('Run', { runId: runAtiva.id, nome })} />
+              onPress={() => nav.navigate('Run', { runId: bloqueio.id, nome })} />
           </>
         ) : (
           <>
-            <Botao title={ehVitrine ? `Rodar em ${vitrineSel.size} conta${vitrineSel.size !== 1 ? 's' : ''}`
-                : ehStoryBrecho ? 'Postar no story do brechó'
+            {rodandoAoLado.map((r) => (
+              <TouchableOpacity key={r.id} onPress={() => nav.navigate('Run', { runId: r.id, nome })}
+                style={styles.aoLado} hitSlop={6}>
+                <Ionicons name="radio-button-on" size={12} color={colors.ok} />
+                <Text style={styles.aoLadoTxt} numberOfLines={1}>
+                  Rodando no emulador {emuladoresDe(contasDaRun(r)).has('brecho') ? 'do brechó' : 'das segue'} — pode rodar junto
+                </Text>
+                <Text style={styles.linkTxt}>ver</Text>
+              </TouchableOpacity>
+            ))}
+            <Botao title={ehVitrine ? `Rodar em ${ordem.length} conta${ordem.length !== 1 ? 's' : ''}`
                 : lote ? 'Rodar lote' : (contaAtiva ? `Rodar com @${contaAtiva.label}` : 'Rodar')}
               onPress={() => rodar(false)} loading={iniciando} />
-            <Botao title={ehVitrine || lote ? 'Simular' : 'Simular (dry-run)'} cor={colors.card2} txtCor={colors.texto}
-              onPress={() => rodar(true)} disabled={iniciando} />
+            {/* sem "Simular": no app real só dá pra saber se o follow/DM/story funciona fazendo de
+                verdade (20/10/2026) */}
           </>
         )}
       </View>
@@ -649,4 +749,11 @@ const styles = StyleSheet.create({
   contaRowOff: { opacity: 0.5 },   // conta sem sessão viva: travada, não dá pra marcar no lote
   contaRowTxt: { color: colors.texto, fontSize: 14, fontWeight: '600', flex: 1 },
   contaTag: { color: colors.ok, fontSize: 11, fontWeight: '700' },
+  infoHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  infoTxt: { color: colors.textoFraco, fontSize: 12, lineHeight: 17, marginTop: 6 },
+  infoPasso: { color: colors.texto, fontSize: 12, lineHeight: 17, marginTop: 6 },
+  aoLado: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4 },
+  aoLadoTxt: { color: colors.textoFraco, fontSize: 12, flex: 1 },
+  selecaoHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  selecaoAcoes: { flexDirection: 'row', alignItems: 'center', gap: 16 },
 });

@@ -381,11 +381,17 @@ async def start_run_lote(bot_id: str, payload: dict):
         de lá. Roda via story_poster.py (contas-vitrine por instagrapi), uma conta por vez.
     `params` = os mesmos de um run normal (modo, dry_run, start_from)."""
     _checar_bot(bot_id)
-    if any(r.bot == bot_id and r.status in ("rodando", "iniciando") and not r.params.get("import_cookies")
-           for r in mgr.runs.values()):
-        raise HTTPException(409, "esse bot já está rodando — espera terminar")
     base = payload.get("params", {}) or {}
     contas = payload.get("contas") or []
+    # mesmo bot rodando bloqueia — MENOS o Story Repost em emuladores diferentes (o do brechó roda
+    # na instância própria; dá pra rodar o brechó com um modo e as segue com outro ao mesmo tempo)
+    novas = mgr.instancias_do_job(bot_id, {"contas": contas})
+    for r in mgr.runs.values():
+        if r.bot != bot_id or r.status not in ("rodando", "iniciando") or r.params.get("import_cookies"):
+            continue
+        if bot_id == "story-brecho" and not (mgr.instancias_do_job(bot_id, r.params) & novas):
+            continue
+        raise HTTPException(409, "esse bot já está rodando nesse emulador — espera terminar")
     if bot_id == "story-repost":
         # story-repost: `contas` = USERNAMES das contas-vitrine; vazio → todas as de /story/contas
         if not contas:
@@ -597,10 +603,12 @@ async def contas_codigo(payload: dict):
 
 
 @app.get("/emulador/jobs", dependencies=[Depends(auth)])
-async def emulador_reivindicar_job():
-    """O agente reivindica o PRÓXIMO job pendente. {run_id, bot, conta:{label,id,…}, params}
-    ou {} se a fila está vazia. Ao entregar, a Run vira 'rodando' e o job 'em_execucao'."""
-    return await mgr.reivindicar_job()
+async def emulador_reivindicar_job(ocupadas: str = ""):
+    """O agente reivindica o PRÓXIMO job pendente. {run_id, bot, conta:{label,id,…}, params,
+    instancias} ou {} se a fila está vazia. Ao entregar, a Run vira 'rodando' e o job 'em_execucao'.
+    `ocupadas` = instâncias do emulador que o agente está usando agora (ex: "brecho") — só entrega
+    job que cabe nas livres (story do brechó roda junto com os bots das segue)."""
+    return await mgr.reivindicar_job({x for x in ocupadas.split(",") if x})
 
 
 @app.get("/emulador/jobs/{run_id}/parar", dependencies=[Depends(auth)])

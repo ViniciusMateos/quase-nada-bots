@@ -932,9 +932,30 @@ class RunManager:
             return None
         return codigo
 
-    async def reivindicar_job(self):
-        """O agente pega o PRÓXIMO job pendente (FIFO). Marca a Run 'rodando' e o job 'em_execucao'.
-        Devolve {run_id, bot, conta, params} — ou {} se a fila não tem nada pendente."""
+    @staticmethod
+    def instancias_do_job(bot, params):
+        """Em qual emulador o job roda: {"principal"} (as segue), {"brecho"} (a instância própria da
+        conta do brechó) ou as duas. Story/login só da conta do brechó = só a instância dela — aí
+        dá pra rodar AO MESMO TEMPO que um job das segue (20/10/2026)."""
+        p = params or {}
+        contas = [str(c.get("label") or c.get("id") or "") if isinstance(c, dict) else str(c)
+                  for c in (p.get("lote_contas") or p.get("contas") or [])]
+        contas = [c.strip().lstrip("@").lower() for c in contas if c]
+        brecho = "brechoquasenadaa"
+        if bot == "story-brecho" and not contas:
+            return {"brecho"}                  # story sem lista = só o brechó (o jeito antigo)
+        if bot == "story-brecho" or p.get("acao") == "login":
+            tem_b = brecho in contas
+            tem_o = any(c != brecho for c in contas)
+            return ({"brecho"} if tem_b else set()) | ({"principal"} if tem_o or not contas else set())
+        return {"principal"}
+
+    async def reivindicar_job(self, ocupadas=None):
+        """O agente pega o PRÓXIMO job pendente (FIFO) cujas instâncias estão LIVRES. Marca a Run
+        'rodando' e o job 'em_execucao'. `ocupadas` = instâncias que o agente está usando agora
+        (jobs dele rodando em paralelo, ex: o story do brechó). Devolve {run_id, bot, conta,
+        params, instancias} — ou {} se não tem nada que caiba agora."""
+        ocupadas = set(ocupadas or ())
         self._agente_visto = time.time()      # pedir job também conta como heartbeat
         agora = time.time()
         # AUTO-RECUPERA job PRESO: só há 1 agente e ele NÃO pede o próximo job enquanto roda um, então
@@ -942,8 +963,11 @@ class RunManager:
         # meio (ex: reinício do agente) e nunca finalizou. Sem isto a run fica "rodando/verificando"
         # pra SEMPRE e o /emulador/status trava em verificando_sessoes=true. Grace de 120s (ou sem a
         # marca `reivindicado_em` = job antigo) pra não cortar nada legítimo.
+        # (com o paralelo, só é órfão o job de instância que o agente diz estar LIVRE — o que roda
+        # na instância ocupada é legítimo e segue)
         for job in self._fila_emulador:
-            if job.get("estado") == "em_execucao" and (agora - (job.get("reivindicado_em") or 0)) > 120:
+            if (job.get("estado") == "em_execucao" and (agora - (job.get("reivindicado_em") or 0)) > 120
+                    and not (self.instancias_do_job(job.get("bot"), job.get("params")) & ocupadas)):
                 run = self.runs.get(job.get("run_id"))
                 if run and run.status not in ("finalizado", "erro", "parado"):
                     run.status = "erro"
@@ -963,6 +987,9 @@ class RunManager:
             if not run or run.status == "parado":   # run sumiu / foi parada antes de rodar → descarta
                 job["estado"] = "descartado"
                 continue
+            inst = self.instancias_do_job(job.get("bot"), job.get("params"))
+            if inst & ocupadas:
+                continue                            # o emulador dele está ocupado → espera a vez
             job["estado"] = "em_execucao"
             job["reivindicado_em"] = agora          # marca quando pegou (pro auto-recupera acima)
             if run.status == "iniciando":
@@ -970,7 +997,8 @@ class RunManager:
             # virou "rodando" → a LA reage na hora (igual bot do server quando entra em execução)
             asyncio.create_task(self.empurrar_la(forcar=True))
             return {"run_id": job["run_id"], "bot": job["bot"],
-                    "conta": job.get("conta") or {}, "params": job.get("params") or {}}
+                    "conta": job.get("conta") or {}, "params": job.get("params") or {},
+                    "instancias": sorted(inst)}
         return {}
 
     def job_parar(self, run_id):

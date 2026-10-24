@@ -22,11 +22,12 @@ progresso e o saldo. O app mostra tudo igual a antes (Rodando agora, log ao vivo
 |---|---|
 | `frontend/` | **App** React Native (Expo + TS) — o hub no iPhone (e na web). OTA pelo canal `preview`. |
 | `backend/` | **API** FastAPI — runs, fila de jobs do emulador, contas, histórico, push/LA. |
-| `painel-sessao/` | **App no navegador** em `http://quase-nada-bots.localhost` (local, sempre no ar: liga com o PC e volta se cair) e o **Criar Conta** automático do PC (Chromium + código do Gmail). |
+| `painel-sessao/` | **App no navegador** em `http://quase-nada-bots.localhost` (local, sempre no ar: liga com o PC e volta se cair) e o **helper de login do IG** (Chromium + Playwright). |
 | `workers/` | Workers antigos do servidor (Playwright/API), cada um com repo próprio — legado. A pasta `story-brecho-emulador/` guarda só os modos do Story Repost do emulador. |
 
 Os bots do emulador moram no repo **`quase-nada-bots-device`** (agente + supervisor) e cada um no
-seu repo: `auto-follow-emulador`, `dm-followers-emulador` e `story-repost-emulador`.
+seu repo: `auto-follow-emulador`, `dm-followers-emulador`, `story-repost-emulador` e
+`criar-conta-emulador`.
 
 ## Bots
 
@@ -39,13 +40,16 @@ seu repo: `auto-follow-emulador`, `dm-followers-emulador` e `story-repost-emulad
 - **Raspagem do brechó** (`brecho-scraper`, disparada pelo app do Brechó) — uma conta auxiliar lê
   o perfil público da loja no emulador e atualiza as peças (novas, preço, vendidas). Nunca usa a
   conta da loja; `GET /emulador/raspagem/prontidao` diz se dá pra raspar agora e quem está apta.
+- **Criar Conta** — cria uma conta nova do Instagram no app do emulador, preenchendo cada
+  passo (usuário, senha, nascimento, e-mail) e lendo o código de confirmação do Gmail; a
+  conta nasce logada no seletor multi-conta.
 
 Os bots rodam em **lote na ordem em que as contas foram marcadas**, e cada um tem **modos** feitos
 pro emulador (teto por conta e do lote, descanso depois de soft-block, pausa entre contas, limites
 de DM por hora/dia etc.), editáveis no app.
 
-O que ainda falta trazer do servidor: Aquecimento Humano (+ cronograma), Like + Repost, os extras
-do Story (apagar peça vendida, modo drop novo) e o Criar Conta pelo emulador.
+O que ainda falta trazer do servidor: Aquecimento Humano (+ cronograma), Like + Repost e os extras
+do Story (apagar peça vendida, modo drop novo).
 
 ## Contas
 

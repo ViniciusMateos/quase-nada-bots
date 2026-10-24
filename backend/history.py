@@ -36,6 +36,10 @@ def listar(bot=None, status=None, desde=None, ate=None, limite=1000):
     def ok(r):
         if bot and r.get("bot") != bot:
             return False
+        # filtro POR BOT: login/verificar do emulador gravam bot="auto-follow" (só o veículo do
+        # job) — não são runs do Auto Follow, então não entram na lista dele (23/10)
+        if bot and r.get("acao") in ("login", "verificar"):
+            return False
         if status and r.get("status") != status:
             return False
         t = r.get("ended_at") or r.get("started_at") or 0

@@ -25,7 +25,7 @@ import notify
 import perfil
 import settings
 import story_contas_svc
-from run_manager import RunManager
+from run_manager import RunManager, eh_processo_de_conta
 
 app = FastAPI(title="Quase Nada Bots — API", version="0.1.0")
 app.add_middleware(
@@ -359,9 +359,11 @@ async def start_run(payload: dict):
     bot_id = payload.get("bot")
     _checar_bot(bot_id)
     params = payload.get("params", {}) or {}
-    # não deixa DOIS do MESMO bot rodando junto (bots diferentes pode; conectar IG não conta)
+    # não deixa DOIS do MESMO bot rodando junto (bots diferentes pode; conectar IG não conta; nem
+    # login/verificar do emulador, que só usam o "auto-follow" como veículo — 23/10)
     if not params.get("import_cookies") and any(
         r.bot == bot_id and r.status in ("rodando", "iniciando") and not r.params.get("import_cookies")
+        and not eh_processo_de_conta(r.params)
         for r in mgr.runs.values()
     ):
         raise HTTPException(409, "esse bot já está rodando — espera terminar")
@@ -387,7 +389,8 @@ async def start_run_lote(bot_id: str, payload: dict):
     # na instância própria; dá pra rodar o brechó com um modo e as segue com outro ao mesmo tempo)
     novas = mgr.instancias_do_job(bot_id, {"contas": contas})
     for r in mgr.runs.values():
-        if r.bot != bot_id or r.status not in ("rodando", "iniciando") or r.params.get("import_cookies"):
+        if (r.bot != bot_id or r.status not in ("rodando", "iniciando") or r.params.get("import_cookies")
+                or eh_processo_de_conta(r.params)):   # login/verificar não são o Auto Follow
             continue
         if bot_id == "story-brecho" and not (mgr.instancias_do_job(bot_id, r.params) & novas):
             continue

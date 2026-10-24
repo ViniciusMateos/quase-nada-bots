@@ -15,6 +15,7 @@ import { colors } from '@/theme';
 import { Aparece, Botao, Card } from '@/ui/components';
 import { Esqueleto, EsqueletoLinha } from '@/ui/Esqueleto';
 import { useDogRefresh } from '@/ui/DogRefresh';
+import { nomeDoProcesso } from '@/lib/processo';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -68,9 +69,13 @@ function resultado(r: RunHistorico): { icon: keyof typeof Ionicons.glyphMap; lab
 // login/verificar do emulador usam o "auto-follow" como veículo — a AÇÃO é que diz o que foi
 // (senão aparecia "Auto Follow" no histórico). A chave separa no filtro também.
 const NOMES_ACAO: Record<string, string> = {
-  'acao:login': 'Reconectar no app',
+  'acao:login': 'Conectar contas',
   'acao:verificar': 'Verificar sessões',
 };
+// título da run no histórico: os logins antigos gravaram "Reconectar no app" → mostra o nome novo
+function tituloDe(r: RunHistorico, nomeDe: (k: string) => string): string {
+  return nomeDoProcesso(r.acao ?? null, r.titulo) ?? nomeDe(chaveRun(r));
+}
 function chaveRun(r: RunHistorico): string {
   return r.acao ? `acao:${r.acao}` : r.bot;
 }
@@ -292,11 +297,11 @@ export function HistoricoScreen() {
             {/* tocar no card abre o log daquele run (funciona pras runs que o server ainda
                 tem em memória; as importadas antigas mostram só o saldo). */}
             <TouchableOpacity activeOpacity={0.7} disabled={item.backfill}
-              onPress={() => nav.navigate('Run', { runId: item.id, nome: item.titulo ?? nomeDe(chaveRun(item)) })}>
+              onPress={() => nav.navigate('Run', { runId: item.id, nome: tituloDe(item, nomeDe) })}>
             <Card style={{ gap: 6 }}>
               <View style={styles.topoLinha}>
                 <Text style={styles.botNome}>
-                  {item.titulo ?? nomeDe(chaveRun(item))}{item.dry_run ? '  ·  simulação' : ''}
+                  {tituloDe(item, nomeDe)}{item.dry_run ? '  ·  simulação' : ''}
                 </Text>
                 <View style={[styles.badge, { borderColor: res.cor }]}>
                   <Ionicons name={res.icon} size={13} color={res.cor} />

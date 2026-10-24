@@ -68,6 +68,22 @@ def _limpar_locks_chromium(profile_dir):
             pass
 
 
+ACOES_DE_CONTA = ("login", "verificar")
+
+
+def eh_processo_de_conta(params):
+    """Login/verificar do emulador rodam com o bot "auto-follow" só como VEÍCULO do job — não são
+    o Auto Follow. Tudo que mostra/filtra por bot (trava de "já está rodando", ícone da LA, grupo
+    da notificação) tem que tratar esses à parte."""
+    return (params or {}).get("acao") in ACOES_DE_CONTA
+
+
+def bot_exibicao(bot_id, params):
+    """O `bot` que vai pra LA/notificação: "contas" pro login/verificar (o widget mostra o ícone
+    genérico, não o do Auto Follow), o bot de verdade pro resto."""
+    return "contas" if eh_processo_de_conta(params) else bot_id
+
+
 def _proc_info(bot_id, params):
     """Textos por TIPO de processo (rodar o bot × conectar o Instagram). Conectar é um
     processo de primeira classe: tem título próprio, notificação de fim e Live Activity —
@@ -83,16 +99,18 @@ def _proc_info(bot_id, params):
             "fim_parado": ("Instagram · parado", "A conexão do Instagram foi parada."),
         }
     if (params or {}).get("acao") == "login":
-        # LOGIN no emulador (reconectar a conta tocando no app do device, job pro agente do PC):
-        # processo próprio, com título e notificações dedicados — senão apareceria como "Auto
-        # Follow" (o bot-veículo do job de emulador) e confundiria o usuário. Várias contas = UMA
-        # run só (lote), igual os outros lotes.
-        n = len((params or {}).get("contas") or [])
+        # CONECTAR/RECONECTAR contas no emulador (o agente loga tocando no app do device): processo
+        # próprio, com título e notificações dedicados — NUNCA "Auto Follow" (o bot-veículo do job
+        # de emulador). Várias contas = UMA run só (lote). 23/10: "Conectar @conta"/"Conectar
+        # contas · N" (antes "Reconectar no app", que o Vinicius não reconhecia).
+        contas = [str(c).strip().lstrip("@") for c in ((params or {}).get("contas") or []) if c]
+        n = len(contas)
+        alvo = f"@{contas[0]}" if n == 1 else "as contas"
         return {
-            "titulo": "Reconectar no app" + (f" · {n} contas" if n > 1 else ""),
-            "fim_ok": ("Reconectar · pronto", "Login no app do device concluído."),
-            "fim_erro": ("Reconectar · deu ruim", "Não consegui logar no app do device."),
-            "fim_parado": ("Reconectar · parado", "O login no app foi parado."),
+            "titulo": f"Conectar @{contas[0]}" if n == 1 else (f"Conectar contas · {n}" if n else "Conectar contas"),
+            "fim_ok": ("Conectar · pronto", f"Terminei de logar {alvo} no emulador."),
+            "fim_erro": ("Conectar · deu ruim", f"Não consegui logar {alvo} no emulador."),
+            "fim_parado": ("Conectar · parado", "O login das contas foi parado."),
         }
     if (params or {}).get("acao") == "verificar":
         # VERIFICAÇÃO PROFUNDA de sessões no emulador (o agente entra em CADA conta logada e marca
@@ -445,7 +463,7 @@ class RunManager:
                     mot = r.espera.get("motivo") or ""
                     label = f"pausa · faltam {_fmt_mmss(restam)}" + (f" ({mot})" if mot else "")
             return {"titulo": r.titulo, "pct": self._pct(r), "medido": medido,
-                    "label": label[:60], "quantos": 1, "bot": r.bot, "linhas": []}
+                    "label": label[:60], "quantos": 1, "bot": bot_exibicao(r.bot, r.params), "linhas": []}
 
         # `linhas` VAZIO de propósito: mesmo o build 0f37f278 NÃO aplica push com linhas
         # preenchido (o iOS aceita 200 e ignora — a LA congela em "começando"). Testado ao vivo
@@ -552,7 +570,7 @@ class RunManager:
         if run.bloqueio:
             fim = "bloqueado"
         estado = {"titulo": info["titulo"], "pct": 100 if run.status == "finalizado" else self._pct(run),
-                  "medido": True, "label": fim, "quantos": 0, "bot": run.bot, "linhas": []}
+                  "medido": True, "label": fim, "quantos": 0, "bot": bot_exibicao(run.bot, run.params), "linhas": []}
         try:
             ok, det = await asyncio.to_thread(
                 liveactivity.encerrar, self.la_token, estado, self.la_bundle)
@@ -1333,15 +1351,15 @@ class RunManager:
         # sozinho" (via LA/push). Sem isso vinham 3 avisos. O "começou" fica só pro run MANUAL.
         if run.params.get("cronograma"):
             return
-        nome = bots.BOTS.get(run.bot, {}).get("nome", run.bot)
-        if run.params.get("acao") == "login":
-            nome = "Reconectar no app"   # job de login no emulador: não é "Auto Follow começou"
+        # o nome do PROCESSO (login → "Conectar @x", verificar → "Verificar sessões", lote → "X ·
+        # lote"): antes só o login era tratado e o verificar chegava como "Auto Follow · começou"
+        nome = run.titulo or bots.BOTS.get(run.bot, {}).get("nome", run.bot)
         try:
             await asyncio.to_thread(
                 notify.enviar, f"{nome} · começou",
                 "Tô nessa… vou te mostrando o progresso.",
                 {"type": "start", "runId": run.id, "bot": run.bot, "titulo": run.titulo},
-                grupo=f"bot:{run.bot}")   # um monte por bot no lock screen
+                grupo=f"bot:{bot_exibicao(run.bot, run.params)}")   # um monte por processo no lock screen
         except Exception:
             pass
 
@@ -1379,7 +1397,8 @@ class RunManager:
         entrou (ou não). Quem cuida da Live Activity é o _encerrar_la_se_acabou.
         """
         info = _proc_info(run.bot, run.params)
-        nome = bots.BOTS.get(run.bot, {}).get("nome", run.bot)
+        # login/verificar: o nome é o do PROCESSO ("Conectar @x"), não o do bot-veículo
+        nome = info["titulo"] if eh_processo_de_conta(run.params) else bots.BOTS.get(run.bot, {}).get("nome", run.bot)
         if run.proxy_instavel:
             # parou por proxy/túnel — deixa CLARO que não é bloqueio/conta e pede pra tentar depois
             titulo, corpo = (f"{nome} · proxy instável", f"{nome} parou por instabilidade do proxy/túnel — "
@@ -1394,7 +1413,7 @@ class RunManager:
             if not run.params.get("import_cookies") and run.progress and run.progress.get("total"):
                 corpo = f"{nome} finalizou — {run.progress['done']}/{run.progress['total']}."
         # conectar conta vai pro monte "conexão"; o resto agrupa por bot
-        grupo = "conexao" if run.params.get("import_cookies") else f"bot:{run.bot}"
+        grupo = "conexao" if run.params.get("import_cookies") else f"bot:{bot_exibicao(run.bot, run.params)}"
         try:
             await asyncio.to_thread(notify.enviar, titulo, corpo,
                                     {"runId": run.id, "bot": run.bot, "titulo": info["titulo"]},
@@ -1527,12 +1546,18 @@ class RunManager:
         """Monta um 'info' no mesmo formato do Run.info() a partir do registro do histórico —
         pra o app abrir um run que já saiu da memória sem quebrar (sem live, só o log salvo)."""
         bot = rec.get("bot")
+        acao = rec.get("acao")
+        # o título GRAVADO (login/verificar = "Conectar …"/"Verificar sessões"); só cai no nome do
+        # bot se o registro é antigo — antes isto devolvia "Auto Follow" pros logins
+        titulo = rec.get("titulo") or bots.BOTS.get(bot, {}).get("nome", bot)
+        if acao == "login" and str(titulo).startswith("Reconectar no app"):
+            titulo = "Conectar contas"
         return {
             "id": rec.get("id"), "bot": bot,
-            "titulo": bots.BOTS.get(bot, {}).get("nome", bot),
+            "titulo": titulo,
             "status": rec.get("status") or "finalizado",
             "started_at": rec.get("started_at"), "ended_at": rec.get("ended_at"),
-            "returncode": None, "params": {}, "linhas": 0,
+            "returncode": None, "params": {"acao": acao} if acao else {}, "linhas": 0,
             "progress": None, "status_log": None,
             "conta": rec.get("conta"),
             "saldo": rec.get("saldo") or {}, "historico": True,

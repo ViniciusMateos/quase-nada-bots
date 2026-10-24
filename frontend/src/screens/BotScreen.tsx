@@ -11,6 +11,7 @@ import { colors } from '@/theme';
 import { Aparece, Botao, Card, CartaoTocavel } from '@/ui/components';
 import { SeletorConta } from '@/ui/SeletorConta';
 import { SeletorContas } from '@/ui/SeletorContas';
+import { ehProcessoDeConta } from '@/lib/processo';
 import { MenuContexto } from '@/ui/MenuContexto';
 import { TecladoView } from '@/ui/TecladoView';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
@@ -101,8 +102,9 @@ export function BotScreen() {
   // checagem leve (só as runs) — usada no polling pra atualizar o botão ao vivo
   const checarRun = useCallback(() => {
     api.listRuns().then((rs) => {
+      // conectar/verificar contas usam o "auto-follow" de veículo — não travam o Auto Follow
       const ativas = rs.filter((r) => r.bot === botId && ['rodando', 'iniciando'].includes(r.status)
-        && !(r.params as { import_cookies?: unknown })?.import_cookies);
+        && !(r.params as { import_cookies?: unknown })?.import_cookies && !ehProcessoDeConta(r));
       const a = ativas[0] ?? null;
       setRunAtiva(a);
       setRunsAtivas(ativas);
@@ -144,7 +146,7 @@ export function BotScreen() {
         // postando → volta com as segue marcadas, prontas pra rodar junto com outro modo)
         const rs = await api.listRuns().catch(() => [] as RunInfo[]);
         const ocup = new Set<Emu>();
-        rs.filter((r) => r.bot === botId && ['rodando', 'iniciando'].includes(r.status))
+        rs.filter((r) => r.bot === botId && ['rodando', 'iniciando'].includes(r.status) && !ehProcessoDeConta(r))
           .forEach((r) => emuladoresDe(contasDaRun(r)).forEach((e) => ocup.add(e)));
         const livres = padrao.filter((u) => !ocup.has(u === CONTA_BRECHO ? 'brecho' : 'principal'));
         if (ocup.size && livres.length) padrao = livres;

@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api, RunInfo } from '@/lib/api';
 import { laRunsAcabaram } from '@/lib/la';
+import { acaoDe, ehProcessoDeConta, nomeDoProcesso } from '@/lib/processo';
 import { colors } from '@/theme';
 import { Contagem } from '@/ui/Contagem';
 import { LoadingDog } from '@/ui/LoadingDog';
@@ -16,15 +17,20 @@ const MAX_LINHAS = 3; // acima disso vira "+N rodando" (senão a pílula come a 
 
 // Cor e ícone por bot — MESMA linguagem do widget do Dynamic Island
 // (targets/botswidget/BotsWidget.swift: corDoBot/simboloDoBot). Se mudar lá, muda aqui.
-function corDoBot(bot: string): string {
-  if (bot === 'auto-follow') return colors.rosa;
-  if (bot === 'dm-followers') return colors.amarelo;
+// conectar/verificar contas rodam com bot "auto-follow" (veículo) — pela AÇÃO ganham ícone próprio,
+// senão apareciam com o ícone rosa do Auto Follow (23/10)
+function corDoBot(run: RunInfo): string {
+  if (ehProcessoDeConta(run)) return colors.marca;
+  if (run.bot === 'auto-follow') return colors.rosa;
+  if (run.bot === 'dm-followers') return colors.amarelo;
   return colors.roxo;
 }
-function iconeDoBot(bot: string): keyof typeof Ionicons.glyphMap {
-  if (bot === 'auto-follow') return 'person-add';
-  if (bot === 'dm-followers') return 'paper-plane';
-  if (bot === 'story-brecho' || bot === 'story-repost') return 'images';
+function iconeDoBot(run: RunInfo): keyof typeof Ionicons.glyphMap {
+  if (acaoDe(run) === 'login') return 'log-in-outline';
+  if (acaoDe(run) === 'verificar') return 'shield-checkmark-outline';
+  if (run.bot === 'auto-follow') return 'person-add';
+  if (run.bot === 'dm-followers') return 'paper-plane';
+  if (run.bot === 'story-brecho' || run.bot === 'story-repost') return 'images';
   return 'flash';
 }
 
@@ -250,17 +256,17 @@ export function BarraBotsGlobal({ onAbrir }: { onAbrir?: (runId: string, titulo:
 function Linha({ run, soUm, onAbrir }: {
   run: RunInfo; soUm: boolean; onAbrir?: (runId: string, titulo: string) => void;
 }) {
-  const cor = corDoBot(run.bot);
+  const cor = corDoBot(run);
   const p = run.progress;
   const pct = pctDe(run);
-  const titulo = run.titulo ?? run.bot;
+  const titulo = nomeDoProcesso(acaoDe(run), run.titulo) ?? run.bot;
   return (
     <Pressable onPress={() => onAbrir?.(run.id, titulo)} style={styles.linha}>
       {soUm ? (
         <LoadingDog size={26} />
       ) : (
         <View style={[styles.marcador, { borderColor: cor }]}>
-          <Ionicons name={iconeDoBot(run.bot)} size={13} color={cor} />
+          <Ionicons name={iconeDoBot(run)} size={13} color={cor} />
         </View>
       )}
       <View style={{ flex: 1, gap: 5 }}>

@@ -561,6 +561,17 @@ async def emulador_login(payload: dict):
         raise HTTPException(400, str(e))
 
 
+@app.post("/emulador/criar-conta", dependencies=[Depends(auth)])
+async def emulador_criar_conta(payload: dict):
+    """Enfileira um job de CRIAR CONTA no emulador (o agente cria a conta tocando no app do IG, com
+    o código de confirmação vindo do Gmail). body {username, senha, email, ano?, dia?, bio?, grupo?}.
+    senha/e-mail viajam SÓ no job (nunca no log nem em /runs). Devolve {run_id, username, …}."""
+    try:
+        return await mgr.start_criar_conta(payload or {})
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 # ─────────────────────── story-repost (contas + sessão) ───────────────────────
 @app.get("/story/contas", dependencies=[Depends(auth)])
 async def story_contas(force: bool = False):

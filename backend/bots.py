@@ -54,6 +54,15 @@ BOTS = {
         "tem_modos": False, "tem_chats": False, "tem_ig": False,
         "descricao": "Lê os posts do brechó com uma conta auxiliar no emulador e atualiza as peças (vendidas, preço, novas).",
     },
+    # 24/10/2026: Criar Conta migrado do painel (Playwright no PC) pro emulador. O agente cria a
+    # conta tocando no app real do IG (username→senha→nascimento→e-mail→código→Concordo); o código
+    # de confirmação vem do Gmail (GET /gmail/codigo). A conta nasce LOGADA no app. Disparado por
+    # POST /emulador/criar-conta. Módulo: quase-nada-bots-device/bots/criar_conta.
+    "criar-conta": {
+        "nome": "Criar Conta", "dir": "criar-conta-emulador", "target": "emulador",
+        "tem_modos": False, "tem_chats": False, "tem_ig": False,
+        "descricao": "Cria uma conta nova no app do Instagram no emulador (preenche tudo e confirma pelo código do e-mail).",
+    },
     "story-repost": {
         "nome": "Story Repost (antigo)", "dir": "story-repost-instagram", "target": "server",
         "tem_modos": True, "tem_chats": False, "tem_ig": True,

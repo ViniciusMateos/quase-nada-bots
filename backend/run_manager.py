@@ -1245,6 +1245,43 @@ class RunManager:
         return {"emulador": True, "login": True, "total": len(usuarios),
                 "contas": usuarios, "run_ids": [run.id]}
 
+    async def start_criar_conta(self, dados):
+        """Enfileira um job de CRIAR CONTA no emulador (o agente do PC cria a conta tocando no app).
+        `dados` = {username, senha, email, ano?, dia?, bio?, grupo?}. Os dados sensíveis (senha,
+        e-mail) vão SÓ na CONTA do job (que só o agente recebe) — nunca em run.params (que o /runs
+        expõe). Devolve {emulador, criar, run_id, username}."""
+        d = dict(dados or {})
+        user = str(d.get("username") or "").strip().lstrip("@")
+        email = str(d.get("email") or "").strip()
+        if not user:
+            raise ValueError("sem username pra criar a conta")
+        if not email:
+            raise ValueError("sem e-mail pra criar a conta")
+        # criar-conta já na fila pra esse @? não duplica
+        for j in self._fila_emulador:
+            if (j.get("bot") == "criar-conta" and j.get("estado") in ("pendente", "em_execucao")
+                    and ((j.get("conta") or {}).get("label") or "").lower() == user.lower()):
+                return {"emulador": True, "criar": True, "run_id": j.get("run_id"), "username": user,
+                        "ja_na_fila": True}
+        run = Run("criar-conta", {"username": user})      # params LIMPOS (sem senha/e-mail)
+        run._log_path = os.path.join(self._LOG_DIR, f"{run.id}.log")
+        try:
+            open(run._log_path, "w", encoding="utf-8").close()
+        except Exception:
+            pass
+        self.runs[run.id] = run
+        run.conta = user
+        conta = {"id": user, "label": user, "username": user, "senha": d.get("senha") or "",
+                 "email": email, "ano": d.get("ano"), "dia": d.get("dia"),
+                 "bio": d.get("bio") or "", "grupo": d.get("grupo") or ""}
+        self._fila_emulador.append({
+            "run_id": run.id, "bot": "criar-conta", "conta": conta,
+            "params": {"username": user}, "estado": "pendente", "parar": False,
+        })
+        await run.emitir(f"[backend] criar conta no emulador enfileirado · @{user}")
+        asyncio.create_task(self.empurrar_la(forcar=True))
+        return {"emulador": True, "criar": True, "run_id": run.id, "username": user}
+
     async def _start_story_lote(self, bot_id, base_params, usernames):
         """LOTE do story-repost = UMA run só (UM processo) rodando o story_poster.py pros usernames
         selecionados. A FILA (uma conta por vez, com pausa humana entre contas) é o loop INTERNO do

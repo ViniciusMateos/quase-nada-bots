@@ -178,6 +178,11 @@ export const api = {
   reconectarEmulador: (contas: string[], senhas?: Record<string, string>) =>
     http.post<{ emulador: boolean; login: boolean; total: number; contas: string[]; run_ids: string[] }>(
       '/emulador/login', senhas ? { contas, senhas } : { contas }),
+  // CRIAR CONTA no emulador: o agente cria a conta tocando no app do IG (o código vem do Gmail).
+  // senha/e-mail viajam só no job (nunca no log nem em /runs). Devolve o run_id pra acompanhar.
+  criarContaEmulador: (dados: { username: string; senha: string; email: string; ano?: number; dia?: number; bio?: string; grupo?: string }) =>
+    http.post<{ emulador: boolean; criar: boolean; run_id: string; username: string; ja_na_fila?: boolean }>(
+      '/emulador/criar-conta', dados),
   // código de verificação do IG (server grava em codigos/<user>.txt; emulador busca via GET)
   enviarCodigo: (user: string, codigo: string) =>
     http.post<{ ok: boolean; user: string }>('/contas/codigo', { user, codigo }),

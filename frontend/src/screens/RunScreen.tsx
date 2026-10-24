@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated, AppState, Easing, NativeScrollEvent, NativeSyntheticEvent, Pressable,
   ScrollView, StyleSheet, Text, TouchableOpacity, View,
@@ -72,9 +72,9 @@ function parseLinha(raw: string): Parsed {
   const nivel = m ? m[2] : '';
   const resto = (m ? m[3] : raw).trimEnd();
 
-  // separadores (─────) e cabeçalhos com traços (─── TÍTULO ───), sem pegar a árvore ┌─│└
-  if (/[─—]{3,}/.test(resto) || /-{5,}/.test(resto)) {
-    const limpo = resto.replace(/[─—]+/g, ' ').replace(/-{3,}/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  // separadores (───── / ═════) e cabeçalhos com traços (─── TÍTULO ───), sem pegar a árvore ┌─│└
+  if (/[─—═]{3,}/.test(resto) || /-{5,}/.test(resto)) {
+    const limpo = resto.replace(/[─—═]+/g, ' ').replace(/-{3,}/g, ' ').replace(/\s{2,}/g, ' ').trim();
     return limpo ? { tipo: 'titulo', texto: limpo } : { tipo: 'divisor' };
   }
   const wrap = resto.match(/^[─—]\s*(.+?)\s*[─—]$/);   // — Título —
@@ -169,6 +169,75 @@ function LogLinha({ raw, onCopiar }: { raw: string; onCopiar: (t: string) => voi
   return <Pressable onLongPress={() => onCopiar(raw)} delayLongPress={280}>{el}</Pressable>;
 }
 
+// ── SEÇÕES POR CONTA (23/10/2026): cada "[conta] @user" abre um card que dobra/desdobra com as
+// linhas daquela conta embaixo. O que vem antes da 1ª conta (abertura) e depois do fecho do lote
+// (═════ / === SALDO) fica solto, sempre à mostra.
+const RE_CONTA = /^\[conta\]\s+@?([A-Za-z0-9._]+)\s*(\d+\/\d+)?/;
+const RE_FECHO = /^═{3,}\s*$|^=== SALDO:/;
+
+type SecaoConta = {
+  tipo: 'conta'; key: string; user: string; pos: string; idx: number[];
+  visiveis: number; erro: boolean;
+};
+type Secao = { tipo: 'solta'; key: string; idx: number[] } | SecaoConta;
+
+function agrupar(linhas: string[]): Secao[] {
+  const out: Secao[] = [];
+  let conta: SecaoConta | null = null;
+  let fechou = false;
+  linhas.forEach((raw, i) => {
+    const ct = fechou ? null : raw.match(RE_CONTA);
+    if (ct) {
+      // a mesma conta marcada de novo (ex: o agente reemite no meio) continua no mesmo card
+      if (conta && conta.user === ct[1]) { if (ct[2]) conta.pos = ct[2]; return; }
+      conta = { tipo: 'conta', key: `${ct[1]}#${i}`, user: ct[1], pos: ct[2] ?? '', idx: [], visiveis: 0, erro: false };
+      out.push(conta);
+      return;
+    }
+    if (conta && RE_FECHO.test(raw)) { fechou = true; conta = null; }   // resumo do lote: fora dos cards
+    if (conta) {
+      const p = parseLinha(raw);
+      conta.idx.push(i);
+      if (p.tipo !== 'oculta') conta.visiveis += 1;
+      if ((p.tipo === 'texto' && p.cor === colors.erro) || raw.includes('!!')) conta.erro = true;
+      return;
+    }
+    const ult = out[out.length - 1];
+    if (ult && ult.tipo === 'solta') ult.idx.push(i);
+    else out.push({ tipo: 'solta', key: `s#${i}`, idx: [i] });
+  });
+  return out;
+}
+
+function CartaoConta({ s, aberta, agora, linhas, onToggle, onCopiar }: {
+  s: SecaoConta; aberta: boolean; agora: boolean; linhas: string[];
+  onToggle: () => void; onCopiar: (t: string, msg: string) => void;
+}) {
+  return (
+    <View>
+      <TouchableOpacity activeOpacity={0.8} onPress={onToggle} delayLongPress={280}
+        onLongPress={() => onCopiar([`[conta] @${s.user}`, ...s.idx.map((i) => linhas[i])].join('\n'),
+          `log da @${s.user} copiado`)}
+        style={[styles.contaFaixa, !aberta && styles.contaFaixaFechada]}>
+        <Ionicons name={aberta ? 'chevron-down' : 'chevron-forward'} size={15} color={colors.textoFraco} />
+        <Ionicons name="person-circle" size={16} color={colors.marca} />
+        <Text style={styles.contaUser} numberOfLines={1}>@{s.user}</Text>
+        {s.erro ? <Ionicons name="alert-circle" size={15} color={colors.erro} /> : null}
+        {agora ? <Text style={styles.contaAgora}>agora</Text> : null}
+        {!aberta ? <Text style={styles.contaQtd}>{s.visiveis} {s.visiveis === 1 ? 'linha' : 'linhas'}</Text> : null}
+        {s.pos ? <Text style={styles.contaPos}>{s.pos}</Text> : null}
+      </TouchableOpacity>
+      {aberta && s.idx.length > 0 ? (
+        <View style={styles.contaCorpo}>
+          {s.idx.map((i) => (
+            <LogLinha key={i} raw={linhas[i]} onCopiar={(t) => onCopiar(t, 'linha copiada')} />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 function parseProgresso(txt: string): Progresso | null {
   const resto = txt.slice('[progress]'.length).trim();
   const m = resto.match(/^(\d+)\s+(\d+)\s*(.*)$/);
@@ -203,6 +272,8 @@ export function RunScreen() {
   const atBottomRef = useRef(true);
   const [mostrarVoltar, setMostrarVoltar] = useState(false);
   const botaoAnim = useRef(new Animated.Value(0)).current;
+  // cards de conta: o que você abriu/fechou na mão (o resto segue o padrão — ver `abertaPadrao`)
+  const [abertos, setAbertos] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     Animated.spring(botaoAnim, { toValue: mostrarVoltar ? 1 : 0, useNativeDriver: true, friction: 7, tension: 60 }).start();
@@ -230,6 +301,7 @@ export function RunScreen() {
     setProgresso(null);
     setEspera(null);
     setConectando(true);
+    setAbertos({});
 
     const conectar = async () => {
       if (!alive) return;
@@ -310,6 +382,21 @@ export function RunScreen() {
 
   const rodando = ['rodando', 'iniciando'].includes(status);
 
+  const secoes = useMemo(() => agrupar(linhas), [linhas]);
+  const contas = secoes.filter((s): s is SecaoConta => s.tipo === 'conta');
+  const ultimaConta = contas.length ? contas[contas.length - 1].key : null;
+  // padrão: rodando → só a conta da vez aberta (as anteriores vão fechando sozinhas); terminada →
+  // tudo fechado com o resumo à mostra (uma conta só = aberta)
+  const abertaPadrao = (s: SecaoConta) => contas.length === 1 || (rodando && s.key === ultimaConta);
+  const estaAberta = (s: SecaoConta) => abertos[s.key] ?? abertaPadrao(s);
+  const todasAbertas = contas.length > 0 && contas.every(estaAberta);
+  function alternar(s: SecaoConta) {
+    setAbertos((prev) => ({ ...prev, [s.key]: !(prev[s.key] ?? abertaPadrao(s)) }));
+  }
+  function abrirTodas(valor: boolean) {
+    setAbertos(Object.fromEntries(contas.map((s) => [s.key, valor])));
+  }
+
   return (
     <Animated.View style={[styles.tela, {
       opacity: troca,
@@ -320,6 +407,12 @@ export function RunScreen() {
           <Pill texto={status} cor={statusCor[status] ?? colors.textoFraco} />
         </Pulsar>
         <View style={styles.topoAcoes}>
+          {contas.length > 1 && (
+            <TouchableOpacity style={styles.copiarBtn} hitSlop={8} onPress={() => abrirTodas(!todasAbertas)}>
+              <Ionicons name={todasAbertas ? 'contract-outline' : 'expand-outline'} size={16} color={colors.texto} />
+              <Text style={styles.copiarTxt}>{todasAbertas ? 'fechar' : 'abrir'}</Text>
+            </TouchableOpacity>
+          )}
           {linhas.length > 0 && (
             <TouchableOpacity style={styles.copiarBtn} hitSlop={8}
               onPress={() => copiar(linhas.join('\n'), 'log copiado')}>
@@ -354,9 +447,16 @@ export function RunScreen() {
           onScroll={aoScrollar}
           scrollEventThrottle={32}
           onContentSizeChange={() => { if (atBottomRef.current) scrollRef.current?.scrollToEnd({ animated: true }); }}>
-          {linhas.map((l, i) => (
-            <LogLinha key={i} raw={l} onCopiar={(t) => copiar(t, 'linha copiada')} />
-          ))}
+          {secoes.map((s) => (s.tipo === 'conta' ? (
+            <CartaoConta key={s.key} s={s} linhas={linhas} aberta={estaAberta(s)}
+              agora={rodando && s.key === ultimaConta} onToggle={() => alternar(s)} onCopiar={copiar} />
+          ) : (
+            <React.Fragment key={s.key}>
+              {s.idx.map((i) => (
+                <LogLinha key={i} raw={linhas[i]} onCopiar={(t) => copiar(t, 'linha copiada')} />
+              ))}
+            </React.Fragment>
+          )))}
         </ScrollView>
       )}
       {copiadoMsg && (
@@ -410,8 +510,13 @@ const styles = StyleSheet.create({
   contaFaixa: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 12, marginBottom: 4,
     paddingVertical: 7, paddingHorizontal: 10, borderRadius: 10, backgroundColor: colors.card2,
     borderLeftWidth: 3, borderLeftColor: colors.marca },
+  contaFaixaFechada: { marginBottom: 0, opacity: 0.85 },
   contaUser: { color: colors.texto, fontSize: 15, fontWeight: '800', flex: 1 },
   contaPos: { color: colors.textoFraco, fontSize: 12, fontWeight: '700' },
+  contaQtd: { color: colors.textoFraco, fontSize: 11, fontWeight: '600' },
+  contaAgora: { color: colors.marca, fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
+  // linhas da conta: recuadas com um fio à esquerda, pra ficar claro de quem é cada linha
+  contaCorpo: { marginLeft: 8, paddingLeft: 10, borderLeftWidth: 1, borderLeftColor: colors.border, marginBottom: 4 },
   dmuser: { color: colors.texto, fontSize: 13.5, fontWeight: '700' },
   mensagem: { fontFamily: 'monospace', fontSize: 11, lineHeight: 16, color: colors.textoFraco, fontStyle: 'italic', paddingLeft: 18, opacity: 0.8 },
   sleep: { color: '#5A5A5A', fontSize: 10.5, fontStyle: 'italic', paddingLeft: 18, paddingVertical: 1 },

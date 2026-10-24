@@ -3,6 +3,16 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [2.2.0] — 2026-10-24
+
+### Adicionado
+- feat: Criar Conta no emulador — cria a conta nova direto no app do Instagram (usuário → senha → nascimento → e-mail → código do Gmail → Concordo) e ela nasce logada
+- feat: log da run com um card por conta que abre e fecha (cabeçalho com @conta, posição no lote, "agora" e alerta de erro; botão de abrir/fechar tudo)
+- feat: conectar e verificar contas aparecem com nome e ícone próprios ("Conectar contas"/"Verificar sessões", não mais "Auto Follow") no app, nas notificações, no widget e no histórico
+
+### Documentação
+- docs: README com a Criar Conta no emulador (saiu do painel/Chromium)
+
 ## [2.1.0] — 2026-10-22
 
 O brechó e as outras contas rodam juntos no emulador (cada um no seu), a raspagem do brechó saiu

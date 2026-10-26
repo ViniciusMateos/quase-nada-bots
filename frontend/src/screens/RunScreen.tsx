@@ -228,11 +228,17 @@ function CartaoConta({ s, aberta, agora, linhas, onToggle, onCopiar }: {
         {s.pos ? <Text style={styles.contaPos}>{s.pos}</Text> : null}
       </TouchableOpacity>
       {aberta && s.idx.length > 0 ? (
-        <View style={styles.contaCorpo}>
-          {s.idx.map((i) => (
-            <LogLinha key={i} raw={linhas[i]} onCopiar={(t) => onCopiar(t, 'linha copiada')} />
-          ))}
-        </View>
+        <>
+          <View style={styles.contaCorpo}>
+            {s.idx.map((i) => (
+              <LogLinha key={i} raw={linhas[i]} onCopiar={(t) => onCopiar(t, 'linha copiada')} />
+            ))}
+          </View>
+          <TouchableOpacity activeOpacity={0.8} onPress={onToggle} style={styles.contaFechar}>
+            <Ionicons name="chevron-up" size={13} color={colors.textoFraco} />
+            <Text style={styles.contaFecharTxt}>fechar @{s.user}</Text>
+          </TouchableOpacity>
+        </>
       ) : null}
     </View>
   );
@@ -517,6 +523,10 @@ const styles = StyleSheet.create({
   contaAgora: { color: colors.marca, fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
   // linhas da conta: recuadas com um fio à esquerda, pra ficar claro de quem é cada linha
   contaCorpo: { marginLeft: 8, paddingLeft: 10, borderLeftWidth: 1, borderLeftColor: colors.border, marginBottom: 4 },
+  // rodapé do bloco aberto: fecha a conta sem precisar rolar de volta pro cabeçalho
+  contaFechar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    marginLeft: 8, marginBottom: 10, paddingVertical: 6, opacity: 0.8 },
+  contaFecharTxt: { color: colors.textoFraco, fontSize: 11, fontWeight: '700' },
   dmuser: { color: colors.texto, fontSize: 13.5, fontWeight: '700' },
   mensagem: { fontFamily: 'monospace', fontSize: 11, lineHeight: 16, color: colors.textoFraco, fontStyle: 'italic', paddingLeft: 18, opacity: 0.8 },
   sleep: { color: '#5A5A5A', fontSize: 10.5, fontStyle: 'italic', paddingLeft: 18, paddingVertical: 1 },

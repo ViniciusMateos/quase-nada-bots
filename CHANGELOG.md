@@ -3,6 +3,12 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [2.3.0] — 2026-10-25
+
+### Adicionado
+- feat: no log da run, o bloco de cada conta fecha pelo rodapé também ("fechar @conta", sem rolar até o cabeçalho)
+- feat: a senha do Criar Conta é digitada no app e fica salva SÓ no aparelho (SecureStore/localStorage), pré-preenchendo a próxima run — sem hardcode (o repo é público)
+
 ## [2.2.0] — 2026-10-24
 
 ### Adicionado

@@ -35,3 +35,14 @@ export async function salvarCredencial(c: Credencial) {
 export async function removerCredencial(usuario: string) {
   gravar(ler().filter((x) => x.usuario.toLowerCase() !== usuario.trim().toLowerCase()));
 }
+
+// Senha PADRÃO do Criar Conta (ver credenciais.ts): na web vive no localStorage.
+const KEY_SENHA = 'ig_senha_padrao_v1';
+
+export async function lerSenhaPadrao(): Promise<string> {
+  try { return localStorage.getItem(KEY_SENHA) || ''; } catch { return ''; }
+}
+
+export async function salvarSenhaPadrao(senha: string) {
+  try { localStorage.setItem(KEY_SENHA, senha); } catch { /* sem storage */ }
+}

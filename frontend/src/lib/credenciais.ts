@@ -35,3 +35,15 @@ export async function removerCredencial(usuario: string) {
   const list = await lerCredenciais();
   await gravarTodas(list.filter((x) => x.usuario.toLowerCase() !== usuario.trim().toLowerCase()));
 }
+
+// Senha PADRÃO do Criar Conta: a última que você digitou fica salva (SÓ no aparelho) e pré-preenche
+// a próxima run. Nunca vai pro servidor nem pro código — por isso não pode ser hardcoded (repo público).
+const KEY_SENHA = 'ig_senha_padrao_v1';
+
+export async function lerSenhaPadrao(): Promise<string> {
+  try { return (await SecureStore.getItemAsync(KEY_SENHA)) || ''; } catch { return ''; }
+}
+
+export async function salvarSenhaPadrao(senha: string) {
+  try { await SecureStore.setItemAsync(KEY_SENHA, senha); } catch { /* ok */ }
+}

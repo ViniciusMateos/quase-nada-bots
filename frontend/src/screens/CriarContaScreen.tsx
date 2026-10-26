@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
-import { salvarCredencial } from '@/lib/credenciais';
+import { salvarCredencial, lerSenhaPadrao, salvarSenhaPadrao } from '@/lib/credenciais';
 import { cmpTexto } from '@/lib/ordenar';
 import { colors } from '@/theme';
 import { Botao, Card } from '@/ui/components';
@@ -28,7 +28,6 @@ function gerarSenha() {
 function gerarNasc() {
   return { ano: new Date().getFullYear() - (20 + Math.floor(Math.random() * 15)), dia: 1 + Math.floor(Math.random() * 28) };
 }
-
 type GmailConta = { user: string; senha_app: string };
 
 export function CriarContaScreen() {
@@ -38,6 +37,8 @@ export function CriarContaScreen() {
   const [nasc] = useState(gerarNasc);
   const [ano, setAno] = useState(String(nasc.ano));
   const [dia, setDia] = useState(String(nasc.dia));
+  // senha: carrega a última usada (fica salva SÓ no aparelho) pra pré-preencher a próxima run
+  useEffect(() => { lerSenhaPadrao().then((s) => { if (s) setSenha(s); }); }, []);
   const [email, setEmail] = useState('');
 
   const [gmails, setGmails] = useState<GmailConta[]>([]);
@@ -104,6 +105,7 @@ export function CriarContaScreen() {
     try {
       const res = await api.criarContaEmulador({ username: u, senha, email, ano: parseInt(ano, 10), dia: parseInt(dia, 10) });
       try { await salvarCredencial({ usuario: u, senha }); } catch { /* ok */ }   // pra poder reconectar depois
+      try { await salvarSenhaPadrao(senha); } catch { /* ok */ }   // pré-preenche a próxima run
       nav.navigate('Run', { runId: res.run_id, nome: `Criar Conta · @${u}` });
     } catch (e) {
       setMsg((e as Error).message || 'erro ao disparar a criação');

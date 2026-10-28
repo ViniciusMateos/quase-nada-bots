@@ -3,6 +3,23 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [2.4.0] — 2026-10-27
+
+### Adicionado
+- feat: bot **Remover Contas** — marca as contas logadas no emulador e o agente termina a sessão de cada uma (libera vaga no teto de ~10 por aparelho), com Live Activity conta a conta; o Criar Conta também volta pra lista de bots
+- feat: **Criar Conta só até o código** — o bot para depois do código do Gmail e os termos/boas-vindas são na mão (o IG desafia toda conta nova criada no automático); form só com usuário + Gmail (senha e data recolhidas, pré-preenchidas da última run), roleta de data estilo iPhone (dia/mês/ano) que não trava e Live Activity
+- feat: a senha do Criar Conta fica PENDENTE e só vira credencial quando a conta aparece no app — o sincronizar não cadastra nem loga conta que nem foi criada
+- feat: aviso de "começou" por push pros bots do emulador (antes só os do server avisavam)
+
+### Modificado
+- update: sai o vídeo de abertura dos modos do Story Repost (modo "brechó com abertura" e o campo "Vídeo de abertura") — o IG do emulador estragava a capa; o vídeo é postado na mão
+
+### Documentação
+- docs: README com Remover Contas e Criar Conta até o código
+
+### Manutenção
+- chore: OTA_VERSION 103
+
 ## [2.3.0] — 2026-10-25
 
 ### Adicionado

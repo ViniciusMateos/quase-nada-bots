@@ -43,7 +43,7 @@ from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 RAIZ = Path(__file__).resolve().parent
@@ -55,12 +55,18 @@ ENV_LOCAL = RAIZ.parent / "frontend" / ".env.local"
 # app Expo exportado pra web (`expo export -p web`): quando existe, o `/` serve o APP INTEIRO
 # (cópia do app no navegador); senão cai no painel simples de reconexão (index.html).
 APP_DIST = RAIZ.parent / "frontend" / "dist-web"
+# o painel web desktop (Vite, ../painel-web): quando buildado, vira o `/` (o app RN vai pra /app)
+PAINEL_DIST = RAIZ.parent / "painel-web" / "dist"
 APP_ICON = RAIZ.parent / "frontend" / "src" / "assets" / "icon.png"   # logo do app (aba do navegador)
 
 # injetado no <head> do app ao servir: logo na aba + coluna estreita centralizada (pra não esticar
 # o layout de celular na tela toda). Feito ao servir → sobrevive a reexportar o app.
 _INJECT = (
     '<link rel="icon" type="image/png" href="/app-icon.png">'
+    # manifest: a janela de app do Chrome (atalho "Quase Nada Bots" da barra de tarefas) usa o ícone
+    # dele (arredondado, igual ao do iPhone) — ver criar-atalho.ps1
+    '<link rel="manifest" href="/manifest.webmanifest">'
+    '<meta name="theme-color" content="#0a0a0b">'
     '<style>'
     'html,body{background:#0a0a0b;}'
     'body{display:flex;justify-content:center;}'
@@ -570,6 +576,15 @@ def _icon_response():
 
 @app.get("/", response_class=HTMLResponse)
 def home():
+    # o PAINEL web (versão desktop, ../painel-web) quando está buildado; senão o app RN exportado
+    if (PAINEL_DIST / "index.html").exists():
+        return (PAINEL_DIST / "index.html").read_text(encoding="utf-8")
+    return app_rn()
+
+
+@app.get("/app", response_class=HTMLResponse)
+def app_rn():
+    """O app RN exportado pra web (a versão celular) — continua acessível em /app."""
     idx = APP_DIST / "index.html"
     if idx.exists():
         html = idx.read_text(encoding="utf-8")
@@ -585,6 +600,24 @@ def favicon():
 @app.get("/app-icon.png")
 def app_icon():
     return _icon_response()
+
+
+# ícones arredondados (gerados do icon.png do app) + manifest da janela de app do Chrome
+@app.get("/app-icon-{tam}.png")
+def app_icon_tam(tam: int):
+    f = RAIZ / f"app-icon-{tam}.png"
+    if tam not in (192, 512) or not f.exists():
+        return Response(status_code=404)
+    return Response(f.read_bytes(), media_type="image/png")
+
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    return JSONResponse({
+        "name": "Quase Nada Bots", "short_name": "QN Bots", "start_url": "/", "display": "standalone",
+        "background_color": "#0a0a0b", "theme_color": "#0a0a0b",
+        "icons": [{"src": f"/app-icon-{t}.png", "sizes": f"{t}x{t}", "type": "image/png"} for t in (192, 512)],
+    }, media_type="application/manifest+json")
 
 
 @app.get("/painel", response_class=HTMLResponse)
@@ -829,6 +862,21 @@ if (APP_DIST / "_expo").exists():
     app.mount("/_expo", StaticFiles(directory=str(APP_DIST / "_expo")), name="expo")
 if (APP_DIST / "assets").exists():
     app.mount("/assets", StaticFiles(directory=str(APP_DIST / "assets")), name="assets")
+# o painel web desktop: os bundles do Vite + (rota final) arquivos soltos e as rotas do SPA
+if (PAINEL_DIST / "painel-assets").exists():
+    app.mount("/painel-assets", StaticFiles(directory=str(PAINEL_DIST / "painel-assets")), name="painel")
+
+
+@app.get("/{caminho:path}", include_in_schema=False)
+def painel_spa(caminho: str):
+    """Rota FINAL (registrada depois de tudo): arquivo solto do painel (logo.png etc.) ou, pras
+    rotas do painel (/contas, /bots/x…), o index.html — o React Router resolve no navegador."""
+    if caminho.startswith(("api/", "_expo/", "assets/")) or not (PAINEL_DIST / "index.html").exists():
+        raise HTTPException(404)
+    f = (PAINEL_DIST / caminho).resolve()
+    if f.is_file() and PAINEL_DIST.resolve() in f.parents:
+        return FileResponse(str(f))
+    return HTMLResponse((PAINEL_DIST / "index.html").read_text(encoding="utf-8"))
 
 
 def _abrir_navegador():

@@ -1,0 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Identidade Quase Nada Bots (theme.ts do app) — valores RGB pra casar com o <alpha-value> */
+  --bg: 15 15 15;            /* #0F0F0F */
+  --surface: 26 26 26;       /* #1A1A1A */
+  --surface2: 36 36 36;      /* #242424 */
+  --border: 44 44 44;        /* #2C2C2C */
+  --primary: 246 63 147;     /* #F63F93 rosa da marca */
+  --primary-light: 255 112 175; /* #FF70AF */
+  --roxo: 129 20 176;        /* #8114B0 */
+  --amarelo: 247 255 60;     /* #F7FF3C */
+  --txt: 242 242 242;        /* #F2F2F2 */
+  --txt-dim: 154 154 154;    /* #9A9A9A */
+  --txt-faint: 94 94 94;     /* #5E5E5E */
+  --danger: 255 59 48;       /* #FF3B30 */
+  --ok: 52 199 89;           /* #34C759 */
+  --warn: 255 204 0;         /* #FFCC00 */
+}
+
+* {
+  @apply border-border;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-bg text-txt font-sans antialiased;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar discreta, estilo dashboard */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--surface2));
+  border-radius: 999px;
+  border: 2px solid rgb(var(--bg));
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--border));
+}
+
+/* Tira o "ring" feio do browser e padroniza o foco */
+*:focus {
+  outline: none;
+}
+*:focus-visible {
+  @apply ring-2 ring-primary/60 ring-offset-2 ring-offset-bg;
+}
+
+/* util de clamp de linhas */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

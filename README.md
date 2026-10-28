@@ -36,13 +36,21 @@ seu repo: `auto-follow-emulador`, `dm-followers-emulador`, `story-repost-emulado
   mensagens do próprio modo).
 - **Story Repost** — peças disponíveis do brechó no story, pelo app. A conta do brechó roda numa
   instância do emulador só dela (liga só na hora) e pode rodar **junto** com as outras contas,
-  cada uma com o seu modo; o modo "brechó com abertura" posta antes o vídeo "confiram as peças".
+  cada uma com o seu modo. O vídeo de abertura saiu do bot (o IG do emulador estragava a capa) —
+  ele é postado na mão.
 - **Raspagem do brechó** (`brecho-scraper`, disparada pelo app do Brechó) — uma conta auxiliar lê
   o perfil público da loja no emulador e atualiza as peças (novas, preço, vendidas). Nunca usa a
   conta da loja; `GET /emulador/raspagem/prontidao` diz se dá pra raspar agora e quem está apta.
-- **Criar Conta** — cria uma conta nova do Instagram no app do emulador, preenchendo cada
-  passo (usuário, senha, nascimento, e-mail) e lendo o código de confirmação do Gmail; a
-  conta nasce logada no seletor multi-conta.
+- **Criar Conta** — começa a conta nova no app do emulador **até o código**: usuário, senha,
+  nascimento (roleta de data), e-mail e o código de confirmação lido do Gmail. Aí para e manda
+  o push "sua vez": os termos e as boas-vindas são na mão (o IG desafia toda conta nova criada
+  no automático). Enquanto isso o emulador fica reservado (até voltar pra tela principal do IG
+  ou 15 min). No app só se preenche usuário + Gmail; senha e data vêm da última run.
+- **Remover Contas** — marca as contas logadas no emulador e o bot termina a sessão de cada uma
+  (libera vaga no teto de ~10 contas por aparelho). A conta continua no Instagram e no app, só
+  sai do emulador (o sincronizar não loga de volta).
+
+Todo bot do emulador avisa por push quando **começa** e quando termina, com Live Activity.
 
 Os bots rodam em **lote na ordem em que as contas foram marcadas**, e cada um tem **modos** feitos
 pro emulador (teto por conta e do lote, descanso depois de soft-block, pausa entre contas, limites

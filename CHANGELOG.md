@@ -3,6 +3,22 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [2.5.0] — 2026-10-28
+
+### Adicionado
+- feat: **painel web** (`painel-web/`, Vite + React 19 + Tailwind + framer-motion) — a versão desktop do app com menu lateral retrátil, tabelas e as mesmas funções: Visão geral, Bots (modos, chat, lote em ordem), Execuções com log ao vivo por conta, Histórico com filtros, Contas (criar até o código e remover), Cronograma e Ajustes; responsivo até o celular
+- feat: o `painel-sessao` serve o painel novo em `/` e o app RN exportado em `/app`, com manifest, ícones e o atalho `chrome --app` pra fixar na barra de tarefas
+
+### Corrigido
+- fix: tela preta do app na web — o `CriarContaScreen.web.tsx` se reexportava (recursão infinita)
+- fix: conta logada de novo no emulador depois do Remover Contas volta pros Auxiliares (o backend devolve o "emulador" nos locais); a tela Contas separa Principal, Auxiliares e Fora do emulador
+
+### Documentação
+- docs: README com o painel web e as rotas novas do painel-sessao
+
+### Manutenção
+- chore: OTA_VERSION 104
+
 ## [2.4.0] — 2026-10-27
 
 ### Adicionado

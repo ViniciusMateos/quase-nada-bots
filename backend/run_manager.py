@@ -852,13 +852,22 @@ class RunManager:
             # @). Assim conta logada no device aparece SOZINHA no Gerenciar contas — o usuário pediu
             # que adicionar no emulador (manual) reflita no app automático. Idempotente por label.
             try:
-                existentes = {(c.get("label") or "").strip().lower()
-                              for c in accounts.listar()}
+                todas = accounts.listar()
+                existentes = {(c.get("label") or "").strip().lower() for c in todas}
                 for u in (est["contas_logadas"] or []):
                     uu = (u or "").strip().lstrip("@")
                     if uu and uu.lower() not in existentes:
                         accounts.adicionar_pendente(uu)
                         existentes.add(uu.lower())
+                # e a conta que JÁ existe mas está sem "emulador" nos locais (o Remover Contas zerou) e
+                # voltou a estar logada no emulador (ex: logada de novo na mão) → devolve o "emulador",
+                # senão o app a mostra fora do emulador e os lotes não a usam (segue25, 28/10)
+                logadas = {(u or "").strip().lstrip("@").lower() for u in (est["contas_logadas"] or [])}
+                for c in todas:
+                    lab = (c.get("label") or "").strip().lower()
+                    if (lab in logadas and lab != "brechoquasenadaa" and c.get("id")
+                            and "emulador" not in (c.get("locais") or [])):
+                        accounts.definir_locais(c["id"], list(c.get("locais") or []) + ["emulador"])
             except Exception:
                 pass
         if "sessao" in info:

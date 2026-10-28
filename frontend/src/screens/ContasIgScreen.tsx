@@ -28,6 +28,8 @@ type Entry = {
   grupos?: string[];
   // conta FORA do emulador das segue = a do brechó (o Story Repost roda no emulador próprio dela)
   propria?: boolean;
+  // conta que SAIU do emulador das segue (Remover Contas zera o "emulador" dos locais)
+  fora?: boolean;
   emulLogada?: boolean;          // logada no app do IG dentro do emulador?
   emulSessao?: 'ok' | 'bloqueada' | 'desconhecida' | 'deslogada' | 'senha_incorreta';   // última verificação
 };
@@ -129,7 +131,10 @@ export function ContasIgScreen() {
       const e = ensure(a.label);
       e.id = a.id; e.criadaEm = a.criada_em; e.pendente = a.pendente;
       e.grupos = a.grupos;
-      e.propria = (a.label || '').toLowerCase() === CONTA_BRECHO || !locaisDe(a).includes('emulador');
+      // Principal = SÓ a do brechó. Antes, qualquer conta sem "emulador" nos locais virava
+      // Principal — e o Remover Contas zera os locais, então toda removida caía lá (segue25, 28/10)
+      e.propria = (a.label || '').toLowerCase() === CONTA_BRECHO;
+      e.fora = !e.propria && !locaisDe(a).includes('emulador');
       if (e.propria) e.emulSessao = emulSess[a.label] ?? emulSess[CONTA_BRECHO];   // emulador dela
     }
     for (const u of emul) {
@@ -139,14 +144,18 @@ export function ContasIgScreen() {
     return [...map.values()].sort((a, b) => cmpTexto(a.usuario, b.usuario));
   }, [creds, contas, emul, emulSess]);
 
-  // a lista em duas partes: PRINCIPAL (a conta do brechó) e AUXILIARES (as outras)
+  // a lista em três partes: PRINCIPAL (a conta do brechó), AUXILIARES (as do emulador das segue) e
+  // FORA DO EMULADOR (as que o Remover Contas tirou — logada de novo na mão já conta como auxiliar)
   const lista = useMemo<(Entry | { _h: string })[]>(() => {
     const ehPrincipal = (e: Entry) => !!e.propria || e.usuario.toLowerCase() === CONTA_BRECHO;
+    const ehFora = (e: Entry) => !ehPrincipal(e) && !!e.fora && !e.emulLogada;
     const pri = entries.filter(ehPrincipal);
-    const aux = entries.filter((e) => !ehPrincipal(e));
+    const aux = entries.filter((e) => !ehPrincipal(e) && !ehFora(e));
+    const fora = entries.filter(ehFora);
     return [
       ...(pri.length ? [{ _h: 'Principal' }, ...pri] : []),
       ...(aux.length ? [{ _h: 'Auxiliares' }, ...aux] : []),
+      ...(fora.length ? [{ _h: 'Fora do emulador' }, ...fora] : []),
     ];
   }, [entries]);
 

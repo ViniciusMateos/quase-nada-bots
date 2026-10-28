@@ -180,20 +180,15 @@ MODOS_PADRAO_EMULADOR = {
                        "pausa_longa_cada": 8, "pausa_longa": [120, 300], "pausa_humana_cada": 8,
                        "pausa_entre_contas": [60, 150], "resfriar_conta_h": 24, "mensagens": []},
     },
-    # video_intro: abre com o vídeo "confiram as peças disponíveis no destaque" antes das peças
-    # (o do brechó usa; as segue não) — 20/10/2026
     "story-brecho": {
-        "brechó com abertura": {"quantos_posts": 10, "fundo": "laranja", "mostrar_preco": True,
-                                "chamada": "", "video_intro": True, "pausa_story": [3, 8],
-                                "tentativas_por_peca": 2, "manter_ligado": False},
         "10 stories": {"quantos_posts": 10, "fundo": "laranja", "mostrar_preco": True, "chamada": "",
-                       "video_intro": False, "pausa_story": [3, 8], "tentativas_por_peca": 2,
+                       "pausa_story": [3, 8], "tentativas_por_peca": 2,
                        "manter_ligado": False},
         "5 stories": {"quantos_posts": 5, "fundo": "laranja", "mostrar_preco": True, "chamada": "",
-                      "video_intro": False, "pausa_story": [3, 8], "tentativas_por_peca": 2,
+                      "pausa_story": [3, 8], "tentativas_por_peca": 2,
                       "manter_ligado": False},
         "rápido": {"quantos_posts": 5, "fundo": "instagram", "mostrar_preco": True, "chamada": "",
-                   "video_intro": False, "pausa_story": [0, 0], "tentativas_por_peca": 1,
+                   "pausa_story": [0, 0], "tentativas_por_peca": 1,
                    "manter_ligado": False},
     },
 }

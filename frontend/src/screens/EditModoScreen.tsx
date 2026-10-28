@@ -85,8 +85,6 @@ const META: Record<string, MetaF> = {
   selecao: { label: 'O que postar', cat: 'alvo', tipo: 'opcao', sug: 'aleatorio',
     opcoes: [{ valor: 'aleatorio', label: 'Aleatório' }, { valor: 'drop_novo', label: 'Drop novo' }],
     dica: 'Aleatório: sorteia entre TODAS as peças disponíveis (o último drop incluso). Drop novo: só as disponíveis do último drop postado. Nos dois, cada conta só repete peça depois de postar todas.' },
-  video_intro: { label: 'Vídeo de abertura', cat: 'alvo', tipo: 'bool',
-    dica: 'Antes das peças, posta o vídeo "confiram as peças disponíveis no destaque". Ligado no aleatório; no drop novo fica desligado.' },
   repost_card: { label: 'Repostar como card', cat: 'alvo', tipo: 'bool',
     dica: 'Ligado: o post como card (dá pra tocar e abrir o post). Desligado: só a foto em tela cheia.' },
   estilo: { label: 'Estilo do story', cat: 'alvo', tipo: 'opcao', sug: 'vitrine',
@@ -164,7 +162,6 @@ const META_BOT: Record<string, Record<string, Partial<MetaF>>> = {
   'story-brecho': {
     quantos_posts: { label: 'Stories por run', dica: 'Quantas peças postar no story a cada run.' },
     mostrar_preco: { dica: 'A etiqueta com o preço e o tamanho no canto do card.' },
-    video_intro: { dica: 'Antes das peças, posta o vídeo "confiram as peças disponíveis no destaque". Feito pro brechó; nas outras contas deixa desligado.' },
   },
 };
 
@@ -193,7 +190,7 @@ const CAMPOS_NOVO: Record<string, string[]> = {
     'pausa_humana_cada', 'pausa_entre_contas',
   ],
   'story-brecho': [
-    'quantos_posts', 'video_intro', 'fundo', 'mostrar_preco', 'chamada', 'pausa_story', 'tentativas_por_peca',
+    'quantos_posts', 'fundo', 'mostrar_preco', 'chamada', 'pausa_story', 'tentativas_por_peca',
     'manter_ligado',
   ],
   'human-warmup': [
@@ -205,7 +202,7 @@ const CAMPOS_NOVO: Record<string, string[]> = {
     'delay_post', 'delay_acao_ui', 'humanizar', 'pausa_cada', 'active_hours',
   ],
   'story-repost': [
-    'selecao', 'video_intro', 'quantos_posts', 'repost_card', 'estilo', 'mostrar_preco', 'texto', 'link',
+    'selecao', 'quantos_posts', 'repost_card', 'estilo', 'mostrar_preco', 'texto', 'link',
     'delay_post', 'active_hours',
   ],
 };

@@ -1091,6 +1091,9 @@ class RunManager:
             job["reivindicado_em"] = agora          # marca quando pegou (pro auto-recupera acima)
             if run.status == "iniciando":
                 run.status = "rodando"
+                # o "começou" dos bots de EMULADOR sai aqui, quando o agente pega o job (antes só os do
+                # server avisavam — Criar Conta/Remover/Auto Follow do emulador começavam calados, 27/10)
+                asyncio.create_task(self._push_inicio(run))
             # virou "rodando" → a LA reage na hora (igual bot do server quando entra em execução)
             asyncio.create_task(self.empurrar_la(forcar=True))
             return {"run_id": job["run_id"], "bot": job["bot"],

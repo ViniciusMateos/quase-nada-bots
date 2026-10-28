@@ -61,7 +61,15 @@ BOTS = {
     "criar-conta": {
         "nome": "Criar Conta", "dir": "criar-conta-emulador", "target": "emulador",
         "tem_modos": False, "tem_chats": False, "tem_ig": False,
-        "descricao": "Cria uma conta nova no app do Instagram no emulador (preenche tudo e confirma pelo código do e-mail).",
+        "descricao": "Começa a conta nova no app do Instagram do emulador até o código do e-mail; os termos e as boas-vindas você termina na mão.",
+    },
+    # 27/10/2026: tira contas do emulador das segue (Terminar sessão no app do IG), uma por vez —
+    # libera vaga no teto de 10 contas por aparelho. POST /runs {bot, params: {contas: [@…]}}. O
+    # agente também tira o "emulador" dos locais da conta no app (senão o sincronizar loga de volta).
+    "remover-conta": {
+        "nome": "Remover Contas", "dir": "remover-conta-emulador", "target": "emulador",
+        "tem_modos": False, "tem_chats": False, "tem_ig": False,
+        "descricao": "Tira contas do app do Instagram no emulador (termina a sessão) pra liberar vaga.",
     },
     "story-repost": {
         "nome": "Story Repost (antigo)", "dir": "story-repost-instagram", "target": "server",

@@ -766,9 +766,13 @@ class RunManager:
         except Exception:
             pass
         self.runs[run.id] = run
-        conta = self._conta_do_job(params)
+        # remover-conta age na LISTA de params["contas"], não numa conta do job
+        conta = {} if bot_id == "remover-conta" else self._conta_do_job(params)
         if conta.get("id"):          # já deixa a conta visível no card antes do agente logar "Conta:"
             run.conta = conta.get("label") or conta.get("id")
+        elif bot_id == "remover-conta":
+            n = len((params or {}).get("contas") or [])
+            run.conta = f"{n} conta{'s' if n != 1 else ''}"
         self._fila_emulador.append({
             "run_id": run.id, "bot": bot_id, "conta": conta,
             "params": params or {}, "estado": "pendente", "parar": False,

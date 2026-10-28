@@ -20,6 +20,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 // (20/10, numa instância do MuMu só dele). Fallback cobre backend que não devolva o bot em /bots.
 const BOTS_EMULADOR: {
   id: string; icone: keyof typeof Ionicons.glyphMap; nomeFallback: string; descFallback: string;
+  tela?: 'CriarConta' | 'RemoverContas';   // bots normais abrem o BotScreen; esses têm tela própria
 }[] = [
   { id: 'auto-follow', icone: 'person-add', nomeFallback: 'Auto Follow',
     descFallback: 'Segue os curtidores dos posts compartilhados num chat.' },
@@ -28,6 +29,10 @@ const BOTS_EMULADOR: {
   // story da conta do brechó, pelo app de verdade, numa instância do MuMu só dela (20/10)
   { id: 'story-brecho', icone: 'images', nomeFallback: 'Story Repost',
     descFallback: 'Posta as peças disponíveis no story do brechó pelo app.' },
+  { id: 'criar-conta', icone: 'add-circle', nomeFallback: 'Criar Conta',
+    descFallback: 'Começa a conta nova no emulador até o código do e-mail; o resto você termina.', tela: 'CriarConta' },
+  { id: 'remover-conta', icone: 'remove-circle', nomeFallback: 'Remover Contas',
+    descFallback: 'Tira contas do app do Instagram no emulador pra liberar vaga.', tela: 'RemoverContas' },
 ];
 
 export function EmuladorScreen() {
@@ -264,7 +269,7 @@ export function EmuladorScreen() {
           const desc = real?.descricao ?? b.descFallback;
           return (
             <Aparece key={b.id} delay={(i + 1) * 60}>
-              <CartaoTocavel onPress={() => nav.navigate('Bot', { botId: b.id, nome })}>
+              <CartaoTocavel onPress={() => b.tela ? nav.navigate(b.tela) : nav.navigate('Bot', { botId: b.id, nome })}>
                 <View style={styles.linha}>
                   <Ionicons name={b.icone} size={24} color={colors.marca} />
                   <View style={{ flex: 1 }}>

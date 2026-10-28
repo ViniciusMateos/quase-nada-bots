@@ -15,6 +15,7 @@ import { ChatsScreen } from '@/screens/ChatsScreen';
 import { EditModoScreen } from '@/screens/EditModoScreen';
 import { InstagramLoginScreen } from '@/screens/InstagramLoginScreen';
 import { CriarContaScreen } from '@/screens/CriarContaScreen';
+import { RemoverContasScreen } from '@/screens/RemoverContasScreen';
 import { ContasIgScreen } from '@/screens/ContasIgScreen';
 import { EmuladorScreen } from '@/screens/EmuladorScreen';
 import { CronogramaScreen } from '@/screens/CronogramaScreen';
@@ -34,6 +35,7 @@ export type RootStackParamList = {
   VerificandoConta: { contaId?: string; label?: string; botId: string; nome: string };
   InstagramLogin: { label?: string; senha?: string } | undefined;
   CriarConta: undefined;
+  RemoverContas: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -131,6 +133,8 @@ export function RootNavigator() {
           options={{ title: 'Conectar Instagram' }} />
         <Stack.Screen name="CriarConta" component={CriarContaScreen}
           options={{ title: 'Criar Conta' }} />
+        <Stack.Screen name="RemoverContas" component={RemoverContasScreen}
+          options={{ title: 'Remover Contas' }} />
       </Stack.Navigator>
       </View>
       <BarraBotsGlobal onAbrir={(runId, titulo) => {

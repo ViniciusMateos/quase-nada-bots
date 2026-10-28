@@ -14,8 +14,13 @@ Windows roda o `supervisor_painel.py` escondido) e volta sozinho se cair. Endere
 no hosts; porta 80 — se estiver ocupada, cai na `:8777`). `iniciar.bat` só garante o supervisor
 e abre o endereço.
 
-- App completo: `http://quase-nada-bots.localhost/`
+- Painel web (versão desktop, `../painel-web`): `http://quase-nada-bots.localhost/`
+- App RN exportado pra web (cara de celular): `http://quase-nada-bots.localhost/app`
 - Painel simples só de reconexão (lista enxuta): `http://quase-nada-bots.localhost/painel`
+
+**Ícone na barra de tarefas:** `criar-atalho.ps1` cria o atalho no Menu Iniciar (Chrome `--app`
+com o mesmo AppUserModelID da janela); depois é só botão direito no ícone aberto → *Fixar na barra
+de tarefas* (o Windows 11 não deixa fixar por script).
 - Logs: `painel.log` (painel) e `supervisor_painel.log`
 
 ## Reconectar uma conta (login do Instagram)
@@ -60,9 +65,14 @@ app e quiser refletir na web, rode **`atualizar-app.bat`** (ou
 `cd frontend && npx expo export --platform web --output-dir dist-web`) e reinicie o `iniciar.bat`.
 O app no celular continua igual (OTA/EAS) — isto é só a versão web.
 
+O painel web da raiz é outro build: `cd painel-web && npx vite build` (gera `painel-web/dist`,
+servido na hora, sem reiniciar nada — só recarregar a janela).
+
 ## Como funciona (resumo técnico)
 
-- O servidor local (`painel_sessao.py`, FastAPI) serve o app exportado em `/` e expõe os
+- O servidor local (`painel_sessao.py`, FastAPI) serve o painel web em `/` (SPA: qualquer rota
+  desconhecida devolve o `index.html`; assets em `/painel-assets`), o app exportado em `/app`
+  (assets em `/_expo` e `/assets`), o manifest + ícones do atalho, e expõe os
   endpoints do helper de login (`/api/abrir`, `/api/status`, `/api/conectar`, `/api/fechar`),
   que dirigem um Chromium pelo Playwright pra capturar a sessão.
 - O app fala com o backend de produção direto (`https://quasenadaserver2.duckdns.org/bots`), com

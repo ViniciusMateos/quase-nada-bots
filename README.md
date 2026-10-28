@@ -22,7 +22,8 @@ progresso e o saldo. O app mostra tudo igual a antes (Rodando agora, log ao vivo
 |---|---|
 | `frontend/` | **App** React Native (Expo + TS) — o hub no iPhone (e na web). OTA pelo canal `preview`. |
 | `backend/` | **API** FastAPI — runs, fila de jobs do emulador, contas, histórico, push/LA. |
-| `painel-sessao/` | **App no navegador** em `http://quase-nada-bots.localhost` (local, sempre no ar: liga com o PC e volta se cair) e o **helper de login do IG** (Chromium + Playwright). |
+| `painel-web/` | **Painel web** (Vite + React + Tailwind) — a versão desktop do app: menu lateral retrátil, tabelas e as mesmas funções (bots, execuções com log ao vivo, histórico, contas, cronograma). |
+| `painel-sessao/` | **Servidor local** em `http://quase-nada-bots.localhost` (sempre no ar: liga com o PC e volta se cair): serve o painel web em `/`, o app RN exportado em `/app` e o **helper de login do IG** (Chromium + Playwright). |
 | `workers/` | Workers antigos do servidor (Playwright/API), cada um com repo próprio — legado. A pasta `story-brecho-emulador/` guarda só os modos do Story Repost do emulador. |
 
 Os bots do emulador moram no repo **`quase-nada-bots-device`** (agente + supervisor) e cada um no
@@ -80,10 +81,18 @@ BOTS_API_TOKEN=algumtoken uvicorn app:app --host 0.0.0.0 --port 8010
 
 # app
 cd frontend && npm install && npm run start
+
+# painel web (dev em :5179; o build em painel-web/dist é o que o painel-sessao serve)
+cd painel-web && npm install && npm run dev
+npx vite build
 ```
+
+O painel web lê a URL e o token do mesmo `frontend/.env.local` do app (nada de segredo duplicado).
+Ele não tem OTA: atualiza quando roda o `vite build` de novo no PC (basta recarregar a janela).
 
 O app **já vem conectado** — a URL do servidor e o token ficam cravados no build (via
 `EXPO_PUBLIC_API_URL` / `EXPO_PUBLIC_API_TOKEN` no `eas.json` / `.env.local`). Atualização de JS vai
 por OTA (`eas update --branch preview`; o número no rodapé das Configurações sobe a cada uma).
 
-Detalhes: `frontend/README.md` (app), `backend/README.md` (API) e `painel-sessao/README.md`.
+Detalhes: `frontend/README.md` (app), `backend/README.md` (API), `painel-sessao/README.md` e
+`painel-web/CONVENCOES.md`.

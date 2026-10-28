@@ -1267,7 +1267,9 @@ class RunManager:
                     and ((j.get("conta") or {}).get("label") or "").lower() == user.lower()):
                 return {"emulador": True, "criar": True, "run_id": j.get("run_id"), "username": user,
                         "ja_na_fila": True}
-        run = Run("criar-conta", {"username": user})      # params LIMPOS (sem senha/e-mail)
+        # ate_codigo: o bot para depois do código do e-mail e o resto é na mão (27/10)
+        params = {"username": user, "ate_codigo": bool(d.get("ate_codigo"))}
+        run = Run("criar-conta", dict(params))      # params LIMPOS (sem senha/e-mail)
         run._log_path = os.path.join(self._LOG_DIR, f"{run.id}.log")
         try:
             open(run._log_path, "w", encoding="utf-8").close()
@@ -1276,11 +1278,11 @@ class RunManager:
         self.runs[run.id] = run
         run.conta = user
         conta = {"id": user, "label": user, "username": user, "senha": d.get("senha") or "",
-                 "email": email, "ano": d.get("ano"), "dia": d.get("dia"),
+                 "email": email, "ano": d.get("ano"), "mes": d.get("mes"), "dia": d.get("dia"),
                  "bio": d.get("bio") or "", "grupo": d.get("grupo") or ""}
         self._fila_emulador.append({
             "run_id": run.id, "bot": "criar-conta", "conta": conta,
-            "params": {"username": user}, "estado": "pendente", "parar": False,
+            "params": params, "estado": "pendente", "parar": False,
         })
         await run.emitir(f"[backend] criar conta no emulador enfileirado · @{user}")
         asyncio.create_task(self.empurrar_la(forcar=True))

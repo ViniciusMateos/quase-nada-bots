@@ -6,7 +6,7 @@
 //      (sessoes[brecho] = ok | deslogada); só manda logar quando não está ok.
 // Conta sem senha salva no aparelho não tem como logar → volta em `semSenha` pra avisar.
 import { api, locaisDe } from '@/lib/api';
-import { lerCredenciais } from '@/lib/credenciais';
+import { lerCredenciais, promoverPendentes } from '@/lib/credenciais';
 
 /** Tem cara de @ do Instagram? (o agente já filtra; aqui é a 2ª trava pra lixo nunca virar conta) */
 /** A conta da loja: roda no emulador PRÓPRIO dela (Story Repost), fora do das segue. */
@@ -22,11 +22,10 @@ export type ResultadoSync = {
 };
 
 export async function sincronizarEmulador(): Promise<ResultadoSync> {
-  let [contas, creds, status] = await Promise.all([
-    api.getAccounts(),
-    lerCredenciais().catch(() => []),
-    api.emuladorStatus(),
-  ]);
+  let [contas, status] = await Promise.all([api.getAccounts(), api.emuladorStatus()]);
+  // senha de conta criada pelo Criar Conta só vira credencial quando a conta já está no app
+  await promoverPendentes(contas.map((a) => a.label || '')).catch(() => 0);
+  const creds = await lerCredenciais().catch(() => []);
   const logadas = (status?.contas_logadas ?? []).filter(ehUsername);
   const noEmulador = new Set(logadas.map((u) => u.toLowerCase()));
   const conhecidas = new Set(contas.map((a) => (a.label || '').toLowerCase()));

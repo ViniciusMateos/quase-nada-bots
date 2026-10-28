@@ -4,11 +4,15 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
-import { salvarCredencial, lerSenhaPadrao, salvarSenhaPadrao } from '@/lib/credenciais';
+import { garantirLA } from '@/lib/la';
+import {
+  salvarCredencialPendente, lerSenhaPadrao, salvarSenhaPadrao, lerNascPadrao, salvarNascPadrao,
+} from '@/lib/credenciais';
 import { cmpTexto } from '@/lib/ordenar';
 import { colors } from '@/theme';
 import { Botao, Card } from '@/ui/components';
 import { TecladoView } from '@/ui/TecladoView';
+import { RoletaData } from '@/ui/RoletaData';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -26,7 +30,11 @@ function gerarSenha() {
   return (pick(U, 1) + pick(L, 6) + pick(D, 3) + pick(S, 1) + pick(L, 2)).split('').sort(() => Math.random() - 0.5).join('');
 }
 function gerarNasc() {
-  return { ano: new Date().getFullYear() - (20 + Math.floor(Math.random() * 15)), dia: 1 + Math.floor(Math.random() * 28) };
+  return {
+    ano: new Date().getFullYear() - (20 + Math.floor(Math.random() * 15)),
+    mes: 1 + Math.floor(Math.random() * 12),
+    dia: 1 + Math.floor(Math.random() * 28),
+  };
 }
 type GmailConta = { user: string; senha_app: string };
 
@@ -34,11 +42,12 @@ export function CriarContaScreen() {
   const nav = useNavigation<Nav>();
   const [username, setUsername] = useState('');
   const [senha, setSenha] = useState(gerarSenha);
-  const [nasc] = useState(gerarNasc);
-  const [ano, setAno] = useState(String(nasc.ano));
-  const [dia, setDia] = useState(String(nasc.dia));
-  // senha: carrega a última usada (fica salva SÓ no aparelho) pra pré-preencher a próxima run
-  useEffect(() => { lerSenhaPadrao().then((s) => { if (s) setSenha(s); }); }, []);
+  const [nasc, setNasc] = useState(gerarNasc);
+  // senha e nascimento: carrega os da última run (ficam salvos SÓ no aparelho) pra pré-preencher
+  useEffect(() => {
+    lerSenhaPadrao().then((s) => { if (s) setSenha(s); });
+    lerNascPadrao().then((n) => { if (n) setNasc(n); });
+  }, []);
   const [email, setEmail] = useState('');
 
   const [gmails, setGmails] = useState<GmailConta[]>([]);
@@ -47,6 +56,7 @@ export function CriarContaScreen() {
   const [novoPw, setNovoPw] = useState('');
   const [msg, setMsg] = useState('');
   const [criando, setCriando] = useState(false);
+  const [extras, setExtras] = useState(false);   // senha + nascimento (já vêm preenchidos)
 
   const carregarGmails = useCallback(async () => {
     try {
@@ -96,17 +106,25 @@ export function CriarContaScreen() {
     ]);
   }
 
-  const faltando = !username.trim() || !senha.trim() || !email || !ano || !dia;
+  const faltando = !username.trim() || !senha.trim() || !email;
 
   async function criar() {
     const u = username.trim().replace(/^@/, '');
-    if (faltando) { setMsg('Preencha usuário, senha, nascimento e escolha o Gmail base.'); return; }
+    if (faltando) { setMsg('Preencha o usuário e escolha o Gmail base.'); return; }
     setCriando(true); setMsg('');
     try {
-      const res = await api.criarContaEmulador({ username: u, senha, email, ano: parseInt(ano, 10), dia: parseInt(dia, 10) });
-      try { await salvarCredencial({ usuario: u, senha }); } catch { /* ok */ }   // pra poder reconectar depois
+      // ATÉ O CÓDIGO (27/10): o bot para depois do código do e-mail; termos + boas-vindas são na mão
+      // (o IG desafia toda conta nova criada no automático logo depois dos termos)
+      const res = await api.criarContaEmulador({
+        username: u, senha, email, ano: nasc.ano, mes: nasc.mes, dia: nasc.dia, ate_codigo: true });
+      // senha PENDENTE: só vira credencial quando a conta aparecer no app (o agente só cadastra se
+      // criou de verdade) — senão o sincronizar cadastra e loga uma conta que nem existe
+      try { await salvarCredencialPendente({ usuario: u, senha }); } catch { /* ok */ }
       try { await salvarSenhaPadrao(senha); } catch { /* ok */ }   // pré-preenche a próxima run
-      nav.navigate('Run', { runId: res.run_id, nome: `Criar Conta · @${u}` });
+      try { await salvarNascPadrao(nasc); } catch { /* ok */ }
+      const nome = `Criar Conta · @${u}`;
+      garantirLA(nome);   // barra viva no lock screen: enche passo a passo
+      nav.navigate('Run', { runId: res.run_id, nome });
     } catch (e) {
       setMsg((e as Error).message || 'erro ao disparar a criação');
       setCriando(false);
@@ -122,9 +140,10 @@ export function CriarContaScreen() {
             <Text style={styles.sec}>Como funciona</Text>
           </View>
           <Text style={styles.dica}>
-            O bot cria a conta no app do Instagram no emulador: preenche usuário, senha, nascimento e
-            e-mail, pega o código de confirmação do Gmail sozinho e aceita os termos. A conta nasce já
-            logada no aparelho. Você acompanha cada passo no log.
+            O bot começa o cadastro no app do Instagram do emulador: usuário, senha, nascimento e e-mail,
+            e pega o código de confirmação no Gmail sozinho. Aí PARA e te avisa: você termina no emulador
+            (Concordo + telas de boas-vindas). Enquanto isso o emulador fica reservado pra você (até 15 min
+            ou até voltar pra tela principal do Instagram).
           </Text>
           <Text style={[styles.dica, { color: colors.alerta }]}>
             O Instagram limita ~10 contas por aparelho. Com o seletor cheio, o botão "criar" some no app
@@ -150,22 +169,32 @@ export function CriarContaScreen() {
           )}
           <Text style={styles.lbl}>E-mail da conta (não edita)</Text>
           <View style={[styles.input, styles.readonly]}><Text style={styles.readonlyTxt} numberOfLines={1}>{email || '—'}</Text></View>
-          <Text style={styles.lbl}>Senha</Text>
-          <View style={styles.senhaRow}>
-            <TextInput style={[styles.input, { flex: 1 }]} value={senha} onChangeText={setSenha} autoCapitalize="none" autoCorrect={false} placeholderTextColor={colors.textoFraco} />
-            <TouchableOpacity onPress={() => setSenha(gerarSenha())} style={styles.gerar} hitSlop={8}>
-              <Ionicons name="refresh" size={18} color={colors.marca} />
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.lbl}>Nascimento (ano / dia — o mês o app escolhe)</Text>
-          <View style={styles.row}>
-            <TextInput style={[styles.input, { flex: 1 }]} value={ano} onChangeText={setAno} keyboardType="number-pad" placeholder="ano" placeholderTextColor={colors.textoFraco} />
-            <TextInput style={[styles.input, { flex: 1 }]} value={dia} onChangeText={setDia} keyboardType="number-pad" placeholder="dia" placeholderTextColor={colors.textoFraco} />
-          </View>
           {!!msg && <Text style={[styles.dica, { color: colors.erro }]}>{msg}</Text>}
           <View style={{ marginTop: 14 }}>
-            <Botao title={criando ? 'Disparando…' : 'Criar conta no emulador'} onPress={criar} disabled={faltando || criando} loading={criando} />
+            <Botao title={criando ? 'Disparando…' : 'Criar até o código'} onPress={criar} disabled={faltando || criando} loading={criando} />
           </View>
+          {/* senha e nascimento: o IG pede antes do e-mail, então o bot preenche — já vêm da última run */}
+          <TouchableOpacity onPress={() => setExtras((v) => !v)} style={styles.extrasHead} hitSlop={6}>
+            <Text style={styles.extrasTxt}>Senha e nascimento (já preenchidos)</Text>
+            <Ionicons name={extras ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textoFraco} />
+          </TouchableOpacity>
+          {extras && (<>
+            <Text style={styles.lbl}>Senha</Text>
+            <View style={styles.senhaRow}>
+              <TextInput style={[styles.input, { flex: 1 }]} value={senha} onChangeText={setSenha} autoCapitalize="none" autoCorrect={false} placeholderTextColor={colors.textoFraco} />
+              <TouchableOpacity onPress={() => setSenha(gerarSenha())} style={styles.gerar} hitSlop={8}>
+                <Ionicons name="refresh" size={18} color={colors.marca} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.lblRow}>
+              <Text style={styles.lbl}>Data de nascimento</Text>
+              <TouchableOpacity onPress={() => setNasc(gerarNasc())} hitSlop={8} style={styles.sortear}>
+                <Ionicons name="shuffle" size={16} color={colors.marca} />
+                <Text style={styles.sortearTxt}>sortear</Text>
+              </TouchableOpacity>
+            </View>
+            <RoletaData ano={nasc.ano} mes={nasc.mes} dia={nasc.dia} onChange={setNasc} />
+          </>)}
         </Card>
 
         <Card>
@@ -196,6 +225,11 @@ const styles = StyleSheet.create({
   infoHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
   sec: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
   lbl: { color: colors.textoFraco, fontSize: 12.5, fontWeight: '600', marginTop: 10, marginBottom: 4 },
+  lblRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  extrasHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border },
+  extrasTxt: { color: colors.textoFraco, fontSize: 12.5, fontWeight: '700' },
+  sortear: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
+  sortearTxt: { color: colors.marca, fontSize: 12.5, fontWeight: '700' },
   input: { backgroundColor: colors.card2, borderWidth: 1, borderColor: colors.border, color: colors.texto, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 },
   readonly: { justifyContent: 'center' },
   readonlyTxt: { color: colors.textoFraco, fontSize: 15 },

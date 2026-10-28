@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { api, Account, Grupo, locaisDe } from '@/lib/api';
 import { CONTA_BRECHO, ehUsername, sincronizarEmulador } from '@/lib/syncEmulador';
 import { cmpTexto } from '@/lib/ordenar';
-import { Credencial, lerCredenciais, salvarCredencial, removerCredencial } from '@/lib/credenciais';
+import { Credencial, lerCredenciais, salvarCredencial, removerCredencial, promoverPendentes } from '@/lib/credenciais';
 import { colors } from '@/theme';
 import { Botao, Card, Pulsar } from '@/ui/components';
 import { LoadingDog } from '@/ui/LoadingDog';
@@ -83,6 +83,10 @@ export function ContasIgScreen() {
       api.getGrupos().catch(() => [] as Grupo[]),
       api.emuladorStatus().catch(() => null),                   // conta(s) logada(s) no emulador
     ]);
+    // senha de conta criada pelo Criar Conta só vira credencial quando a conta já está no app
+    if (await promoverPendentes(cs.map((c) => c.label || '')).catch(() => 0)) {
+      cr = await lerCredenciais().catch(() => cr);
+    }
     setGrupos(gs);
     setEmul(es?.contas_logadas ?? []);
     setEmulSess(es?.sessoes ?? {});
@@ -323,8 +327,7 @@ export function ContasIgScreen() {
 
         {/* botões no TOPO (primeiro), não no fim da lista */}
         <Botao title="Adicionar conta" cor={colors.marca} txtCor="#fff" onPress={abrirAdd} />
-        {/* Criar Conta: no PC (web) é automático (Chromium + lê o Gmail + bio/foto); no celular abre
-            o cadastro num WebView e você digita o código na mão */}
+        {/* Criar Conta no emulador: o bot vai até o código do e-mail, o resto é na mão */}
         <Botao title="Criar conta nova" cor={colors.card2} txtCor={colors.texto}
           onPress={() => nav.navigate('CriarConta')} />
         {/* verificar + sincronizar (mesma rotina do botão da tela inicial) */}

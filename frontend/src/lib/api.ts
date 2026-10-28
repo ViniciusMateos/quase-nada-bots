@@ -180,7 +180,7 @@ export const api = {
       '/emulador/login', senhas ? { contas, senhas } : { contas }),
   // CRIAR CONTA no emulador: o agente cria a conta tocando no app do IG (o código vem do Gmail).
   // senha/e-mail viajam só no job (nunca no log nem em /runs). Devolve o run_id pra acompanhar.
-  criarContaEmulador: (dados: { username: string; senha: string; email: string; ano?: number; dia?: number; bio?: string; grupo?: string }) =>
+  criarContaEmulador: (dados: { username: string; senha: string; email: string; ano?: number; mes?: number; dia?: number; bio?: string; grupo?: string; ate_codigo?: boolean }) =>
     http.post<{ emulador: boolean; criar: boolean; run_id: string; username: string; ja_na_fila?: boolean }>(
       '/emulador/criar-conta', dados),
   // código de verificação do IG (server grava em codigos/<user>.txt; emulador busca via GET)

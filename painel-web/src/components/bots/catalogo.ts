@@ -1,7 +1,7 @@
 // Catálogo e regras dos bots do EMULADOR — espelho do BOTS_EMULADOR (EmuladorScreen) e das regras
 // do BotScreen do app. Tudo aqui é puro (sem React) pra Bots/Bot/EditModo/Chats usarem igual.
 import type { LucideIcon } from 'lucide-react'
-import { CircleMinus, CirclePlus, Images, MessagesSquare, UserPlus } from 'lucide-react'
+import { CircleMinus, CirclePlus, Heart, Images, MessagesSquare, UserPlus } from 'lucide-react'
 import type { EmuladorStatus, Account, RunHistorico, RunInfo } from '@/lib/api'
 import { locaisDe } from '@/lib/api'
 import { cmpTexto } from '@/lib/ordenar'
@@ -27,6 +27,8 @@ export const BOTS_EMULADOR: BotCatalogo[] = [
     descFallback: 'Manda DM de obrigado pros novos seguidores de cada conta.' },
   { id: 'story-brecho', icone: Images, nomeFallback: 'Story Repost',
     descFallback: 'Posta as peças disponíveis no story do brechó pelo app.' },
+  { id: 'like-repost', icone: Heart, nomeFallback: 'Like + Repost',
+    descFallback: 'Curte e republica os posts do brechó com as contas do emulador.' },
   { id: 'criar-conta', icone: CirclePlus, nomeFallback: 'Criar Conta',
     descFallback: 'Começa a conta nova no emulador até o código do e-mail; o resto você termina.', rota: '/contas/criar' },
   { id: 'remover-conta', icone: CircleMinus, nomeFallback: 'Remover Contas',
@@ -48,9 +50,10 @@ export function recursosDoBot(botId: string, temChatsBackend?: boolean) {
     temChats: botId === 'auto-follow' || !!temChatsBackend,
     temPostInicial: botId === 'like-repost',
     // lote por COOKIE (contas do servidor)
-    temLote: botId === 'like-repost' || botId === 'story-repost',
+    temLote: botId === 'story-repost',
     // emulador: lote pelas contas logadas no device, uma de cada vez, na ORDEM da seleção
-    ehVitrine: botId === 'auto-follow' || botId === 'dm-followers' || botId === 'story-brecho',
+    ehVitrine: botId === 'auto-follow' || botId === 'dm-followers' || botId === 'story-brecho'
+      || botId === 'like-repost',
     // Story Repost: a conta do brechó entra na mesma ordem (roda no emulador próprio dela)
     ehStoryBrecho: botId === 'story-brecho',
   }

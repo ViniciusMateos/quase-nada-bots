@@ -90,10 +90,11 @@ export function BotScreen() {
 
   const temChats = botId === 'auto-follow';
   const temPostInicial = botId === 'like-repost';
-  const temLote = botId === 'like-repost' || botId === 'story-repost';   // lote por COOKIE (accounts.json)
+  const temLote = botId === 'story-repost';   // lote por COOKIE (accounts.json)
   // Bots do EMULADOR: lote pelas contas logadas no device (por username), uma de cada vez, numa run
-  // só, na ORDEM da seleção (20/10/2026: todos os bots com a mesma estrutura).
-  const ehVitrine = botId === 'auto-follow' || botId === 'dm-followers' || botId === 'story-brecho';
+  // só, na ORDEM da seleção (20/10/2026: todos os bots com a mesma estrutura; 28/10: like-repost).
+  const ehVitrine = botId === 'auto-follow' || botId === 'dm-followers' || botId === 'story-brecho'
+    || botId === 'like-repost';
   // Story Repost: além das segue, a conta do BRECHÓ (roda no emulador próprio dela) entra na mesma ordem
   const ehStoryBrecho = botId === 'story-brecho';
   const fonteVitrine: 'emulador' | 'story' = 'emulador';
@@ -608,9 +609,8 @@ export function BotScreen() {
             autoCapitalize="none" autoCorrect={false} placeholderTextColor={colors.textoFraco}
             placeholder="link do post ou código (ex: DABC123xyz)" />
           <Text style={styles.aviso}>
-            Só na 1ª vez, pra marcar de onde começar (ex: o 1º post do drop). Em branco, ele
-            pega os posts mais recentes do modo. Depois disso ele continua sozinho, do último
-            que parou pra frente.
+            Em branco, segue o modo (o último drop ou os posts mais recentes do brechó).
+            Preenchido, faz daquele post em diante. Cada conta pula o que já curtiu e republicou.
           </Text>
         </Card>
         </Aparece>

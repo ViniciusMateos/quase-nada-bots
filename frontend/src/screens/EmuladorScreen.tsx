@@ -29,6 +29,9 @@ const BOTS_EMULADOR: {
   // story da conta do brechó, pelo app de verdade, numa instância do MuMu só dela (20/10)
   { id: 'story-brecho', icone: 'images', nomeFallback: 'Story Repost',
     descFallback: 'Posta as peças disponíveis no story do brechó pelo app.' },
+  // curte e republica os posts do brechó com as segue (28/10)
+  { id: 'like-repost', icone: 'heart', nomeFallback: 'Like + Repost',
+    descFallback: 'Curte e republica os posts do brechó com as contas do emulador.' },
   { id: 'criar-conta', icone: 'add-circle', nomeFallback: 'Criar Conta',
     descFallback: 'Começa a conta nova no emulador até o código do e-mail; o resto você termina.', tela: 'CriarConta' },
   { id: 'remover-conta', icone: 'remove-circle', nomeFallback: 'Remover Contas',

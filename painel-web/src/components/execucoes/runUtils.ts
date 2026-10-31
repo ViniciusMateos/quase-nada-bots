@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   CircleMinus,
+  Heart,
   Images,
   LogIn,
   MessagesSquare,
@@ -63,6 +64,8 @@ export function visualDoProcesso(r: { bot?: string | null; params?: Record<strin
     case 'story-brecho':
     case 'story-repost':
       return { Icon: Images, cor: 'text-[#B66BDB]', fundo: 'bg-roxo/20' }
+    case 'like-repost':
+      return { Icon: Heart, cor: 'text-danger', fundo: 'bg-danger/10' }
     case 'criar-conta':
       return { Icon: UserRoundPlus, cor: 'text-ok', fundo: 'bg-ok/10' }
     case 'remover-conta':
@@ -120,9 +123,12 @@ const ROTULO_SALDO: Record<string, [string, string]> = {
   vendidas: ['vendida', 'vendidas'],
   vistos: ['visto', 'vistos'],
   imagens: ['imagem', 'imagens'],
+  curtidas: ['curtida', 'curtidas'],
+  repostadas: ['repost', 'reposts'],
 }
 // chaves "boas" (verde) e "ruins" (vermelho) — o resto fica neutro
-const SALDO_BOM = new Set(['follows', 'seguidos', 'enviadas', 'postados', 'criadas', 'removidas', 'novas'])
+const SALDO_BOM = new Set(['follows', 'seguidos', 'enviadas', 'postados', 'criadas', 'removidas', 'novas',
+  'curtidas', 'repostadas'])
 const SALDO_RUIM = new Set(['falhas'])
 
 export type ChipSaldo = { key: string; valor: string; rotulo: string; tom: 'bom' | 'ruim' | 'neutro' }

@@ -31,6 +31,7 @@ function iconeDoBot(run: RunInfo): keyof typeof Ionicons.glyphMap {
   if (run.bot === 'auto-follow') return 'person-add';
   if (run.bot === 'dm-followers') return 'paper-plane';
   if (run.bot === 'story-brecho' || run.bot === 'story-repost') return 'images';
+  if (run.bot === 'like-repost') return 'heart';
   return 'flash';
 }
 

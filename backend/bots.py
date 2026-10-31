@@ -33,10 +33,14 @@ BOTS = {
         "tem_modos": True, "tem_chats": False, "tem_ig": True,
         "descricao": "Navega como gente (feed, story, curtidas) pra aquecer a conta.",
     },
+    # 28/10/2026: Like + Repost saiu do server (mutations GraphQL) pro emulador — as contas segue
+    # curtem e republicam os posts do brechó tocando no app real. A lista de posts vem do app do
+    # Brechó (peças com shortcode). O dir novo só guarda os MODOS (o do worker antigo fica de lado).
+    # Módulo: quase-nada-bots-device/bots/like_repost.
     "like-repost": {
-        "nome": "Like + Repost", "dir": "like-repost-instagram", "target": "server",
-        "tem_modos": True, "tem_chats": False, "tem_ig": True,
-        "descricao": "Curte (e reposta) os posts de uma conta-alvo — ex: o drop do brechó.",
+        "nome": "Like + Repost", "dir": "like-repost-emulador", "target": "emulador",
+        "tem_modos": True, "tem_chats": False, "tem_ig": False,
+        "descricao": "Curte e republica os posts do brechó com as contas do emulador (último drop ou os mais recentes).",
     },
     # 20/10/2026: story da conta do BRECHÓ pelo app de verdade, numa instância do MuMu só dele (o
     # story pela API do server tomou "restricted from uploading"). O dir só guarda os MODOS.
@@ -190,6 +194,22 @@ MODOS_PADRAO_EMULADOR = {
         "rápido": {"quantos_posts": 5, "fundo": "instagram", "mostrar_preco": True, "chamada": "",
                    "pausa_story": [0, 0], "tentativas_por_peca": 1,
                    "manter_ligado": False},
+    },
+    # selecao: 'drop' = peças do último drop (quantos_posts = teto, 0 = todas) | 'recentes' = os N
+    # posts mais novos. Cada conta lembra o que já fez e só pega o que falta.
+    "like-repost": {
+        "drop": {"selecao": "drop", "quantos_posts": 0, "curtir": True, "repostar": True,
+                 "max_posts_conta": 0, "max_acoes_dia": 60, "delay_acao_ui": [2, 5],
+                 "delay_post": [20, 60], "pausa_longa_cada": 8, "pausa_longa": [90, 240],
+                 "pausa_entre_contas": [60, 180], "resfriar_conta_h": 12},
+        "recentes": {"selecao": "recentes", "quantos_posts": 12, "curtir": True, "repostar": True,
+                     "max_posts_conta": 0, "max_acoes_dia": 60, "delay_acao_ui": [2, 5],
+                     "delay_post": [20, 60], "pausa_longa_cada": 8, "pausa_longa": [90, 240],
+                     "pausa_entre_contas": [60, 180], "resfriar_conta_h": 12},
+        "só curtir": {"selecao": "drop", "quantos_posts": 0, "curtir": True, "repostar": False,
+                      "max_posts_conta": 0, "max_acoes_dia": 60, "delay_acao_ui": [2, 5],
+                      "delay_post": [15, 40], "pausa_longa_cada": 10, "pausa_longa": [60, 180],
+                      "pausa_entre_contas": [60, 180], "resfriar_conta_h": 12},
     },
 }
 

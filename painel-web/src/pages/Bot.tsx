@@ -601,8 +601,8 @@ function TelaBot({ botId }: { botId: string }) {
                     placeholder="link do post ou código (ex: DABC123xyz)"
                   />
                   <Dica className="mt-2">
-                    Só na 1ª vez, pra marcar de onde começar (ex: o 1º post do drop). Em branco, ele pega os posts mais
-                    recentes do modo. Depois disso ele continua sozinho, do último que parou pra frente.
+                    Em branco, segue o modo (o último drop ou os posts mais recentes do brechó). Preenchido, faz daquele
+                    post em diante. Cada conta pula o que já curtiu e republicou.
                   </Dica>
                 </Section>
               </motion.div>

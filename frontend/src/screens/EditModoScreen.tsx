@@ -141,6 +141,9 @@ const META_EMULADOR: Record<string, MetaF> = {
     dica: 'Se a conferência barrar o story, tenta a mesma peça de novo até N vezes.' },
   manter_ligado: { label: 'Deixar o emulador ligado no fim', cat: 'outros', tipo: 'bool',
     dica: 'Pra rodar de novo em seguida sem esperar ligar (gasta memória do PC enquanto isso).' },
+  // like + repost (28/10)
+  max_acoes_dia: { label: 'Máx. curtidas + reposts por dia', cat: 'limites', tipo: 'cap', sug: 60,
+    dica: 'Por conta, contando as últimas 24h. Chegou no teto, a conta fica pra próxima run.' },
 };
 Object.assign(META, META_EMULADOR);
 
@@ -163,6 +166,26 @@ const META_BOT: Record<string, Record<string, Partial<MetaF>>> = {
     quantos_posts: { label: 'Stories por run', dica: 'Quantas peças postar no story a cada run.' },
     mostrar_preco: { dica: 'A etiqueta com o preço e o tamanho no canto do card.' },
   },
+  'like-repost': {
+    selecao: { label: 'Quais posts', sug: 'drop',
+      opcoes: [{ valor: 'drop', label: 'Último drop' }, { valor: 'recentes', label: 'Os mais recentes' }],
+      dica: 'Último drop: todas as peças do drop mais novo (as vendidas também) + o post de pré-drop. Se o pré-drop do próximo drop já saiu e as peças ainda não, faz só ele. Os mais recentes: os N posts mais novos do brechó. Cada conta pula o que já fez.' },
+    quantos_posts: { label: 'Quantos posts', sug: 12,
+      dica: 'Nos mais recentes, quantos posts pegar. No último drop, teto de peças (desligado = o drop inteiro).' },
+    curtir: { label: 'Curtir os posts' },
+    repostar: { label: 'Republicar os posts',
+      dica: 'O botão Republicar do app. Conta que ainda não tem o botão (o IG libera aos poucos) só curte.' },
+    max_posts_conta: { label: 'Máx. posts por conta', sug: 8,
+      dica: 'Quantos posts cada conta faz nesta run. Desligado = todos os que faltam.' },
+    resfriar_conta_h: { label: 'Descanso após bloqueio (h)', sug: 12,
+      dica: 'Depois de bloqueio ou soft-block (a curtida/o repost não colou), a conta fica de fora por essas horas.' },
+    delay_post: { sug: [20, 60] },
+    delay_acao_ui: { label: 'Espera entre curtir e republicar (s)', sug: [2, 5] },
+    pausa_longa_cada: { label: 'Pausa longa a cada N posts', sug: 8,
+      dica: 'De vez em quando sai, rola o feed e espera — quebra o padrão de rajada.' },
+    pausa_longa: { sug: [90, 240] },
+    pausa_entre_contas: { sug: [60, 180] },
+  },
 };
 
 // campos ESCONDIDOS do editor (o bot já cuida deles; não faz sentido mexer)
@@ -176,7 +199,7 @@ const OCULTOS_DEFAULT: Record<string, Record<string, Valor>> = {};
 
 // bots com o esquema NOVO (emulador): ao editar, a tela mostra exatamente estes campos (os antigos
 // que não fazem mais sentido somem ao salvar)
-const ESQUEMA_NOVO = new Set(['auto-follow', 'dm-followers', 'story-brecho']);
+const ESQUEMA_NOVO = new Set(['auto-follow', 'dm-followers', 'story-brecho', 'like-repost']);
 
 // campos de um modo NOVO (zerado), por bot — a fonte da verdade quando não há template
 const CAMPOS_NOVO: Record<string, string[]> = {
@@ -198,8 +221,9 @@ const CAMPOS_NOVO: Record<string, string[]> = {
     'prob_story', 'ver_explore', 'delay_scroll', 'delay_acao_ui', 'active_hours',
   ],
   'like-repost': [
-    'alvo', 'curtir', 'repostar', 'primeira_vez_ultimos', 'aplicar_caps', 'max_por_run',
-    'delay_post', 'delay_acao_ui', 'humanizar', 'pausa_cada', 'active_hours',
+    'selecao', 'quantos_posts', 'curtir', 'repostar', 'max_posts_conta', 'max_acoes_dia',
+    'resfriar_conta_h', 'delay_acao_ui', 'delay_post', 'pausa_longa_cada', 'pausa_longa',
+    'pausa_entre_contas',
   ],
   'story-repost': [
     'selecao', 'quantos_posts', 'repost_card', 'estilo', 'mostrar_preco', 'texto', 'link',

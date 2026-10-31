@@ -89,6 +89,9 @@ function saldoTxt(r: RunHistorico): string {
   if (r.bot === 'dm-followers') {
     return `${s.enviadas ?? 0} DMs · ${s.puladas ?? 0} puladas`;
   }
+  if (r.bot === 'like-repost') {
+    return `${s.curtidas ?? 0} curtidas · ${s.repostadas ?? 0} reposts · ${s.puladas ?? 0} já feitos`;
+  }
   return Object.entries(s).map(([k, v]) => `${v} ${k}`).join(' · ') || 'sem saldo';
 }
 
@@ -144,7 +147,9 @@ export function HistoricoScreen() {
       if (r.acao) continue;   // login/verificar não são ações de bot
       acoes += r.bot === 'auto-follow'
         ? Number(s.seguidos ?? 0) + Number(s.pedidos ?? 0)
-        : Number(s.enviadas ?? 0);
+        : r.bot === 'like-repost'
+          ? Number(s.curtidas ?? 0) + Number(s.repostadas ?? 0)
+          : Number(s.enviadas ?? 0);
     }
     return { runs: filtrados.length, acoes };
   }, [filtrados]);

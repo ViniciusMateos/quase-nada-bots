@@ -1199,6 +1199,9 @@ class RunManager:
         except Exception:
             pass
         self.runs[run.id] = run
+        # conta da run = a do lote ("N contas" ou a única): sem isso o 1º "Conta: @x" do log virava a
+        # conta da run e o histórico mostrava o lote de 10 como se fosse só a segue17 (30/10)
+        run.conta = contas[0]["label"] if len(contas) == 1 else f"{len(contas)} contas"
         # UM job só carregando a lista → o agente roda lote_contas em sequência (sem conta única).
         self._fila_emulador.append({
             "run_id": run.id, "bot": bot_id, "conta": {},

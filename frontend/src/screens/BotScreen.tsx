@@ -11,7 +11,14 @@ import { colors } from '@/theme';
 import { Aparece, Botao, Card, CartaoTocavel } from '@/ui/components';
 import { SeletorConta } from '@/ui/SeletorConta';
 import { SeletorContas } from '@/ui/SeletorContas';
-import { ehProcessoDeConta } from '@/lib/processo';
+import { acaoDe, ehProcessoDeConta, nomeDoProcesso } from '@/lib/processo';
+
+// conta de uma run do histórico: "@user", ou "N contas" num lote (sem @); sem conta = o processo
+// (verificar/login) — antes saía "conta ?" (30/10)
+function rotuloConta(r: RunHistorico): string {
+  if (r.conta) return /\d+ contas?$/.test(r.conta) ? r.conta : `@${r.conta}`;
+  return nomeDoProcesso(acaoDe(r), null) || 'sem conta';
+}
 import { MenuContexto } from '@/ui/MenuContexto';
 import { TecladoView } from '@/ui/TecladoView';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
@@ -687,7 +694,7 @@ export function BotScreen() {
                 <View style={[styles.runDot, { backgroundColor: corRun(r) }]} />
                 <Ionicons name="person-circle-outline" size={14} color={colors.marca} />
                 <Text style={styles.runConta} numberOfLines={1}>
-                  {r.conta ? `@${r.conta}` : 'conta ?'}{r.dry_run ? '  ·  simulação' : ''}
+                  {rotuloConta(r)}{r.dry_run ? '  ·  simulação' : ''}
                 </Text>
                 <Text style={styles.runHora}>{fmtHora(r.ended_at ?? r.started_at)}</Text>
                 {!r.backfill && <Ionicons name="chevron-forward" size={14} color={colors.textoFraco} />}

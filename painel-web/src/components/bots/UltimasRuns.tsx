@@ -82,7 +82,7 @@ export function UltimasRuns({ historico, carregando, erro, onTentar }: {
             <CircleUser className="h-4 w-4 text-primary-light shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="text-sm font-semibold text-txt truncate">{r.conta ? arroba(r.conta) : 'conta ?'}</span>
+                <span className="text-sm font-semibold text-txt truncate">{r.conta ? arroba(r.conta) : (nomeDoProcesso(acaoDe(r), null) || 'sem conta')}</span>
                 {r.dry_run && <Etiqueta className="bg-surface2 text-txt-dim">simulação</Etiqueta>}
                 {r.bloqueio && <Etiqueta className="bg-danger/15 text-danger">bloqueio</Etiqueta>}
                 {processo && <Etiqueta className="bg-roxo/20 text-txt-dim">{processo}</Etiqueta>}

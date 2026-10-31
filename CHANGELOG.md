@@ -3,6 +3,20 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [2.6.0] — 2026-10-31
+
+### Adicionado
+- feat: bot **Like + Repost** no emulador — curte e republica os posts do brechó com as contas segue. No backend vira bot do emulador (modos drop, recentes e só curtir, e os modos de todo bot do emulador chegam no job); no app e no painel ganha card, lote por username na ordem, editor de modo com os campos novos (drop inteiro + pré-drop), saldo de curtidas/reposts no histórico e ícone na barra
+
+### Corrigido
+- fix: histórico mostra o lote como "N contas" (ou o @ da única) — o Story das 10 contas aparecia como se fosse só a segue17; run sem conta mostra o processo (Verificar sessões, Conectar contas) em vez de "conta ?", no app e no painel
+
+### Documentação
+- docs: README com o Like + Repost e o repo `like-repost-emulador`
+
+### Manutenção
+- chore: OTA_VERSION 108
+
 ## [2.5.0] — 2026-10-28
 
 ### Adicionado

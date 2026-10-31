@@ -47,6 +47,10 @@ seu repo: `auto-follow-emulador`, `dm-followers-emulador`, `story-repost-emulado
   o push "sua vez": os termos e as boas-vindas são na mão (o IG desafia toda conta nova criada
   no automático). Enquanto isso o emulador fica reservado (até voltar pra tela principal do IG
   ou 15 min). No app só se preenche usuário + Gmail; senha e data vêm da última run.
+- **Like + Repost** — curte e republica os posts do brechó com as contas do emulador. Modos:
+  **drop** (as peças do último drop, vendidas também, **+ o pré-drop** — o post de divulgação sem
+  `#p`) ou **recentes** (os N mais novos). Confere cada post antes de agir, não desfaz o que já
+  estava feito e cada conta lembra o que já fez. Conta sem o botão Republicar só curte.
 - **Remover Contas** — marca as contas logadas no emulador e o bot termina a sessão de cada uma
   (libera vaga no teto de ~10 contas por aparelho). A conta continua no Instagram e no app, só
   sai do emulador (o sincronizar não loga de volta).
@@ -57,8 +61,10 @@ Os bots rodam em **lote na ordem em que as contas foram marcadas**, e cada um te
 pro emulador (teto por conta e do lote, descanso depois de soft-block, pausa entre contas, limites
 de DM por hora/dia etc.), editáveis no app.
 
-O que ainda falta trazer do servidor: Aquecimento Humano (+ cronograma), Like + Repost e os extras
-do Story (apagar peça vendida, modo drop novo).
+O que ainda falta trazer do servidor: Aquecimento Humano (+ cronograma) e os extras do Story
+(apagar peça vendida, modo drop novo).
+
+No histórico, uma run em lote aparece como "N contas" (não como a primeira conta do lote).
 
 ## Contas
 

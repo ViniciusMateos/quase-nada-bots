@@ -27,8 +27,8 @@ progresso e o saldo. O app mostra tudo igual a antes (Rodando agora, log ao vivo
 | `workers/` | Workers antigos do servidor (Playwright/API), cada um com repo próprio — legado. A pasta `story-brecho-emulador/` guarda só os modos do Story Repost do emulador. |
 
 Os bots do emulador moram no repo **`quase-nada-bots-device`** (agente + supervisor) e cada um no
-seu repo: `auto-follow-emulador`, `dm-followers-emulador`, `story-repost-emulador` e
-`criar-conta-emulador`.
+seu repo: `auto-follow-emulador`, `dm-followers-emulador`, `story-repost-emulador`,
+`criar-conta-emulador` e `like-repost-emulador`.
 
 ## Bots
 

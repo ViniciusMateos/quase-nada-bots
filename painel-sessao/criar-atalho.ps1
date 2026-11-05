@@ -14,7 +14,11 @@ param(
   [Parameter(Mandatory)] [string] $Icone,
   # Trecho do <title> da pagina, pra achar a janela depois de abrir.
   [Parameter(Mandatory)] [string] $TituloJanela,
-  [string] $Perfil = 'Default'
+  [string] $Perfil = 'Default',
+  # URL que responde quando o servidor local esta no ar (ex.: http://127.0.0.1/). Com ela o atalho
+  # abre pelo abrir.vbs (ao lado deste script), que avisa "ainda iniciando"/"fora do ar" e so
+  # abre a janela quando o servidor responde. Sem ela, o atalho chama o Chrome direto.
+  [string] $UrlCheck = ''
 )
 $ErrorActionPreference = 'Stop'
 
@@ -112,10 +116,17 @@ $args_ = "--profile-directory=$Perfil --app=$Url"
 # 1) Atalho no Menu Iniciar (Win + nome acha ele)
 $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) "$Nome.lnk"
 $sc = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
-$sc.TargetPath = $chrome
-$sc.Arguments = $args_
+$lancador = Join-Path $PSScriptRoot 'abrir.vbs'
+if ($UrlCheck -and (Test-Path $lancador)) {
+  $sc.TargetPath = "$env:SystemRoot\System32\wscript.exe"
+  $sc.Arguments = "//nologo `"$lancador`" `"$Nome`" `"$Url`" `"$UrlCheck`""
+  $sc.WorkingDirectory = $PSScriptRoot
+} else {
+  $sc.TargetPath = $chrome
+  $sc.Arguments = $args_
+  $sc.WorkingDirectory = Split-Path $chrome
+}
 $sc.IconLocation = "$Icone,0"
-$sc.WorkingDirectory = Split-Path $chrome
 $sc.Description = $Nome
 $sc.Save()
 Write-Output "atalho: $lnk"

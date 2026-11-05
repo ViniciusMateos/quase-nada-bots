@@ -5,8 +5,8 @@ Sobe o painel_sessao.py (sem abrir navegador) e RE-SOBE se ele cair, com espera 
 (5s → 60s) pra não ficar em loop se algo quebrar de vez. Se o painel já estiver respondendo
 (ex: alguém rodou o iniciar.bat antigo), só fica olhando.
 
-Liga no BOOT do PC: um .vbs no Startup do Windows (QuaseNada-PainelWeb.vbs) roda este arquivo
-escondido (pythonw). Logs: painel.log (saída do painel) e supervisor_painel.log.
+Liga no BOOT do PC: a tarefa agendada QuaseNada-Bots-Painel (no logon) roda este arquivo escondido
+(pythonw) — ver quase-nada-bots-device/inicializacao/registrar-tarefas.ps1. Logs: painel.log (saída do painel) e supervisor_painel.log.
 Pra atualizar o código do painel: edite e mate o processo do painel_sessao.py — ele volta sozinho.
 """
 import datetime

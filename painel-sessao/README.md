@@ -8,8 +8,9 @@ Playwright (porque o navegador não consegue ler o cookie `sessionid`, que é ht
 
 ## Rodar
 
-**Fica sempre no ar:** liga junto com o PC (`QuaseNada-PainelWeb.vbs` na pasta Inicializar do
-Windows roda o `supervisor_painel.py` escondido) e volta sozinho se cair. Endereço:
+**Fica sempre no ar:** liga no login do PC (a tarefa agendada `QuaseNada-Bots-Painel` roda o
+`supervisor_painel.py` escondido; o padrão de inicialização mora em
+`quase-nada-bots-device/inicializacao/registrar-tarefas.ps1`) e volta sozinho se cair. Endereço:
 **http://quase-nada-bots.localhost** (qualquer `*.localhost` já aponta pro próprio PC, sem mexer
 no hosts; porta 80 — se estiver ocupada, cai na `:8777`). `iniciar.bat` só garante o supervisor
 e abre o endereço.
@@ -20,7 +21,9 @@ e abre o endereço.
 
 **Ícone na barra de tarefas:** `criar-atalho.ps1` cria o atalho no Menu Iniciar (Chrome `--app`
 com o mesmo AppUserModelID da janela); depois é só botão direito no ícone aberto → *Fixar na barra
-de tarefas* (o Windows 11 não deixa fixar por script).
+de tarefas* (o Windows 11 não deixa fixar por script). Com `-UrlCheck "http://127.0.0.1/"` o atalho
+abre pelo `abrir.vbs`: se o painel ainda não respondeu, avisa "ainda está iniciando" (PC ligado há
+pouco) ou "pode estar fora do ar" e abre a janela sozinho quando ele subir.
 - Logs: `painel.log` (painel) e `supervisor_painel.log`
 
 ## Reconectar uma conta (login do Instagram)

@@ -3,6 +3,14 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [2.7.0] — 2026-11-05
+
+### Adicionado
+- feat: ícone do painel na barra avisa se ele **ainda está iniciando** (PC ligado há menos de 8 min) ou se **pode estar fora do ar**, e abre a janela sozinho quando o servidor responder (`painel-sessao/abrir.vbs`; `criar-atalho.ps1 -UrlCheck`)
+
+### Documentação
+- docs: painel sobe por tarefa agendada no logon (padrão em `quase-nada-bots-device/inicializacao`) e abre pelo `abrir.vbs`
+
 ## [2.6.0] — 2026-10-31
 
 ### Adicionado

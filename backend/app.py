@@ -243,11 +243,14 @@ async def validar_contas(force: bool = False):
 @app.post("/accounts/pendente", dependencies=[Depends(auth)])
 async def adicionar_conta_pendente(payload: dict):
     """Registra uma conta PENDENTE (só o @, sem sessão) pra ela já entrar na lista e no cronograma
-    antes de conectar. Idempotente (mesmo label = devolve a existente). body {label, locais?}."""
+    antes de conectar. Idempotente (mesmo label = devolve a existente). body {label, locais?, manual?}.
+    manual=true = você adicionou no app (traz de volta uma conta que tinha apagado); sem ele, conta
+    apagada é ignorada ({ignorada: "apagada"}) — o auto-registro não ressuscita conta apagada."""
     label = (payload or {}).get("label") or ""
     locais = (payload or {}).get("locais")
     try:
-        return accounts.adicionar_pendente(label, locais if isinstance(locais, list) else None)
+        return accounts.adicionar_pendente(label, locais if isinstance(locais, list) else None,
+                                           manual=bool((payload or {}).get("manual")))
     except ValueError as e:
         raise HTTPException(400, str(e))
 

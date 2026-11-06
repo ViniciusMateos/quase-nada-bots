@@ -136,6 +136,7 @@ export function ContasIgScreen() {
       e.propria = (a.label || '').toLowerCase() === CONTA_BRECHO;
       e.fora = !e.propria && !locaisDe(a).includes('emulador');
       if (e.propria) e.emulSessao = emulSess[a.label] ?? emulSess[CONTA_BRECHO];   // emulador dela
+      else e.emulSessao = emulSess[a.label];   // fora do aparelho também (bloqueada/senha incorreta)
     }
     for (const u of emul) {
       if (!ehUsername(u)) continue;
@@ -160,11 +161,16 @@ export function ContasIgScreen() {
   }, [entries]);
 
   function apagar(e: Entry) {
-    Alert.alert('Apagar conta', `Apagar "@${e.usuario}"? Some a credencial salva e a sessão.`, [
+    const noEmulador = !!e.emulLogada && !e.propria;
+    Alert.alert('Apagar conta', `Apagar "@${e.usuario}"? Some a credencial salva e a sessão.`
+      + (noEmulador ? '\n\nEla está logada no emulador: o Remover Contas tira ela de lá também.' : ''), [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Apagar', style: 'destructive', onPress: async () => {
         setBusy(e.usuario);
         try {
+          // 05/11: apagar só do app deixava ela logada no emulador → o auto-registro trazia de volta
+          // (segue25). Agora tira do emulador também (Remover Contas) e o server lembra que foi apagada.
+          if (noEmulador) await api.startRun('remover-conta', { contas: [e.usuario] }).catch(() => null);
           await removerCredencial(e.usuario);
           if (e.id) await api.removerConta(e.id);
           await carregar();
@@ -210,8 +216,7 @@ export function ContasIgScreen() {
     if (sincronizando) return;
     setSincronizando(true);
     try {
-      const r = await sincronizarEmulador();
-      await api.verificarSessoes().catch(() => {});
+      const r = await sincronizarEmulador(true);   // um lote só: loga as que faltam e verifica todas
       await carregar();
       const partes: string[] = [];
       if (r.adicionadas.length) partes.push(`Entraram no app: ${r.adicionadas.map((u) => '@' + u).join(', ')}`);
@@ -246,7 +251,7 @@ export function ContasIgScreen() {
     if (!modal.senha) { Alert.alert('Falta a senha', 'Põe a senha (fica só neste aparelho).'); return; }
     try {
       await salvarCredencial({ usuario: u, senha: modal.senha });
-      await api.adicionarContaPendente(u).catch(() => {});   // já entra na lista (sem logar ainda)
+      await api.adicionarContaPendente(u, undefined, true).catch(() => {});   // já entra na lista (sem logar ainda); manual → volta mesmo se tinha sido apagada
       // não está logada → já manda o agente logar (fila), com a senha recém-salva. A do brechó
       // sempre loga (no emulador próprio dela; se já estiver logada, ele só confere e desliga)
       const logada = emul.some((x) => x.toLowerCase() === u.toLowerCase());
@@ -398,9 +403,10 @@ export function ContasIgScreen() {
             else if (e.emulSessao === 'senha_incorreta') { txt = 'senha incorreta · edite e corrija'; cor = colors.erro; }
             else { txt = 'não sincronizada · emulador do brechó'; cor = colors.laranja; }
           }
+          else if (e.emulSessao === 'bloqueada') { txt = 'bloqueada'; cor = colors.erro; }
+          else if (e.emulSessao === 'senha_incorreta') { txt = 'senha incorreta · edite e corrija'; cor = colors.erro; }
           else if (e.emulLogada) {
             if (e.emulSessao === 'ok') { txt = 'sessão ok'; cor = colors.ok; }
-            else if (e.emulSessao === 'bloqueada') { txt = 'bloqueada'; cor = colors.erro; }
             else { txt = 'logada'; cor = colors.ok; }
           }
           else { txt = 'não sincronizada'; cor = colors.laranja; }

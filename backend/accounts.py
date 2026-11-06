@@ -224,12 +224,16 @@ def eh_pendente(uid):
     return any(c.get("id") == uid and c.get("pendente") for c in listar())
 
 
-def adicionar_pendente(label, locais=None):
+def adicionar_pendente(label, locais=None, manual=False):
     """Registra uma conta PENDENTE — só o @, SEM sessão nem senha. Serve pra a conta já entrar na
     lista e no cronograma ANTES de conectar: nos horários o cronograma manda 'conecta pra rodar'.
     Quando você conectar de verdade, o `salvar()` funde a pendente na conta real (mesmo label).
     Idempotente: se já existe conta (real ou pendente) com esse label, devolve a existente.
-    `locais` default = só emulador (conta nova hoje nasce pro emulador; o server é só o brechó)."""
+    `locais` default = só emulador (conta nova hoje nasce pro emulador; o server é só o brechó).
+
+    05/11: conta que você APAGOU (lixeira) não volta sozinha — o auto-registro (ping do agente,
+    sincronização do app) ignora ela enquanto estiver em `apagadas`. `manual=True` (você adicionou
+    na mão no app) tira da lista de apagadas e cadastra de novo. Ignorada → {ignorada: "apagada"}."""
     label = (label or "").strip().lstrip("@")
     if not label:
         raise ValueError("label vazio")
@@ -237,6 +241,11 @@ def adicionar_pendente(label, locais=None):
     ja = next((c for c in idx.get("contas", []) if (c.get("label") or "").lower() == label.lower()), None)
     if ja:
         return {"id": ja.get("id"), "label": ja.get("label"), "pendente": bool(ja.get("pendente"))}
+    apagadas = idx.setdefault("apagadas", {})
+    if label.lower() in apagadas:
+        if not manual:
+            return {"id": None, "label": label, "pendente": True, "ignorada": "apagada"}
+        apagadas.pop(label.lower(), None)
     existentes = {c.get("id") for c in idx.get("contas", [])}
     pid = "pend:" + _slug(label)                 # prefixo "pend:" nunca colide com ds_user_id (numérico)
     base, n = pid, 2
@@ -280,6 +289,7 @@ def salvar(cookies, label=None):
     contas.append({"id": uid, "label": label, "conectada_em": int(time.time()),
                    "criada_em": criada_em, "grupos": grupos, "travada": travada,
                    "locais": _limpar_locais(locais)})
+    (idx.get("apagadas") or {}).pop(label.strip().lstrip("@").lower(), None)   # conectou de verdade → volta
     _gravar_index({**idx, "ativa": uid, "contas": contas})   # preserva o resto do índice (ex: "grupos")
     _escrever_central(uid)
     return {"id": uid, "label": label, "ativa": True}
@@ -407,8 +417,12 @@ def remover_grupo(nome):
 
 
 def remover(uid):
-    """Apaga uma conta salva. Se era a ativa, promove outra (ou zera a sessão central)."""
+    """Apaga uma conta salva. Se era a ativa, promove outra (ou zera a sessão central).
+    05/11: o @ vai pra `apagadas` — o auto-registro não traz ela de volta (só adicionar na mão)."""
     idx = _ler_index()
+    for c in idx.get("contas", []):
+        if c.get("id") == uid and (c.get("label") or "").strip():
+            idx.setdefault("apagadas", {})[(c.get("label") or "").strip().lstrip("@").lower()] = int(time.time())
     idx["contas"] = [c for c in idx.get("contas", []) if c.get("id") != uid]
     try:
         _sess_path(uid).unlink(missing_ok=True)

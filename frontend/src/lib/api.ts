@@ -123,9 +123,11 @@ export const api = {
   // registra uma conta PENDENTE no server (só o @, sem sessão) pra ela já entrar no cronograma
   // antes de conectar. Idempotente. A senha NUNCA vai — fica só no aparelho.
   // `locais` default no server = só emulador
-  adicionarContaPendente: (label: string, locais?: Local[]) =>
-    http.post<{ id: string; label: string; pendente?: boolean }>('/accounts/pendente',
-      locais ? { label, locais } : { label }),
+  // `manual` = você adicionou no app (traz de volta uma conta apagada); sem ele, conta que você
+  // apagou é IGNORADA pelo server (05/11 — o auto-registro não ressuscita conta apagada)
+  adicionarContaPendente: (label: string, locais?: Local[], manual = false) =>
+    http.post<{ id: string | null; label: string; pendente?: boolean; ignorada?: string }>('/accounts/pendente',
+      { label, ...(locais ? { locais } : {}), ...(manual ? { manual: true } : {}) }),
   // force=true ignora o cache de ~60s do server (pull-to-refresh / após reconectar uma conta)
   validarContas: (force = false) => http.get<Account[]>(force ? '/accounts/validar?force=1' : '/accounts/validar'),
   ativarConta: (id: string) => http.post<{ ativa: string }>(`/accounts/${encodeURIComponent(id)}/ativar`, {}),

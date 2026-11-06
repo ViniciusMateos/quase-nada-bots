@@ -1,7 +1,7 @@
 // Catálogo e regras dos bots do EMULADOR — espelho do BOTS_EMULADOR (EmuladorScreen) e das regras
 // do BotScreen do app. Tudo aqui é puro (sem React) pra Bots/Bot/EditModo/Chats usarem igual.
 import type { LucideIcon } from 'lucide-react'
-import { CircleMinus, CirclePlus, Heart, Images, MessagesSquare, UserPlus } from 'lucide-react'
+import { CircleMinus, CirclePlus, Heart, Images, Megaphone, MessagesSquare, UserPlus } from 'lucide-react'
 import type { EmuladorStatus, Account, RunHistorico, RunInfo } from '@/lib/api'
 import { locaisDe } from '@/lib/api'
 import { cmpTexto } from '@/lib/ordenar'
@@ -29,6 +29,8 @@ export const BOTS_EMULADOR: BotCatalogo[] = [
     descFallback: 'Posta as peças disponíveis no story do brechó pelo app.' },
   { id: 'like-repost', icone: Heart, nomeFallback: 'Like + Repost',
     descFallback: 'Curte e republica os posts do brechó com as contas do emulador.' },
+  { id: 'pre-drop', icone: Megaphone, nomeFallback: 'Pré-drop',
+    descFallback: 'Reposta o pré-drop do dia nas contas auxiliares: carrossel no feed, as fotos no story e o "ativem as notificações".' },
   { id: 'criar-conta', icone: CirclePlus, nomeFallback: 'Criar Conta',
     descFallback: 'Começa a conta nova no emulador até o código do e-mail; o resto você termina.', rota: '/contas/criar' },
   { id: 'remover-conta', icone: CircleMinus, nomeFallback: 'Remover Contas',
@@ -53,7 +55,7 @@ export function recursosDoBot(botId: string, temChatsBackend?: boolean) {
     temLote: botId === 'story-repost',
     // emulador: lote pelas contas logadas no device, uma de cada vez, na ORDEM da seleção
     ehVitrine: botId === 'auto-follow' || botId === 'dm-followers' || botId === 'story-brecho'
-      || botId === 'like-repost',
+      || botId === 'like-repost' || botId === 'pre-drop',
     // Story Repost: a conta do brechó entra na mesma ordem (roda no emulador próprio dela)
     ehStoryBrecho: botId === 'story-brecho',
   }

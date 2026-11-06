@@ -16,6 +16,7 @@ const BOTS_EMULADOR: { id: string; nomeFallback: string; descFallback: string; r
   { id: 'dm-followers', nomeFallback: 'DM Followers', descFallback: 'Manda DM de obrigado pros novos seguidores de cada conta.' },
   { id: 'story-brecho', nomeFallback: 'Story Repost', descFallback: 'Posta as peças disponíveis no story do brechó pelo app.' },
   { id: 'like-repost', nomeFallback: 'Like + Repost', descFallback: 'Curte e republica os posts do brechó com as contas do emulador.' },
+  { id: 'pre-drop', nomeFallback: 'Pré-drop', descFallback: 'Reposta o pré-drop do dia nas contas auxiliares.' },
   {
     id: 'criar-conta', nomeFallback: 'Criar Conta', rota: '/contas/criar',
     descFallback: 'Começa a conta nova no emulador até o código do e-mail; o resto você termina.',

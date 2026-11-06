@@ -32,6 +32,8 @@ const BOTS_EMULADOR: {
   // curte e republica os posts do brechó com as segue (28/10)
   { id: 'like-repost', icone: 'heart', nomeFallback: 'Like + Repost',
     descFallback: 'Curte e republica os posts do brechó com as contas do emulador.' },
+  { id: 'pre-drop', icone: 'megaphone', nomeFallback: 'Pré-drop',
+    descFallback: 'Reposta o pré-drop do dia nas contas auxiliares: carrossel no feed, as fotos no story e o "ativem as notificações".' },
   { id: 'criar-conta', icone: 'add-circle', nomeFallback: 'Criar Conta',
     descFallback: 'Começa a conta nova no emulador até o código do e-mail; o resto você termina.', tela: 'CriarConta' },
   { id: 'remover-conta', icone: 'remove-circle', nomeFallback: 'Remover Contas',

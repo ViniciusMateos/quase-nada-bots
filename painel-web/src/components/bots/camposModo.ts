@@ -131,6 +131,13 @@ const META_EMULADOR: Record<string, MetaF> = {
   // like + repost (28/10)
   max_acoes_dia: { label: 'Máx. curtidas + reposts por dia', cat: 'limites', tipo: 'cap', sug: 60,
     dica: 'Por conta, contando as últimas 24h. Chegou no teto, a conta fica pra próxima run.' },
+  // pré-drop (05/11)
+  feed: { label: 'Carrossel no feed', cat: 'outros', tipo: 'bool',
+    dica: 'Publica as fotos do pré-drop no feed da conta, com a legenda do brechó + "no @brechoquasenadaa".' },
+  stories: { label: 'Fotos no story', cat: 'outros', tipo: 'bool',
+    dica: 'Reposta o post do brechó no story, uma foto do carrossel por story, com o fundo laranja.' },
+  ativem: { label: 'Story "ativem as notificações"', cat: 'outros', tipo: 'bool',
+    dica: 'Fecha com a arte "ATIVEM AS NOTIFICAÇÕES" e a menção ao @brechoquasenadaa (só depois de todas as fotos).' },
 }
 Object.assign(META, META_EMULADOR)
 
@@ -184,7 +191,7 @@ export const OCULTOS = new Set([
 export const OCULTOS_DEFAULT: Record<string, Record<string, Valor>> = {}
 
 // bots com o esquema NOVO (emulador): o editor mostra exatamente estes campos
-export const ESQUEMA_NOVO = new Set(['auto-follow', 'dm-followers', 'story-brecho', 'like-repost'])
+export const ESQUEMA_NOVO = new Set(['auto-follow', 'dm-followers', 'story-brecho', 'like-repost', 'pre-drop'])
 
 // campos de um modo NOVO (zerado), por bot
 export const CAMPOS_NOVO: Record<string, string[]> = {
@@ -210,6 +217,7 @@ export const CAMPOS_NOVO: Record<string, string[]> = {
     'resfriar_conta_h', 'delay_acao_ui', 'delay_post', 'pausa_longa_cada', 'pausa_longa',
     'pausa_entre_contas',
   ],
+  'pre-drop': ['feed', 'stories', 'ativem', 'pausa_entre_contas'],
   'story-repost': [
     'selecao', 'quantos_posts', 'repost_card', 'estilo', 'mostrar_preco', 'texto', 'link',
     'delay_post', 'active_hours',

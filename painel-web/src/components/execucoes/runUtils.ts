@@ -6,6 +6,7 @@ import {
   CircleMinus,
   Heart,
   Images,
+  Megaphone,
   LogIn,
   MessagesSquare,
   ShieldCheck,
@@ -66,6 +67,8 @@ export function visualDoProcesso(r: { bot?: string | null; params?: Record<strin
       return { Icon: Images, cor: 'text-[#B66BDB]', fundo: 'bg-roxo/20' }
     case 'like-repost':
       return { Icon: Heart, cor: 'text-danger', fundo: 'bg-danger/10' }
+    case 'pre-drop':
+      return { Icon: Megaphone, cor: 'text-[#FF8234]', fundo: 'bg-[#FF8234]/10' }
     case 'criar-conta':
       return { Icon: UserRoundPlus, cor: 'text-ok', fundo: 'bg-ok/10' }
     case 'remover-conta':
@@ -125,10 +128,13 @@ const ROTULO_SALDO: Record<string, [string, string]> = {
   imagens: ['imagem', 'imagens'],
   curtidas: ['curtida', 'curtidas'],
   repostadas: ['repost', 'reposts'],
+  feeds: ['no feed', 'no feed'],
+  stories: ['story', 'stories'],
+  ativem: ['"ativem"', '"ativem"'],
 }
 // chaves "boas" (verde) e "ruins" (vermelho) — o resto fica neutro
 const SALDO_BOM = new Set(['follows', 'seguidos', 'enviadas', 'postados', 'criadas', 'removidas', 'novas',
-  'curtidas', 'repostadas'])
+  'curtidas', 'repostadas', 'feeds', 'stories', 'ativem'])
 const SALDO_RUIM = new Set(['falhas'])
 
 export type ChipSaldo = { key: string; valor: string; rotulo: string; tom: 'bom' | 'ruim' | 'neutro' }

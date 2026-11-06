@@ -42,6 +42,15 @@ BOTS = {
         "tem_modos": True, "tem_chats": False, "tem_ig": False,
         "descricao": "Curte e republica os posts do brechó com as contas do emulador (último drop ou os mais recentes).",
     },
+    # 05/11/2026: PRÉ-DROP — pega o post de pré-drop do dia do brechó e, em cada conta auxiliar,
+    # publica o mesmo carrossel no FEED (legenda com "no @brechoquasenadaa"), reposta cada foto no
+    # STORY (fundo laranja) e fecha com o story "ativem as notificações" + menção ao brechó.
+    # Módulo: quase-nada-bots-device/bots/pre_drop. O dir só guarda os MODOS.
+    "pre-drop": {
+        "nome": "Pré-drop", "dir": "pre-drop-emulador", "target": "emulador",
+        "tem_modos": True, "tem_chats": False, "tem_ig": False,
+        "descricao": "Reposta o pré-drop do dia nas contas auxiliares: carrossel no feed, cada foto no story e o 'ativem as notificações'.",
+    },
     # 20/10/2026: story da conta do BRECHÓ pelo app de verdade, numa instância do MuMu só dele (o
     # story pela API do server tomou "restricted from uploading"). O dir só guarda os MODOS.
     "story-brecho": {
@@ -210,6 +219,13 @@ MODOS_PADRAO_EMULADOR = {
                       "max_posts_conta": 0, "max_acoes_dia": 60, "delay_acao_ui": [2, 5],
                       "delay_post": [15, 40], "pausa_longa_cada": 10, "pausa_longa": [60, 180],
                       "pausa_entre_contas": [60, 180], "resfriar_conta_h": 12},
+    },
+    # pré-drop: o que cada conta faz com o post de pré-drop do dia (cada conta lembra o que já fez e
+    # só pega o que falta — rodar de novo completa quem ficou pela metade)
+    "pre-drop": {
+        "completo": {"feed": True, "stories": True, "ativem": True, "pausa_entre_contas": [30, 90]},
+        "só feed": {"feed": True, "stories": False, "ativem": False, "pausa_entre_contas": [30, 90]},
+        "só stories": {"feed": False, "stories": True, "ativem": True, "pausa_entre_contas": [30, 90]},
     },
 }
 

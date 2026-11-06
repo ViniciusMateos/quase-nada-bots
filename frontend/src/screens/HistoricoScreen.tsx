@@ -92,6 +92,10 @@ function saldoTxt(r: RunHistorico): string {
   if (r.bot === 'like-repost') {
     return `${s.curtidas ?? 0} curtidas · ${s.repostadas ?? 0} reposts · ${s.puladas ?? 0} já feitos`;
   }
+  if (r.bot === 'pre-drop') {
+    return `${s.feeds ?? 0} no feed · ${s.stories ?? 0} stories · ${s.ativem ?? 0} "ativem"`
+      + (s.falhas ? ` · ${s.falhas} falhas` : '');
+  }
   return Object.entries(s).map(([k, v]) => `${v} ${k}`).join(' · ') || 'sem saldo';
 }
 
@@ -149,7 +153,9 @@ export function HistoricoScreen() {
         ? Number(s.seguidos ?? 0) + Number(s.pedidos ?? 0)
         : r.bot === 'like-repost'
           ? Number(s.curtidas ?? 0) + Number(s.repostadas ?? 0)
-          : Number(s.enviadas ?? 0);
+          : r.bot === 'pre-drop'
+            ? Number(s.feeds ?? 0) + Number(s.stories ?? 0) + Number(s.ativem ?? 0)
+            : Number(s.enviadas ?? 0);
     }
     return { runs: filtrados.length, acoes };
   }, [filtrados]);

@@ -81,6 +81,11 @@ export type EmuladorStatus = {
   // Último resultado por conta + se um verificar está rodando agora.
   sessoes?: Record<string, 'ok' | 'bloqueada' | 'desconhecida' | 'deslogada' | 'senha_incorreta'>;
   verificando_sessoes?: boolean;
+  // 05/11: quando cada resultado chegou (epoch s) + desde quando o verificar roda e quais contas ele
+  // cobre — o painel mostra "verificando…" em TODAS as cadastradas até chegar o resultado de cada uma
+  sessoes_ts?: Record<string, number | null>;
+  verificando_desde?: number | null;
+  verificando_contas?: string[];
 };
 
 // conta do STORY-REPOST (roda no server via instagrapi). Verificação de sessão é pelo proxy
@@ -163,8 +168,12 @@ export const api = {
   // como "indisponível". As RUNS do emulador seguem nos endpoints normais (/runs e
   // /bots/:bot/run-lote) — o backend roteia server vs emulador pelo `target` do bot.
   emuladorStatus: () => http.get<EmuladorStatus>('/emulador/status'),
-  // dispara a verificação profunda das sessões do emulador (o agente entra em cada conta)
-  verificarSessoes: () => http.post<{ ok: boolean; run_id?: string }>('/emulador/verificar', {}),
+  // dispara a verificação profunda das sessões do emulador (o agente entra em cada conta). `contas`
+  // + `senhas` (credencial salva no aparelho) = as que NÃO estão no emulador: o agente loga elas
+  // antes de verificar, no MESMO lote (05/11 — antes era um job de login e outro de verificação)
+  verificarSessoes: (contas?: string[], senhas?: Record<string, string>) =>
+    http.post<{ ok: boolean; run_id?: string; logar?: string[] }>(
+      '/emulador/verificar', contas && contas.length ? { contas, senhas: senhas ?? {} } : {}),
   // contas do story-repost (server) + verificação de sessão (pelo proxy). force ignora o
   // cache de ~60s do server. Backend antigo pode não expor → o chamador trata como vazio.
   storyContas: (force = false) =>

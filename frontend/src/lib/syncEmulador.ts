@@ -5,7 +5,7 @@
 //      — como ele vive desligado, o "está logada?" dela é o último que os jobs dela reportaram
 //      (sessoes[brecho] = ok | deslogada); só manda logar quando não está ok.
 // Conta sem senha salva no aparelho não tem como logar → volta em `semSenha` pra avisar.
-import { api, locaisDe } from '@/lib/api';
+import { api, locaisDe, type EmuladorStatus } from '@/lib/api';
 import { lerCredenciais, promoverPendentes } from '@/lib/credenciais';
 
 /** Tem cara de @ do Instagram? (o agente já filtra; aqui é a 2ª trava pra lixo nunca virar conta) */
@@ -16,12 +16,26 @@ export function ehUsername(u: string): boolean {
   return /^[a-z0-9._]{1,30}$/.test(u || '');
 }
 
+/** Durante o VERIFICAR: esta conta ainda não recebeu o resultado desta rodada? Todas as cadastradas
+ *  ficam "verificando…" até o agente reportar cada uma (sessoes_ts depois do início). Backend antigo
+ *  (sem verificando_desde) → todas aguardando enquanto verifica. */
+export function aindaVerificando(u: string, status: EmuladorStatus | null | undefined,
+                                 verificando: boolean): boolean {
+  if (!verificando) return false;
+  const desde = status?.verificando_desde;
+  if (!desde) return true;
+  const ts = status?.sessoes_ts?.[u] ?? status?.sessoes_ts?.[u.toLowerCase()];
+  return !ts || ts < desde;
+}
+
 export type ResultadoSync = {
   adicionadas: string[]; logando: string[]; semSenha: string[];
   senhaIncorreta: string[];   // o IG recusou a senha salva → não re-tenta sozinho (só ao salvar outra)
 };
 
-export async function sincronizarEmulador(): Promise<ResultadoSync> {
+/** `verificar` = o "verificar" do app: as contas fora do emulador vão DENTRO da verificação (um
+ *  lote só: o agente loga as que faltam e depois verifica todas). Sem ele, só enfileira os logins. */
+export async function sincronizarEmulador(verificar = false): Promise<ResultadoSync> {
   let [contas, status] = await Promise.all([api.getAccounts(), api.emuladorStatus()]);
   // senha de conta criada pelo Criar Conta só vira credencial quando a conta já está no app
   await promoverPendentes(contas.map((a) => a.label || '')).catch(() => 0);
@@ -56,9 +70,12 @@ export async function sincronizarEmulador(): Promise<ResultadoSync> {
   const doEmulador = contas.filter((a) => {
     const l = (a.label || '').toLowerCase();
     if (l === CONTA_BRECHO) return stBrecho !== 'ok' && stBrecho !== 'senha_incorreta';
-    // "bloqueada" = o bot tirou ela do emulador (ex: verificação humana) → NÃO reloga sozinho, senão
-    // ela volta e trava tudo de novo; só pelo Reconectar, quando você resolver (22/10)
-    if (status?.sessoes?.[a.label] === 'bloqueada') return false;
+    // "bloqueada" = o bot tirou ela do emulador (ex: verificação humana). Na sincronização solta NÃO
+    // reloga (22/10); no VERIFICAR vai junto (05/11 — "verificar TODAS as cadastradas"): o login mostra
+    // se ela ainda está presa (o agente marca de novo e tira, sem push repetido) ou se você já resolveu
+    if (!verificar && status?.sessoes?.[a.label] === 'bloqueada') return false;
+    // senha recusada pelo IG: não insiste (errar senha várias vezes chama atenção) — só ao salvar outra
+    if (status?.sessoes?.[a.label] === 'senha_incorreta') return false;
     return locaisDe(a).includes('emulador') && !noEmulador.has(l);
   });
   const senhas: Record<string, string> = {};
@@ -69,6 +86,10 @@ export async function sincronizarEmulador(): Promise<ResultadoSync> {
     else semSenha.push(a.label);
   }
   const logando = Object.keys(senhas);
-  if (logando.length) await api.reconectarEmulador(logando, senhas);
+  if (verificar) {
+    const v = await api.verificarSessoes(logando, senhas);
+    // backend antigo (sem o lote junto) ignora as contas e não devolve `logar` → loga à parte, como antes
+    if (logando.length && !Array.isArray(v?.logar)) await api.reconectarEmulador(logando, senhas);
+  } else if (logando.length) await api.reconectarEmulador(logando, senhas);
   return { adicionadas, logando, semSenha, senhaIncorreta };
 }

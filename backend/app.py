@@ -524,9 +524,15 @@ async def emulador_codigo(user: str = ""):
 async def emulador_verificar(payload: dict = None):
     """Enfileira UM job de VERIFICAÇÃO PROFUNDA de sessões pro agente do PC: ele entra em CADA conta
     logada no device e marca ok/bloqueada (estar na gavetinha do IG NÃO garante sessão sã). body {}.
-    Fila = um por vez. Devolve {ok, run_id}. O progresso vem no GET /emulador/status (sessoes +
-    verificando_sessoes), atualizado conta a conta pelo agente via POST /emulador/sessoes."""
-    return await mgr.enfileirar_verificar()
+    Fila = um por vez. Devolve {ok, run_id, logar}. O progresso vem no GET /emulador/status (sessoes +
+    verificando_sessoes), atualizado conta a conta pelo agente via POST /emulador/sessoes.
+    body opcional {contas:[users], senhas:{user: senha}}: contas do app que NÃO estão no emulador —
+    o agente loga elas ANTES de verificar, no mesmo lote (a senha viaja só no job)."""
+    p = payload or {}
+    senhas = p.get("senhas") or {}
+    if not isinstance(senhas, dict):
+        senhas = {}
+    return await mgr.enfileirar_verificar(p.get("contas") or [], senhas)
 
 
 @app.get("/emulador/raspagem/prontidao", dependencies=[Depends(auth)])

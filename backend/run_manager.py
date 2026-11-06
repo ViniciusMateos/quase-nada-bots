@@ -935,11 +935,16 @@ class RunManager:
         emexec = sum(1 for j in self._fila_emulador if j.get("estado") == "em_execucao")
         # tem job de VERIFICAÇÃO de sessões pendente/rodando? (deriva da fila, igual pend/emexec):
         # o front usa pra mostrar o "verificando…" ao vivo. Volta False sozinho quando o job finaliza.
-        verificando = any(
-            (j.get("params") or {}).get("acao") == "verificar"
-            and j.get("estado") in ("pendente", "em_execucao")
-            for j in self._fila_emulador
-        )
+        # parada pedida (job["parar"]) já NÃO conta como verificando: o app para na hora, mesmo que o
+        # agente leve uns segundos pra abortar (05/11 — "parei e ficou verificando pra sempre")
+        jobs_v = [j for j in self._fila_emulador
+                  if (j.get("params") or {}).get("acao") == "verificar"
+                  and j.get("estado") in ("pendente", "em_execucao") and not j.get("parar")]
+        verificando = bool(jobs_v)
+        # 05/11: desde quando verifica + quais contas → o painel mostra "verificando…" em TODAS as
+        # cadastradas até cada uma receber um resultado novo (sessoes_ts > verificando_desde)
+        desde = min((j.get("criado_em") or 0) for j in jobs_v) if jobs_v else None
+        escopo = sorted({u for j in jobs_v for u in ((j.get("params") or {}).get("todas") or [])})
         est = self._agente_estado
         return {
             "online": bool(visto and (agora - visto) < 90),
@@ -952,7 +957,10 @@ class RunManager:
             "sessao": est.get("sessao"),
             # último resultado da verificação profunda por conta ({user: "ok"|"bloqueada"|"desconhecida"})
             "sessoes": {u: (d or {}).get("status") for u, d in self._sessoes_emulador.items()},
+            "sessoes_ts": {u: (d or {}).get("ts") for u, d in self._sessoes_emulador.items()},
             "verificando_sessoes": verificando,
+            "verificando_desde": desde or None,
+            "verificando_contas": escopo,
         }
 
     _SESSOES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "emulador_sessoes.json")
@@ -989,14 +997,51 @@ class RunManager:
             pass
         return True
 
-    async def enfileirar_verificar(self):
+    async def enfileirar_verificar(self, usernames=None, senhas=None):
         """Enfileira UM job de VERIFICAÇÃO PROFUNDA de sessões pro agente do PC: ele entra em CADA
         conta logada no device e marca ok/bloqueada (estar na gavetinha do IG NÃO garante sessão sã —
         conta em 'recurso em análise' aparece lá mesmo bloqueada). Sem conta específica (varre todas).
         MESMA fila/maquinaria dos jobs de emulador (1 por vez): bot='auto-follow' (bot-veículo, pro
         stop/LA/target reconhecerem o emulador); params={acao:'verificar'} é o que o agente lê.
-        Devolve {ok, run_id}."""
-        run = Run("auto-follow", {"acao": "verificar"})
+
+        05/11: `usernames`/`senhas` = contas do app que NÃO estão no emulador → o agente loga elas
+        ANTES de verificar, no MESMO lote (uma run só, em vez de um job de login + outro de
+        verificação). A senha vem do app (ou do contas.json do story-poster) e viaja SÓ na conta do
+        job — nunca em run.params (o /runs expõe params) nem no log.
+        Devolve {ok, run_id, logar}."""
+        usuarios = [str(u).strip().lstrip("@") for u in (usernames or []) if str(u).strip()]
+        logins = []
+        if usuarios:
+            do_app = {str(k).strip().lstrip("@").lower(): str(v) for k, v in (senhas or {}).items() if v}
+            do_story = story_contas_svc.carregar_senhas()     # {user: senha} — não logar
+            # conta que já tem login na fila não entra de novo (tocar 2x em verificar não loga 2x)
+            na_fila = set()
+            for j in self._fila_emulador:
+                if j.get("estado") not in ("pendente", "em_execucao"):
+                    continue
+                p = j.get("params") or {}
+                if p.get("acao") in ("login", "verificar"):
+                    na_fila.update(str(x).lower() for x in (p.get("contas") or p.get("logar") or []))
+            usuarios = [u for u in usuarios if u.lower() not in na_fila]
+            logins = [{"user": u, "senha": do_app.get(u.lower()) or do_story.get(u) or ""} for u in usuarios]
+        params = {"acao": "verificar"}
+        if usuarios:
+            params["logar"] = usuarios          # só os @ (sem senha) — o app/log mostram quem vai logar
+        # 05/11: ESCOPO = todas as contas cadastradas pro emulador (o painel mostra "verificando" em
+        # todas; o agente dá um resultado pra cada uma). Bloqueadas vão junto: o login delas mostra se
+        # ainda estão presas — sem push de novo (o agente silencia as que já estavam bloqueadas).
+        try:
+            todas = sorted({(c.get("label") or "").strip().lstrip("@").lower() for c in accounts.listar()
+                            if "emulador" in (c.get("locais") or []) and (c.get("label") or "").strip()})
+        except Exception:
+            todas = []
+        if todas:
+            params["todas"] = todas
+            # estado ANTERIOR de cada uma (sem segredo): a bloqueada sem senha salva continua bloqueada,
+            # e o agente não manda push de novo pra quem já estava bloqueada
+            params["previo"] = {u: (self._sessoes_emulador.get(u) or {}).get("status") for u in todas
+                                if (self._sessoes_emulador.get(u) or {}).get("status")}
+        run = Run("auto-follow", dict(params))
         run._log_path = os.path.join(self._LOG_DIR, f"{run.id}.log")
         try:
             open(run._log_path, "w", encoding="utf-8").close()   # começa LIMPO (não herda id antigo)
@@ -1004,13 +1049,14 @@ class RunManager:
             pass
         self.runs[run.id] = run
         self._fila_emulador.append({
-            "run_id": run.id, "bot": "auto-follow", "conta": {},
-            "params": {"acao": "verificar"}, "estado": "pendente", "parar": False,
+            "run_id": run.id, "bot": "auto-follow", "conta": {"logins": logins} if logins else {},
+            "params": dict(params), "estado": "pendente", "parar": False, "criado_em": time.time(),
         })
-        await run.emitir("[backend] verificação de sessões enfileirada pro agente do emulador")
+        await run.emitir("[backend] verificação de sessões enfileirada pro agente do emulador"
+                         + (f" · antes loga {', '.join(usuarios)}" if usuarios else ""))
         # a run já entra como "iniciando" → aparece no app e a LA reflete (igual run normal subindo)
         asyncio.create_task(self.empurrar_la(forcar=True))
-        return {"ok": True, "run_id": run.id}
+        return {"ok": True, "run_id": run.id, "logar": usuarios}
 
     # ── código de verificação (challenge) pro login no EMULADOR (o do server vai pro arquivo) ──
     def guardar_codigo(self, user, codigo):
@@ -1054,6 +1100,8 @@ class RunManager:
             tem_b = brecho in contas
             tem_o = any(c != brecho for c in contas)
             return ({"brecho"} if tem_b else set()) | ({"principal"} if tem_o or not contas else set())
+        if p.get("acao") == "verificar" and brecho in [str(u).lower() for u in (p.get("todas") or [])]:
+            return {"principal", "brecho"}     # verifica o brechó na instância dele: ninguém mais usa ela
         return {"principal"}
 
     async def reivindicar_job(self, ocupadas=None):

@@ -4,7 +4,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { Account, api, Bot, EmuladorStatus, locaisDe, RunInfo } from '@/lib/api';
-import { CONTA_BRECHO, ehUsername, sincronizarEmulador } from '@/lib/syncEmulador';
+import { CONTA_BRECHO, aindaVerificando, ehUsername, sincronizarEmulador } from '@/lib/syncEmulador';
 import { cmpTexto } from '@/lib/ordenar';
 import { colors } from '@/theme';
 import { Aparece, Card, CartaoTocavel, Pill, Pulsar } from '@/ui/components';
@@ -84,8 +84,10 @@ export function EmuladorScreen() {
     if (status?.verificando_sessoes || sincronizando) return;
     setSincronizando(true);
     let r: Awaited<ReturnType<typeof sincronizarEmulador>> | null = null;
-    try { r = await sincronizarEmulador(); } catch { /* segue pra verificação mesmo assim */ }
-    try { await api.verificarSessoes(); } catch { /* backend pode não expor ainda */ }
+    // um lote só: as contas fora do emulador vão dentro da verificação (o agente loga e verifica)
+    try { r = await sincronizarEmulador(true); } catch {
+      try { await api.verificarSessoes(); } catch { /* backend pode não expor ainda */ }
+    }
     setSincronizando(false);
     puxarStatus(); puxarContas();
     if (r && (r.adicionadas.length || r.logando.length || r.semSenha.length || r.senhaIncorreta.length)) {
@@ -145,9 +147,11 @@ export function EmuladorScreen() {
   // dela reportaram; AUXILIARES = as outras (emulador das segue)
   const temBrecho = (contas ?? []).some((a) => (a.label || '').toLowerCase() === CONTA_BRECHO);
   const stBrecho = status?.sessoes?.[CONTA_BRECHO];
-  const brechoTxt = stBrecho === 'ok' ? 'logada' : stBrecho === 'senha_incorreta' ? 'senha incorreta'
+  const brechoChecando = aindaVerificando(CONTA_BRECHO, status, verificando);
+  const brechoTxt = brechoChecando ? 'verificando…' : stBrecho === 'ok' ? 'logada'
+    : stBrecho === 'senha_incorreta' ? 'senha incorreta'
     : stBrecho === 'bloqueada' ? 'bloqueada' : 'não sincronizada';
-  const brechoCor = stBrecho === 'ok' ? colors.ok
+  const brechoCor = brechoChecando ? colors.textoFraco : stBrecho === 'ok' ? colors.ok
     : stBrecho === 'senha_incorreta' || stBrecho === 'bloqueada' ? colors.erro : colors.laranja;
   const ativos = runs.filter((r) => ['rodando', 'iniciando'].includes(r.status)).reverse();
 
@@ -231,17 +235,15 @@ export function EmuladorScreen() {
               {contasEmu.map((u) => {
               const st = status?.sessoes?.[u];
               const noDevice = logadas.has(u.toLowerCase());
-              // enquanto verifica, as do device ficam "verificando" — nunca mostra o status velho
-              // em cache (ok/desconhecida/etc.) de uma checagem anterior.
-              const checando = verificando && noDevice;
+              // enquanto verifica, TODAS as cadastradas ficam "verificando" até chegar o resultado de
+              // cada uma (05/11) — nunca mostra o status velho de uma checagem anterior
+              const checando = aindaVerificando(u, status, verificando);
               let txt: string, cor: string;
-              if (!noDevice) {
-                // fora do emulador: o verificar loga ela
-                txt = 'não sincronizada'; cor = colors.laranja;
-              }
-              else if (checando) { txt = 'verificando…'; cor = colors.textoFraco; }
-              else if (st === 'ok') { txt = 'sessão ok'; cor = colors.ok; }
+              if (checando) { txt = 'verificando…'; cor = colors.textoFraco; }
               else if (st === 'bloqueada') { txt = 'bloqueada'; cor = colors.erro; }
+              else if (st === 'senha_incorreta') { txt = 'senha incorreta'; cor = colors.erro; }
+              else if (!noDevice) { txt = 'não sincronizada'; cor = colors.laranja; }   // o verificar loga ela
+              else if (st === 'ok') { txt = 'sessão ok'; cor = colors.ok; }
               else if (st === 'desconhecida') { txt = 'desconhecida'; cor = colors.textoFraco; }
               else { txt = 'logada'; cor = colors.texto; }   // no device, ainda não verificada a fundo
               return (

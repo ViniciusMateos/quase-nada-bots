@@ -3,6 +3,21 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [2.8.0] — 2026-11-06
+
+### Adicionado
+- feat: bot **Pré-drop** no app, no painel e no backend — reposta o pré-drop do dia nas contas auxiliares (carrossel no feed, cada foto no story e o story "ativem as notificações")
+- feat: **modo drop** no Story Repost — só as disponíveis do último drop, com a arte "DROP ON!" antes
+- feat: **Verificar** loga as contas fora do emulador no mesmo lote e mostra "verificando" em todas as cadastradas
+
+### Corrigido
+- fix: conta apagada não volta sozinha — o auto-registro ignora ela até você adicionar de novo, e a lixeira dispara o Remover Contas
+- fix: parar encerra a Live Activity e o push na hora, sem esperar o agente
+- fix: Live Activity tenta se recuperar quando o server fica sem o token, e o app manda um relatório pro server
+
+### Documentação
+- docs: README com o Pré-drop, os modos lidos do perfil e o parar imediato
+
 ## [2.7.0] — 2026-11-05
 
 ### Adicionado

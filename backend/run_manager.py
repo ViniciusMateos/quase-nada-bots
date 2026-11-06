@@ -1184,7 +1184,9 @@ class RunManager:
         self._remover_job(run.id)
         # ordem igual ao _pump: a run já saiu de "rodando", então _ativas() não a conta mais
         await self._encerrar_la_se_acabou(run)
-        await self._push_fim(run)
+        if not getattr(run, "_fim_avisado", False):     # o stop já avisou "parado" na hora
+            run._fim_avisado = True
+            await self._push_fim(run)
         for q in list(run.subs):       # sinaliza fim (None) aos assinantes do WS
             try:
                 q.put_nowait(None)
@@ -1547,6 +1549,14 @@ class RunManager:
                 job["parar"] = True
             if pendente:
                 await self.finalizar_emulador(run, ok=False, motivo="parado antes de rodar")
+            elif not getattr(run, "_fim_avisado", False):
+                # 05/11: EM EXECUÇÃO — o agente ainda leva um tempo pra abortar (ex.: login esperando
+                # código). O app não espera: encerra a LA e avisa "parado" JÁ; o /fim do agente
+                # depois só fecha a fila/histórico, sem push repetido.
+                run._fim_avisado = True
+                await run.emitir("[backend] parada pedida — avisando o app; o agente encerra em seguida")
+                await self._encerrar_la_se_acabou(run)
+                await self._push_fim(run)
             return True
         if not run.proc:
             return False

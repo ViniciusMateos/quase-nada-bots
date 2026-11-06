@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Easing, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, Easing, PanResponder, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api, RunInfo } from '@/lib/api';
-import { laRunsAcabaram } from '@/lib/la';
+import { curarLA, laRunsAcabaram } from '@/lib/la';
 import { acaoDe, ehProcessoDeConta, nomeDoProcesso } from '@/lib/processo';
 import { colors } from '@/theme';
 import { Contagem } from '@/ui/Contagem';
@@ -77,13 +77,30 @@ export function BarraBotsGlobal({ onAbrir }: { onAbrir?: (runId: string, titulo:
   // poll das runs ativas (TODAS, não só a mais recente)
   useEffect(() => {
     let vivo = true;
+    let semTokenDesde = 0;     // run ativa e o server sem token da LA desde quando (auto-cura)
+    let ultimoCheque = 0;
     const tick = async () => {
       try {
         const todas = await api.listRuns();
         const ativas = todas.filter(ativaRun).sort((a, b) => b.started_at - a.started_at);
         // sem run ativa → o server já encerrou a LA; zera o flag pra o próximo ciclo poder
         // recriar (senão o ativaId ficaria preso e nunca mais nasceria uma LA).
-        if (ativas.length === 0) laRunsAcabaram();
+        if (ativas.length === 0) {
+          laRunsAcabaram();
+          semTokenDesde = 0;
+        } else if (Platform.OS === 'ios' && Date.now() - ultimoCheque > 8000) {
+          // AUTO-CURA da LA (05/11): run rodando e o server sem o token da barra por >15s → a LA
+          // travou em "começando" → recria (token novo). Checa a cada ~8s, cura 1x por ciclo de runs.
+          ultimoCheque = Date.now();
+          api.statusLiveActivity().then((s) => {
+            if (s.token) { semTokenDesde = 0; return; }
+            if (!semTokenDesde) { semTokenDesde = Date.now(); return; }
+            if (Date.now() - semTokenDesde > 15000) {
+              semTokenDesde = 0;
+              curarLA(ativas[0].titulo || ativas[0].bot);
+            }
+          }).catch(() => { /* server antigo sem a rota — segue */ });
+        }
         if (vivo) setRuns(ativas);
       } catch { /* offline / sem server */ }
     };

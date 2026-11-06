@@ -117,6 +117,11 @@ export const api = {
   // Live Activity, e o server é quem soma as runs dentro dela.
   setLiveActivity: (token: string, bundle: string, activityId: string) =>
     http.post('/liveactivity', { token, bundle, activity_id: activityId }),
+  // o server tem o token de update da LA? (sem ele a barra fica em "começando" pra sempre)
+  statusLiveActivity: () =>
+    http.get<{ token: boolean; activity_id: string | null }>('/liveactivity/status'),
+  // relatório de diagnóstico da LA (o server só loga) — pra achar onde o token se perde
+  debugLiveActivity: (dados: Record<string, unknown>) => http.post('/liveactivity/debug', dados),
   // pushToStartToken (iOS 17.2+): com ele o server INICIA a Live Activity sozinho (cronograma).
   setPushToStartToken: (token: string, bundle: string) =>
     http.post<{ ok: boolean }>('/liveactivity/pts', { token, bundle }),

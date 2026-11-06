@@ -2,7 +2,7 @@ import { api } from '@/lib/api';
 import { env } from '@/config/env';
 import {
   aoReceberPushToStartToken, aoReceberTokenLA, configurarLA, encerrarTodasLA,
-  iniciarLiveActivity, laDisponivel, observarLA,
+  iniciarLiveActivity, laAtual, laDisponivel, observarLA,
 } from '../../modules/live-activity';
 
 /**
@@ -20,6 +20,19 @@ import {
  */
 
 let ativaId: string | null = null;
+// DIAGNÓSTICO (05/11): o token da LA criada com o app aberto não chega no server. Conta o que o
+// JS recebe e manda um relatório pro server (/liveactivity/debug) pra achar onde o token se perde.
+let tokensJS = 0;
+let ultimoTokenJS = 0;
+export function relatarLA(evento: string, extra: Record<string, unknown> = {}): void {
+  try {
+    api.debugLiveActivity({
+      evento, disponivel: laDisponivel(), atual: laAtual(), ativaId, laCriada,
+      tokensJS, ultimoTokenJS: ultimoTokenJS ? Math.round((Date.now() - ultimoTokenJS) / 1000) : null,
+      ...extra,
+    }).catch(() => { /* server antigo — segue */ });
+  } catch { /* nunca derruba o app */ }
+}
 let laCriada = false;   // FONTE DA VERDADE anti-duplicação. Setada SÍNCRONA (antes de qualquer
                         // await), então nem race nem iniciarLiveActivity() devolvendo null a
                         // furam. Zerada só por laRunsAcabaram() (sem run ativa).
@@ -29,6 +42,8 @@ function garantirListener() {
   if (ouvindo) return;
   ouvindo = true;
   aoReceberTokenLA((token, id) => {
+    tokensJS += 1;
+    ultimoTokenJS = Date.now();
     // manda o activityId JUNTO com o token. O server usa pra distinguir ROTAÇÃO de token
     // (mesmo id → só troca o token, NÃO encerra nada) de SESSÃO NOVA (id diferente → encerra
     // a LA antiga órfã antes de assumir a nova). Sem o id, o server não saberia a diferença e
@@ -86,7 +101,12 @@ export async function garantirLA(titulo: string): Promise<void> {
     await encerrarTodasLA();                    // limpa órfãs de sessões anteriores (best-effort)
     garantirListener();
     ativaId = await iniciarLiveActivity(titulo);
-  } catch { /* sem LA — o app segue normal */ }
+    relatarLA('criada', { titulo });
+    // 8s depois: o token já devia ter chegado (normal: 1-3s) — o relatório diz se o JS viu
+    setTimeout(() => relatarLA('8s_depois', { titulo }), 8000);
+  } catch (e) {
+    relatarLA('erro_criar', { erro: String(e) });
+  }
 }
 
 /**
@@ -97,6 +117,26 @@ export async function garantirLA(titulo: string): Promise<void> {
 export function laRunsAcabaram(): void {
   laCriada = false;
   ativaId = null;
+  curouNesteCiclo = false;
+}
+
+/**
+ * AUTO-CURA (05/11/2026): a LA do auto-follow ficou em "começando" a run inteira porque o token
+ * dela nunca chegou no server (sem token o server não empurra nada). Chamado pela barra global
+ * quando há run ativa e o server segue SEM token: encerra a LA travada e cria outra (= token
+ * novo, que o observador posta). Uma tentativa só por ciclo de runs pra nunca virar loop de piscar.
+ */
+let curouNesteCiclo = false;   // UMA tentativa por ciclo de runs: o histórico do server mostra que
+                               // o token só chega quando o app ABRE DO ZERO; recriar com o app
+                               // aberto pode não adiantar e piscar a barra a cada minuto seria pior
+export async function curarLA(titulo: string): Promise<void> {
+  if (!laDisponivel()) return;
+  if (curouNesteCiclo) return;
+  curouNesteCiclo = true;
+  relatarLA('curando', { titulo });
+  laCriada = false;
+  ativaId = null;
+  await garantirLA(titulo);
 }
 
 /**

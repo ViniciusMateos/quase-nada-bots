@@ -11,6 +11,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import base64
+import json
 import os
 import re
 import tempfile
@@ -466,6 +467,23 @@ async def set_liveactivity(payload: dict):
           f"| bundle={mgr.la_bundle or '(do .env)'} | configurado={liveactivity.configurado()}",
           flush=True)
     await mgr.empurrar_la()   # já reflete o estado atual, sem esperar o próximo [progress]
+    return {"ok": True}
+
+
+@app.get("/liveactivity/status", dependencies=[Depends(auth)])
+async def get_liveactivity_status():
+    """O server tem o token de update da Live Activity? (05/11: a LA do auto-follow ficou em
+    "começando" a run toda porque o token nunca chegou.) O app consulta com run ativa e, sem
+    token por >15s, recria a LA pra ganhar um token novo."""
+    return {"token": bool(mgr.la_token), "activity_id": mgr.la_activity_id or None}
+
+
+@app.post("/liveactivity/debug", dependencies=[Depends(auth)])
+async def debug_liveactivity(payload: dict):
+    """Relatório do app sobre a LA (criada? id? o iOS diz que está ativa? quantos tokens o JS viu?).
+    Só LOGA — 05/11: a LA criada com o app aberto não entrega o token, isto mostra onde ele se perde."""
+    print(f"[la] DEBUG app: {json.dumps(payload, ensure_ascii=False)[:400]} | server tem token={bool(mgr.la_token)}",
+          flush=True)
     return {"ok": True}
 
 

@@ -203,6 +203,10 @@ MODOS_PADRAO_EMULADOR = {
         "rápido": {"quantos_posts": 5, "fundo": "instagram", "mostrar_preco": True, "chamada": "",
                    "pausa_story": [0, 0], "tentativas_por_peca": 1,
                    "manter_ligado": False},
+        # 06/11: só as disponíveis do ÚLTIMO drop (0 = todas), com a arte "DROP ON!" antes
+        "drop": {"selecao": "drop_novo", "abertura": True, "quantos_posts": 0, "fundo": "laranja",
+                 "mostrar_preco": True, "chamada": "", "pausa_story": [3, 8], "tentativas_por_peca": 2,
+                 "manter_ligado": False},
     },
     # selecao: 'drop' = peças do último drop (quantos_posts = teto, 0 = todas) | 'recentes' = os N
     # posts mais novos. Cada conta lembra o que já fez e só pega o que falta.

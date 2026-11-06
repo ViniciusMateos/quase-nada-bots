@@ -157,7 +157,13 @@ const META_BOT: Record<string, Record<string, Partial<MetaF>>> = {
     pausa_longa: { sug: [180, 420] },
   },
   'story-brecho': {
-    quantos_posts: { label: 'Stories por run', dica: 'Quantas peças postar no story a cada run.' },
+    selecao: { label: 'O que postar', sug: 'aleatorio',
+      opcoes: [{ valor: 'aleatorio', label: 'Aleatório' }, { valor: 'drop_novo', label: 'Último drop' }],
+      dica: 'Aleatório: sorteia entre todas as peças disponíveis. Último drop: só as disponíveis do último drop postado, na ordem do #p; cada conta pula o que já postou desse drop.' },
+    abertura: { label: 'Story de abertura "DROP ON!"', cat: 'alvo', tipo: 'bool',
+      dica: 'No último drop: posta a arte "DROP ON!" antes das peças (uma vez por drop em cada conta).' },
+    quantos_posts: { label: 'Stories por run',
+      dica: 'Quantas peças postar no story a cada run. No último drop, desligado = todas as disponíveis do drop.' },
     mostrar_preco: { dica: 'A etiqueta com o preço e o tamanho no canto do card.' },
   },
   'like-repost': {
@@ -205,8 +211,8 @@ export const CAMPOS_NOVO: Record<string, string[]> = {
     'pausa_humana_cada', 'pausa_entre_contas',
   ],
   'story-brecho': [
-    'quantos_posts', 'fundo', 'mostrar_preco', 'chamada', 'pausa_story', 'tentativas_por_peca',
-    'manter_ligado',
+    'selecao', 'abertura', 'quantos_posts', 'fundo', 'mostrar_preco', 'chamada', 'pausa_story',
+    'tentativas_por_peca', 'manter_ligado',
   ],
   'human-warmup': [
     'aplicar_caps', 'duracao_min', 'max_curtidas', 'prob_curtir', 'ver_stories', 'max_stories',

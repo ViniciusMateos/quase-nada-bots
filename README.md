@@ -28,7 +28,7 @@ progresso e o saldo. O app mostra tudo igual a antes (Rodando agora, log ao vivo
 
 Os bots do emulador moram no repo **`quase-nada-bots-device`** (agente + supervisor) e cada um no
 seu repo: `auto-follow-emulador`, `dm-followers-emulador`, `story-repost-emulador`,
-`criar-conta-emulador` e `like-repost-emulador`.
+`criar-conta-emulador`, `like-repost-emulador` e `pre-drop-emulador`.
 
 ## Bots
 
@@ -37,8 +37,10 @@ seu repo: `auto-follow-emulador`, `dm-followers-emulador`, `story-repost-emulado
   mensagens do próprio modo).
 - **Story Repost** — peças disponíveis do brechó no story, pelo app. A conta do brechó roda numa
   instância do emulador só dela (liga só na hora) e pode rodar **junto** com as outras contas,
-  cada uma com o seu modo. O vídeo de abertura saiu do bot (o IG do emulador estragava a capa) —
-  ele é postado na mão.
+  cada uma com o seu modo. O modo **drop** posta só as disponíveis do último drop, na ordem do `#p`,
+  com a arte "DROP ON!" antes; cada conta lembra o que já postou daquele drop e rodar de novo completa
+  o que faltou. O vídeo de abertura saiu do bot (o IG do emulador estragava a capa) — ele é postado
+  na mão.
 - **Raspagem do brechó** (`brecho-scraper`, disparada pelo app do Brechó) — uma conta auxiliar lê
   o perfil público da loja no emulador e atualiza as peças (novas, preço, vendidas). Nunca usa a
   conta da loja; `GET /emulador/raspagem/prontidao` diz se dá pra raspar agora e quem está apta.
@@ -47,22 +49,28 @@ seu repo: `auto-follow-emulador`, `dm-followers-emulador`, `story-repost-emulado
   o push "sua vez": os termos e as boas-vindas são na mão (o IG desafia toda conta nova criada
   no automático). Enquanto isso o emulador fica reservado (até voltar pra tela principal do IG
   ou 15 min). No app só se preenche usuário + Gmail; senha e data vêm da última run.
-- **Like + Repost** — curte e republica os posts do brechó com as contas do emulador. Modos:
-  **drop** (as peças do último drop, vendidas também, **+ o pré-drop** — o post de divulgação sem
-  `#p`) ou **recentes** (os N mais novos). Confere cada post antes de agir, não desfaz o que já
-  estava feito e cada conta lembra o que já fez. Conta sem o botão Republicar só curte.
+- **Like + Repost** — curte e republica os posts do brechó com as contas do emulador. A lista sai
+  do **perfil do brechó**, lido uma vez no começo da run. Modos: **drop** (do post mais novo até o
+  primeiro pré-drop, ele incluso; se o mais novo já é um pré-drop, o drop não saiu e faz só ele) ou
+  **recentes** (os N primeiros do perfil, de qualquer tipo). Confere cada post antes de agir, não
+  desfaz o que já estava feito e cada conta lembra o que já fez. Conta sem o botão Republicar só curte.
+- **Pré-drop** — reposta o pré-drop do dia nas contas auxiliares: o carrossel no feed (legenda com
+  "no @brechoquasenadaa"), cada foto no story com o fundo laranja e o story "ativem as notificações"
+  com a menção ao brechó. Cada conta lembra o que já fez; rodar de novo completa o que faltou.
 - **Remover Contas** — marca as contas logadas no emulador e o bot termina a sessão de cada uma
   (libera vaga no teto de ~10 contas por aparelho). A conta continua no Instagram e no app, só
   sai do emulador (o sincronizar não loga de volta).
 
-Todo bot do emulador avisa por push quando **começa** e quando termina, com Live Activity.
+Todo bot do emulador avisa por push quando **começa** e quando termina, com Live Activity. O
+**parar** vale na hora em qualquer bot: um vigia ao lado do job consulta o backend a cada 1,5 s,
+fecha o Instagram do emulador e derruba o job onde ele estiver.
 
 Os bots rodam em **lote na ordem em que as contas foram marcadas**, e cada um tem **modos** feitos
 pro emulador (teto por conta e do lote, descanso depois de soft-block, pausa entre contas, limites
 de DM por hora/dia etc.), editáveis no app.
 
-O que ainda falta trazer do servidor: Aquecimento Humano (+ cronograma) e os extras do Story
-(apagar peça vendida, modo drop novo).
+O que ainda falta trazer do servidor: Aquecimento Humano (+ cronograma) e apagar a peça vendida do
+story.
 
 No histórico, uma run em lote aparece como "N contas" (não como a primeira conta do lote).
 
@@ -71,8 +79,10 @@ No histórico, uma run em lote aparece como "N contas" (não como a primeira con
 Tela **Contas**: adicionar (a senha fica só no aparelho), criar conta nova, grupos e o estado de
 cada conta no emulador (sessão ok, bloqueada, não sincronizada, senha incorreta). A lista separa a
 **Principal** (a conta do brechó, no emulador dela) das **Auxiliares**. **Verificar** já
-sincroniza: loga no emulador as que faltam (toda conta sincroniza), traz pro app as que já estavam
-lá e confere cada sessão. Login de várias contas vira **uma run só**.
+sincroniza: num job só, loga no emulador as que faltam, traz pro app as que já estavam lá e confere
+cada sessão, mostrando "verificando" em todas as contas cadastradas até chegar o resultado de cada
+uma. Conta apagada no app não volta sozinha: a lixeira dispara o Remover Contas e o auto-registro
+ignora ela até você adicionar de novo.
 
 Conta que cai em **verificação humana** ("confirma que és uma pessoa") é tirada do emulador sozinha
 pra não travar as outras: vira "bloqueada", sai do rodízio, chega um push avisando e a sincronização

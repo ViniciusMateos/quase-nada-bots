@@ -28,7 +28,7 @@ progresso e o saldo. O app mostra tudo igual a antes (Rodando agora, log ao vivo
 
 Os bots do emulador moram no repo **`quase-nada-bots-device`** (agente + supervisor) e cada um no
 seu repo: `auto-follow-emulador`, `dm-followers-emulador`, `story-repost-emulador`,
-`criar-conta-emulador`, `like-repost-emulador` e `pre-drop-emulador`.
+`criar-conta-emulador`, `like-repost-emulador`, `pre-drop-emulador` e `garimpo-posts-emulador`.
 
 ## Bots
 
@@ -57,6 +57,12 @@ seu repo: `auto-follow-emulador`, `dm-followers-emulador`, `story-repost-emulado
 - **Pré-drop** — reposta o pré-drop do dia nas contas auxiliares: o carrossel no feed (legenda com
   "no @brechoquasenadaa"), cada foto no story com o fundo laranja e o story "ativem as notificações"
   com a menção ao brechó. Cada conta lembra o que já fez; rodar de novo completa o que faltou.
+- **Garimpo** — acha posts novos pro chat do Auto Follow sozinho e manda no grupo. Vai curtidor por
+  curtidor dos posts da turma, olha a grade de cada perfil (o Gemini marca as fotos de roupa numa
+  chamada só), abre as de roupa (foto, carrossel, reel ou vídeo) e só manda o post com curtidas
+  suficientes e lista de curtidas com gente que a frota ainda não seguiu. Perfil bom entra num
+  rodízio e volta pra mandar os posts seguintes. Conta com o direct bloqueado é pulada. Modo:
+  posts por conta, curtidas mínimas e mínimo de gente nova na lista (seguidor mínimo desligado).
 - **Remover Contas** — marca as contas logadas no emulador e o bot termina a sessão de cada uma
   (libera vaga no teto de ~10 contas por aparelho). A conta continua no Instagram e no app, só
   sai do emulador (o sincronizar não loga de volta).

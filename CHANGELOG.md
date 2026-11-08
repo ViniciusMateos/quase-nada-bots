@@ -3,6 +3,17 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [2.9.0] — 2026-11-07
+
+### Adicionado
+- feat: bot **Garimpo** no app, no painel e no backend — garimpa posts novos pro chat do Auto Follow (grade no Gemini, curtidas e lista com gente que a frota ainda não seguiu, rodízio de perfis bons, qualquer tipo de post)
+
+### Manutenção
+- chore: OTA 117
+
+### Documentação
+- docs: README com o Garimpo
+
 ## [2.8.0] — 2026-11-06
 
 ### Adicionado

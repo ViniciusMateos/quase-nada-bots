@@ -101,7 +101,7 @@ export function BotScreen() {
   // Bots do EMULADOR: lote pelas contas logadas no device (por username), uma de cada vez, numa run
   // só, na ORDEM da seleção (20/10/2026: todos os bots com a mesma estrutura; 28/10: like-repost).
   const ehVitrine = botId === 'auto-follow' || botId === 'dm-followers' || botId === 'story-brecho'
-    || botId === 'like-repost' || botId === 'pre-drop';
+    || botId === 'like-repost' || botId === 'pre-drop' || botId === 'garimpo';
   // Story Repost: além das segue, a conta do BRECHÓ (roda no emulador próprio dela) entra na mesma ordem
   const ehStoryBrecho = botId === 'story-brecho';
   const fonteVitrine: 'emulador' | 'story' = 'emulador';

@@ -144,6 +144,15 @@ const META_EMULADOR: Record<string, MetaF> = {
   // like + repost (28/10)
   max_acoes_dia: { label: 'Máx. curtidas + reposts por dia', cat: 'limites', tipo: 'cap', sug: 60,
     dica: 'Por conta, contando as últimas 24h. Chegou no teto, a conta fica pra próxima run.' },
+  // garimpo (07/11)
+  meta: { label: 'Posts por conta', cat: 'limites', tipo: 'cap', sug: 10,
+    dica: 'Quantos posts cada conta manda no grupo nesta run.' },
+  min_seguidores: { label: 'Seguidores mínimos do perfil', cat: 'alvo', tipo: 'cap', sug: 1000,
+    dica: 'Só garimpa post de perfil com pelo menos esse tanto de seguidores. Desligado = qualquer perfil.' },
+  min_curtidas: { label: 'Curtidas mínimas da foto', cat: 'alvo', tipo: 'cap', sug: 5,
+    dica: 'A foto escolhida precisa ter pelo menos esse tanto de curtidas. Desligado = qualquer foto.' },
+  min_novos: { label: 'Mínimo de pessoas novas na lista', cat: 'alvo', tipo: 'cap', sug: 15,
+    dica: 'Quantas pessoas da lista de curtidas a frota ainda NÃO seguiu. Menos que isso o post não rende e é descartado.' },
   // pré-drop (05/11)
   feed: { label: 'Carrossel no feed', cat: 'outros', tipo: 'bool',
     dica: 'Publica as fotos do pré-drop no feed da conta, com a legenda do brechó + "no @brechoquasenadaa".' },
@@ -211,11 +220,14 @@ const OCULTOS = new Set([
 
 // valores dos ocultos gravados SEMPRE (garante o comportamento certo sem depender do worker):
 // seguir privados LIGADO por padrão, pula quem já seguiu/pediu, e não age sozinho se vazio.
-const OCULTOS_DEFAULT: Record<string, Record<string, Valor>> = {};
+const OCULTOS_DEFAULT: Record<string, Record<string, Valor>> = {
+  // o grupo do Garimpo é fixo (o chat que o Auto Follow lê): não aparece no editor, sempre gravado
+  garimpo: { grupo: 'vaitomanoquasenada' },
+};
 
 // bots com o esquema NOVO (emulador): ao editar, a tela mostra exatamente estes campos (os antigos
 // que não fazem mais sentido somem ao salvar)
-const ESQUEMA_NOVO = new Set(['auto-follow', 'dm-followers', 'story-brecho', 'like-repost', 'pre-drop']);
+const ESQUEMA_NOVO = new Set(['auto-follow', 'dm-followers', 'story-brecho', 'like-repost', 'pre-drop', 'garimpo']);
 
 // campos de um modo NOVO (zerado), por bot — a fonte da verdade quando não há template
 const CAMPOS_NOVO: Record<string, string[]> = {
@@ -242,6 +254,7 @@ const CAMPOS_NOVO: Record<string, string[]> = {
     'pausa_entre_contas',
   ],
   'pre-drop': ['feed', 'stories', 'ativem', 'pausa_entre_contas'],
+  'garimpo': ['meta', 'min_seguidores', 'min_curtidas', 'min_novos'],
   'story-repost': [
     'selecao', 'quantos_posts', 'repost_card', 'estilo', 'mostrar_preco', 'texto', 'link',
     'delay_post', 'active_hours',

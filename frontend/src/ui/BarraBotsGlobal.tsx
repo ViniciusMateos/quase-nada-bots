@@ -33,6 +33,7 @@ function iconeDoBot(run: RunInfo): keyof typeof Ionicons.glyphMap {
   if (run.bot === 'story-brecho' || run.bot === 'story-repost') return 'images';
   if (run.bot === 'like-repost') return 'heart';
   if (run.bot === 'pre-drop') return 'megaphone';
+  if (run.bot === 'garimpo') return 'diamond';
   return 'flash';
 }
 

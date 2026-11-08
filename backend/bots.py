@@ -51,6 +51,15 @@ BOTS = {
         "tem_modos": True, "tem_chats": False, "tem_ig": False,
         "descricao": "Reposta o pré-drop do dia nas contas auxiliares: carrossel no feed, cada foto no story e o 'ativem as notificações'.",
     },
+    # 07/11/2026: GARIMPO — realimenta o chat do Auto Follow sozinho. Parte dos autores que já
+    # estão no chat, abre quem curtiu, filtra perfil com N mil+ seguidores e foto de roupa, confere
+    # se a lista de curtidas da foto ainda tem gente que a frota NÃO seguiu e manda o post no grupo.
+    # Módulo: quase-nada-bots-device/bots/garimpo. O dir só guarda os MODOS.
+    "garimpo": {
+        "nome": "Garimpo", "dir": "garimpo-posts-emulador", "target": "emulador",
+        "tem_modos": True, "tem_chats": False, "tem_ig": False,
+        "descricao": "Garimpa posts novos pro chat do auto-follow: vai curtidor por curtidor da turma, olha a grade de cada um atrás de foto de roupa, confere curtidas e se a lista ainda rende, manda no grupo e volta nos perfis bons.",
+    },
     # 20/10/2026: story da conta do BRECHÓ pelo app de verdade, numa instância do MuMu só dele (o
     # story pela API do server tomou "restricted from uploading"). O dir só guarda os MODOS.
     "story-brecho": {
@@ -159,6 +168,7 @@ def _ler_json(bot_id, nome, default):
 
 def _gravar_json(bot_id, nome, data):
     f = bot_dir(bot_id) / nome
+    f.parent.mkdir(parents=True, exist_ok=True)   # bot novo do emulador: o dir só guarda os modos
     f.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -230,6 +240,12 @@ MODOS_PADRAO_EMULADOR = {
         "completo": {"feed": True, "stories": True, "ativem": True, "pausa_entre_contas": [30, 90]},
         "só feed": {"feed": True, "stories": False, "ativem": False, "pausa_entre_contas": [30, 90]},
         "só stories": {"feed": False, "stories": True, "ativem": True, "pausa_entre_contas": [30, 90]},
+    },
+    # garimpo: meta = posts enviados por conta por run; min_novos = gente na lista de curtidas da foto
+    # que a frota ainda não seguiu (abaixo disso o post não rende e é descartado)
+    "garimpo": {
+        "padrão": {"meta": 10, "min_seguidores": 0, "min_curtidas": 5, "min_novos": 15,
+                   "grupo": "vaitomanoquasenada"},
     },
 }
 

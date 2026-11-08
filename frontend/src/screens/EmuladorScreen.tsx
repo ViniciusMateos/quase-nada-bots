@@ -34,6 +34,9 @@ const BOTS_EMULADOR: {
     descFallback: 'Curte e republica os posts do brechó com as contas do emulador.' },
   { id: 'pre-drop', icone: 'megaphone', nomeFallback: 'Pré-drop',
     descFallback: 'Reposta o pré-drop do dia nas contas auxiliares: carrossel no feed, as fotos no story e o "ativem as notificações".' },
+  // realimenta o chat do Auto Follow com posts novos (07/11)
+  { id: 'garimpo', icone: 'diamond', nomeFallback: 'Garimpo',
+    descFallback: 'Garimpa posts novos pro chat do auto-follow: vai curtidor por curtidor da turma, olha a grade de cada um atrás de foto de roupa, confere curtidas e se a lista ainda rende, manda no grupo e volta nos perfis bons.' },
   { id: 'criar-conta', icone: 'add-circle', nomeFallback: 'Criar Conta',
     descFallback: 'Começa a conta nova no emulador até o código do e-mail; o resto você termina.', tela: 'CriarConta' },
   { id: 'remover-conta', icone: 'remove-circle', nomeFallback: 'Remover Contas',

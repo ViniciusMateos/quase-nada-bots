@@ -3,6 +3,18 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [2.10.0] — 2026-11-13
+
+### Adicionado
+- feat: bot **Like Fallback** no app, no painel e no backend — a conta que seguiu volta em quem não segue o brechó (stories, destaque e fotos) e, acabada a fila, curte os curtidores do chat (o funil); saldo com perfis visitados, destaques, já seguem, vindos do chat e privados pro follow
+- feat: **modo funil** no Auto Follow (campo `funil`, modo "funil 125") — cada conta segue quem tocou pelo Like Fallback em vez dos curtidores do chat
+
+### Manutenção
+- chore: OTA 120
+
+### Documentação
+- docs: README com o Like Fallback e o funil
+
 ## [2.9.0] — 2026-11-07
 
 ### Adicionado

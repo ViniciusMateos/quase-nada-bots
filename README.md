@@ -28,11 +28,14 @@ progresso e o saldo. O app mostra tudo igual a antes (Rodando agora, log ao vivo
 
 Os bots do emulador moram no repo **`quase-nada-bots-device`** (agente + supervisor) e cada um no
 seu repo: `auto-follow-emulador`, `dm-followers-emulador`, `story-repost-emulador`,
-`criar-conta-emulador`, `like-repost-emulador`, `pre-drop-emulador` e `garimpo-posts-emulador`.
+`criar-conta-emulador`, `like-repost-emulador`, `pre-drop-emulador`, `garimpo-posts-emulador` e
+`like-fallback-emulador`.
 
 ## Bots
 
-- **Auto Follow** — segue os curtidores dos posts de um chat, em lote de contas.
+- **Auto Follow** — segue os curtidores dos posts de um chat, em lote de contas. No **modo funil**
+  (campo `funil`, modo "funil 125") ele não usa o chat: cada conta segue quem ela mesma já tocou pelo
+  Like Fallback — os privados que não pôde curtir e quem curtiu há 1+ dia e não seguiu o brechó.
 - **DM Followers** — DM de boas-vindas pros novos seguidores (5 variações, desconto de 10%, ou as
   mensagens do próprio modo).
 - **Story Repost** — peças disponíveis do brechó no story, pelo app. A conta do brechó roda numa
@@ -63,6 +66,17 @@ seu repo: `auto-follow-emulador`, `dm-followers-emulador`, `story-repost-emulado
   suficientes e lista de curtidas com gente que a frota ainda não seguiu. Perfil bom entra num
   rodízio e volta pra mandar os posts seguintes. Conta com o direct bloqueado é pulada. Modo:
   posts por conta, curtidas mínimas e mínimo de gente nova na lista (seguidor mínimo desligado).
+- **Like Fallback** — segunda chamada de atenção pra quem a conta seguiu há mais de 1 dia e ainda não
+  segue o brechó: a **mesma** conta volta no perfil, curte os stories, curte as telas de um destaque e
+  curte umas fotos. Antes confere, em lote, na lista de seguidores do brechó (reserva: a lista "a
+  seguir" da pessoa); quem já segue conta como conversão e sai da fila, e quem não deu pra conferir
+  não leva like. A fila prioriza quem foi seguido nos últimos dias, do mais recente pro mais antigo.
+  Acabou a fila, ela não para (**funil**): colhe os curtidores dos próximos posts do chat (mesma
+  fronteira do Auto Follow) e curte quem a frota nunca tocou; privado vai pro follow do modo funil.
+  Privado que a conta seguiu é reconferido 1x por dia e, se aceitou, recebe o like. A conversão é
+  medida pelos seguidores novos do brechó, lidos pela instância dele, e sai por caminho (só follow,
+  follow → like, só like, like → follow) em `metricas.py`. Modo: perfis por conta, fotos por perfil,
+  janela de dias, stories, destaque e a fonte do chat.
 - **Remover Contas** — marca as contas logadas no emulador e o bot termina a sessão de cada uma
   (libera vaga no teto de ~10 contas por aparelho). A conta continua no Instagram e no app, só
   sai do emulador (o sincronizar não loga de volta).

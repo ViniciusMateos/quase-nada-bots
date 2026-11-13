@@ -119,12 +119,15 @@ export function SaldoChips({
   saldo,
   className,
   vazio,
+  bot,
 }: {
   saldo?: Record<string, number | string> | null
   className?: string
   vazio?: string
+  /** id do bot: a mesma chave do saldo pode ter rótulo diferente por bot */
+  bot?: string | null
 }) {
-  const chips = chipsDoSaldo(saldo)
+  const chips = chipsDoSaldo(saldo, bot)
   if (!chips.length) return vazio ? <span className="text-xs text-txt-faint">{vazio}</span> : null
   return (
     <div className={cn('flex flex-wrap gap-1.5', className)}>

@@ -18,6 +18,7 @@ const BOTS_EMULADOR: { id: string; nomeFallback: string; descFallback: string; r
   { id: 'like-repost', nomeFallback: 'Like + Repost', descFallback: 'Curte e republica os posts do brechó com as contas do emulador.' },
   { id: 'pre-drop', nomeFallback: 'Pré-drop', descFallback: 'Reposta o pré-drop do dia nas contas auxiliares.' },
   { id: 'garimpo', nomeFallback: 'Garimpo', descFallback: 'Garimpa posts novos pro chat do auto-follow e manda no grupo.' },
+  { id: 'like-fallback', nomeFallback: 'Like Fallback', descFallback: 'Curte quem a conta seguiu e ainda não segue o brechó.' },
   {
     id: 'criar-conta', nomeFallback: 'Criar Conta', rota: '/contas/criar',
     descFallback: 'Começa a conta nova no emulador até o código do e-mail; o resto você termina.',
@@ -137,7 +138,7 @@ export function UltimasRuns({
                   {r.acao ? (
                     <span className="text-xs text-txt-dim line-clamp-1">{r.motivo || NOMES_ACAO[chaveRun(r)] || r.acao}</span>
                   ) : (
-                    <SaldoChips saldo={r.saldo} className="justify-end" />
+                    <SaldoChips saldo={r.saldo} bot={r.bot} className="justify-end" />
                   )}
                 </div>
                 <ResultadoBadge res={resultadoDe(r)} />

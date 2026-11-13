@@ -96,6 +96,12 @@ function saldoTxt(r: RunHistorico): string {
     return `${s.feeds ?? 0} no feed · ${s.stories ?? 0} stories · ${s.ativem ?? 0} "ativem"`
       + (s.falhas ? ` · ${s.falhas} falhas` : '');
   }
+  if (r.bot === 'like-fallback') {
+    return `${s.perfis ?? 0} perfis visitados · ${s.curtidas ?? 0} curtidas · ${s.ja_seguem ?? 0} já seguem o brechó`
+      + (s.frios ? ` · ${s.frios} vindos do chat` : '')
+      + (s.pend_follow ? ` · ${s.pend_follow} privados pro follow` : '')
+      + (s.falhas ? ` · ${s.falhas} falhas` : '');
+  }
   if (r.bot === 'garimpo') {
     return `${s.enviados ?? 0} posts enviados · ${s.perfis ?? 0} perfis avaliados · ${s.descartados ?? 0} descartados`
       + (s.falhas ? ` · ${s.falhas} falhas` : '');
@@ -161,7 +167,9 @@ export function HistoricoScreen() {
             ? Number(s.feeds ?? 0) + Number(s.stories ?? 0) + Number(s.ativem ?? 0)
             : r.bot === 'garimpo'
               ? Number(s.enviados ?? 0)
-              : Number(s.enviadas ?? 0);
+              : r.bot === 'like-fallback'
+                ? Number(s.perfis ?? 0)
+                : Number(s.enviadas ?? 0);
     }
     return { runs: filtrados.length, acoes };
   }, [filtrados]);

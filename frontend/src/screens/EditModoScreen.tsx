@@ -153,6 +153,22 @@ const META_EMULADOR: Record<string, MetaF> = {
     dica: 'A foto escolhida precisa ter pelo menos esse tanto de curtidas. Desligado = qualquer foto.' },
   min_novos: { label: 'Mínimo de pessoas novas na lista', cat: 'alvo', tipo: 'cap', sug: 15,
     dica: 'Quantas pessoas da lista de curtidas a frota ainda NÃO seguiu. Menos que isso o post não rende e é descartado.' },
+  // like fallback (09/11)
+  perfis: { label: 'Perfis por conta', cat: 'limites', tipo: 'cap', sug: 20,
+    dica: 'Quantas pessoas cada conta visita nesta run (curte, vê os stories e abre um destaque).' },
+  curtidas: { label: 'Fotos curtidas por perfil', cat: 'alvo', tipo: 'cap', sug: 3,
+    dica: 'Quantas fotos de cada pessoa a conta curte, das mais novas pra trás.' },
+  dias_min: { label: 'Seguido há pelo menos (dias)', cat: 'alvo', tipo: 'cap', sug: 1,
+    dica: 'Só entra quem a conta seguiu há pelo menos esse tanto e ainda não segue o brechó.' },
+  dias_max: { label: 'Prioridade: seguidos até (dias)', cat: 'alvo', tipo: 'cap', sug: 7,
+    dica: 'Primeiro quem foi seguido até esse tanto de dias atrás (o mais recente primeiro); acabando, pega os mais antigos.' },
+  destaque: { label: 'Abrir um destaque', cat: 'alvo', tipo: 'bool',
+    dica: 'Além das curtidas, abre um destaque da pessoa (aparece pra ela que a conta viu).' },
+  // funil (13/11): o like vem primeiro e o follow vira a 2ª chamada
+  frio: { label: 'Quando a fila acabar, curtir os curtidores do chat', cat: 'alvo', tipo: 'bool',
+    dica: 'Acabou quem a conta seguiu: ela curte os curtidores dos posts do chat que a frota nunca tocou. Privado vai pro follow do funil.' },
+  funil: { label: 'Modo funil', cat: 'alvo', tipo: 'bool',
+    dica: 'Em vez dos curtidores do chat, a conta segue quem ela já tocou pelo Like Fallback: os privados que ela não pôde curtir e quem ela curtiu há 1+ dia e não seguiu o brechó.' },
   // pré-drop (05/11)
   feed: { label: 'Carrossel no feed', cat: 'outros', tipo: 'bool',
     dica: 'Publica as fotos do pré-drop no feed da conta, com a legenda do brechó + "no @brechoquasenadaa".' },
@@ -211,6 +227,10 @@ const META_BOT: Record<string, Record<string, Partial<MetaF>>> = {
   'pre-drop': {
     pausa_entre_contas: { sug: [30, 90] },
   },
+  'like-fallback': {
+    stories: { label: 'Curtir os stories', cat: 'alvo',
+      dica: 'Se a pessoa tiver story no ar, a conta vê e curte.' },
+  },
 };
 
 // campos ESCONDIDOS do editor (o bot já cuida deles; não faz sentido mexer)
@@ -227,12 +247,13 @@ const OCULTOS_DEFAULT: Record<string, Record<string, Valor>> = {
 
 // bots com o esquema NOVO (emulador): ao editar, a tela mostra exatamente estes campos (os antigos
 // que não fazem mais sentido somem ao salvar)
-const ESQUEMA_NOVO = new Set(['auto-follow', 'dm-followers', 'story-brecho', 'like-repost', 'pre-drop', 'garimpo']);
+const ESQUEMA_NOVO = new Set(['auto-follow', 'dm-followers', 'story-brecho', 'like-repost', 'pre-drop', 'garimpo',
+  'like-fallback']);
 
 // campos de um modo NOVO (zerado), por bot — a fonte da verdade quando não há template
 const CAMPOS_NOVO: Record<string, string[]> = {
   'auto-follow': [
-    'limite_follows_conta', 'max_posts_conta', 'teto_follows_lote', 'parar_lote_apos_softblocks',
+    'funil', 'limite_follows_conta', 'max_posts_conta', 'teto_follows_lote', 'parar_lote_apos_softblocks',
     'cooldown_softblock_h', 'delay_follow', 'pausa_longa_cada', 'pausa_longa', 'delay_post', 'pausa_entre_contas',
   ],
   'dm-followers': [
@@ -255,6 +276,7 @@ const CAMPOS_NOVO: Record<string, string[]> = {
   ],
   'pre-drop': ['feed', 'stories', 'ativem', 'pausa_entre_contas'],
   'garimpo': ['meta', 'min_seguidores', 'min_curtidas', 'min_novos'],
+  'like-fallback': ['perfis', 'curtidas', 'dias_min', 'dias_max', 'stories', 'destaque', 'frio'],
   'story-repost': [
     'selecao', 'quantos_posts', 'repost_card', 'estilo', 'mostrar_preco', 'texto', 'link',
     'delay_post', 'active_hours',

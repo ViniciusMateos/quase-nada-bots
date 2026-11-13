@@ -60,6 +60,15 @@ BOTS = {
         "tem_modos": True, "tem_chats": False, "tem_ig": False,
         "descricao": "Garimpa posts novos pro chat do auto-follow: vai curtidor por curtidor da turma, olha a grade de cada um atrás de foto de roupa, confere curtidas e se a lista ainda rende, manda no grupo e volta nos perfis bons.",
     },
+    # 09/11/2026: LIKE FALLBACK — quem a conta seguiu há mais de 1 dia e ainda não segue o brechó
+    # recebe da MESMA conta umas curtidas, like nos stories e uma olhada num destaque. A fila sai do
+    # agente.log (quem cada conta seguiu) cruzado com os seguidores do brechó. Módulo:
+    # quase-nada-bots-device/bots/like_fallback. O dir só guarda os MODOS.
+    "like-fallback": {
+        "nome": "Like Fallback", "dir": "like-fallback-emulador", "target": "emulador",
+        "tem_modos": True, "tem_chats": False, "tem_ig": False,
+        "descricao": "Segunda chamada de atenção pra quem a conta seguiu há mais de 1 dia e ainda não segue o brechó: a mesma conta curte umas fotos, os stories e abre um destaque da pessoa.",
+    },
     # 20/10/2026: story da conta do BRECHÓ pelo app de verdade, numa instância do MuMu só dele (o
     # story pela API do server tomou "restricted from uploading"). O dir só guarda os MODOS.
     "story-brecho": {
@@ -246,6 +255,12 @@ MODOS_PADRAO_EMULADOR = {
     "garimpo": {
         "padrão": {"meta": 10, "min_seguidores": 0, "min_curtidas": 5, "min_novos": 15,
                    "grupo": "vaitomanoquasenada"},
+    },
+    # like fallback: perfis = pessoas visitadas por conta por run; a fila prioriza quem foi seguido
+    # entre dias_min e dias_max dias atrás (mais recente primeiro) e, acabando, pega os mais antigos
+    "like-fallback": {
+        "padrão": {"perfis": 20, "curtidas": 3, "dias_min": 1, "dias_max": 7,
+                   "stories": True, "destaque": True},
     },
 }
 

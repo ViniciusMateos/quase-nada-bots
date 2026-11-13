@@ -314,7 +314,7 @@ export default function Run() {
                   {histRec && <ResultadoBadge res={resultadoDe(histRec)} />}
                 </div>
                 <div className="min-w-0 flex-1 space-y-2">
-                  <SaldoChips saldo={saldo} vazio={histRec?.motivo ? undefined : 'sem saldo'} />
+                  <SaldoChips saldo={saldo} bot={info?.bot ?? histRec?.bot} vazio={histRec?.motivo ? undefined : 'sem saldo'} />
                   {histRec?.motivo && <p className="text-sm text-txt-dim break-words">{histRec.motivo}</p>}
                 </div>
               </div>

@@ -227,14 +227,14 @@ function LinhaRecente({
             <span className="md:hidden">{tempoRelativo(run.started_at)} · {fmtDuracao(dur)}</span>
             <span className="hidden md:inline">{run.id}</span>
           </p>
-          {hist && <SaldoChips saldo={hist.saldo} className="mt-1.5 lg:hidden" />}
+          {hist && <SaldoChips saldo={hist.saldo} bot={hist.bot} className="mt-1.5 lg:hidden" />}
         </div>
         <div className="w-[30%] hidden lg:block min-w-0">
           {hist ? (
             hist.acao ? (
               <span className="text-xs text-txt-dim truncate block">{hist.motivo || '—'}</span>
             ) : (
-              <SaldoChips saldo={hist.saldo} vazio="sem saldo" />
+              <SaldoChips saldo={hist.saldo} bot={hist.bot} vazio="sem saldo" />
             )
           ) : (
             <span className="text-xs text-txt-faint">—</span>

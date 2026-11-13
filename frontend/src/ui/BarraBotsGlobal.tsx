@@ -34,6 +34,7 @@ function iconeDoBot(run: RunInfo): keyof typeof Ionicons.glyphMap {
   if (run.bot === 'like-repost') return 'heart';
   if (run.bot === 'pre-drop') return 'megaphone';
   if (run.bot === 'garimpo') return 'diamond';
+  if (run.bot === 'like-fallback') return 'heart-circle';
   return 'flash';
 }
 

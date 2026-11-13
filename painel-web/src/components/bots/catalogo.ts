@@ -1,7 +1,7 @@
 // Catálogo e regras dos bots do EMULADOR — espelho do BOTS_EMULADOR (EmuladorScreen) e das regras
 // do BotScreen do app. Tudo aqui é puro (sem React) pra Bots/Bot/EditModo/Chats usarem igual.
 import type { LucideIcon } from 'lucide-react'
-import { CircleMinus, CirclePlus, Gem, Heart, Images, Megaphone, MessagesSquare, UserPlus } from 'lucide-react'
+import { CircleMinus, CirclePlus, Gem, Heart, HeartHandshake, Images, Megaphone, MessagesSquare, UserPlus } from 'lucide-react'
 import type { EmuladorStatus, Account, RunHistorico, RunInfo } from '@/lib/api'
 import { locaisDe } from '@/lib/api'
 import { cmpTexto } from '@/lib/ordenar'
@@ -33,6 +33,8 @@ export const BOTS_EMULADOR: BotCatalogo[] = [
     descFallback: 'Reposta o pré-drop do dia nas contas auxiliares: carrossel no feed, as fotos no story e o "ativem as notificações".' },
   { id: 'garimpo', icone: Gem, nomeFallback: 'Garimpo',
     descFallback: 'Garimpa posts novos pro chat do auto-follow: vai curtidor por curtidor da turma, olha a grade de cada um atrás de foto de roupa, confere curtidas e se a lista ainda rende, manda no grupo e volta nos perfis bons.' },
+  { id: 'like-fallback', icone: HeartHandshake, nomeFallback: 'Like Fallback',
+    descFallback: 'Segunda chamada de atenção pra quem a conta seguiu há mais de 1 dia e ainda não segue o brechó: a mesma conta curte umas fotos, os stories e abre um destaque da pessoa.' },
   { id: 'criar-conta', icone: CirclePlus, nomeFallback: 'Criar Conta',
     descFallback: 'Começa a conta nova no emulador até o código do e-mail; o resto você termina.', rota: '/contas/criar' },
   { id: 'remover-conta', icone: CircleMinus, nomeFallback: 'Remover Contas',
@@ -57,7 +59,8 @@ export function recursosDoBot(botId: string, temChatsBackend?: boolean) {
     temLote: botId === 'story-repost',
     // emulador: lote pelas contas logadas no device, uma de cada vez, na ORDEM da seleção
     ehVitrine: botId === 'auto-follow' || botId === 'dm-followers' || botId === 'story-brecho'
-      || botId === 'like-repost' || botId === 'pre-drop' || botId === 'garimpo',
+      || botId === 'like-repost' || botId === 'pre-drop' || botId === 'garimpo'
+      || botId === 'like-fallback',
     // Story Repost: a conta do brechó entra na mesma ordem (roda no emulador próprio dela)
     ehStoryBrecho: botId === 'story-brecho',
   }

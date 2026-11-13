@@ -37,6 +37,9 @@ const BOTS_EMULADOR: {
   // realimenta o chat do Auto Follow com posts novos (07/11)
   { id: 'garimpo', icone: 'diamond', nomeFallback: 'Garimpo',
     descFallback: 'Garimpa posts novos pro chat do auto-follow: vai curtidor por curtidor da turma, olha a grade de cada um atrás de foto de roupa, confere curtidas e se a lista ainda rende, manda no grupo e volta nos perfis bons.' },
+  // segunda chamada de atenção pra quem foi seguido e não segue o brechó (09/11)
+  { id: 'like-fallback', icone: 'heart-circle', nomeFallback: 'Like Fallback',
+    descFallback: 'Segunda chamada de atenção pra quem a conta seguiu há mais de 1 dia e ainda não segue o brechó: a mesma conta curte umas fotos, os stories e abre um destaque da pessoa.' },
   { id: 'criar-conta', icone: 'add-circle', nomeFallback: 'Criar Conta',
     descFallback: 'Começa a conta nova no emulador até o código do e-mail; o resto você termina.', tela: 'CriarConta' },
   { id: 'remover-conta', icone: 'remove-circle', nomeFallback: 'Remover Contas',

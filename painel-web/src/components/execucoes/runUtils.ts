@@ -6,6 +6,7 @@ import {
   CircleMinus,
   Gem,
   Heart,
+  HeartHandshake,
   Images,
   Megaphone,
   LogIn,
@@ -72,6 +73,8 @@ export function visualDoProcesso(r: { bot?: string | null; params?: Record<strin
       return { Icon: Megaphone, cor: 'text-[#FF8234]', fundo: 'bg-[#FF8234]/10' }
     case 'garimpo':
       return { Icon: Gem, cor: 'text-amarelo', fundo: 'bg-amarelo/10' }
+    case 'like-fallback':
+      return { Icon: HeartHandshake, cor: 'text-[#F63F93]', fundo: 'bg-[#F63F93]/10' }
     case 'criar-conta':
       return { Icon: UserRoundPlus, cor: 'text-ok', fundo: 'bg-ok/10' }
     case 'remover-conta':
@@ -137,19 +140,27 @@ const ROTULO_SALDO: Record<string, [string, string]> = {
   enviados: ['post enviado', 'posts enviados'],
   perfis: ['perfil avaliado', 'perfis avaliados'],
   descartados: ['descartado', 'descartados'],
+  destaques: ['destaque', 'destaques'],
+  ja_seguem: ['já segue o brechó', 'já seguem o brechó'],
+  frios: ['vindo do chat (funil)', 'vindos do chat (funil)'],
+  pend_follow: ['privado pro follow', 'privados pro follow'],
+}
+// a mesma chave com outro sentido conforme o bot (perfis do Garimpo = avaliados; do Like Fallback = visitados)
+const ROTULO_SALDO_BOT: Record<string, Record<string, [string, string]>> = {
+  'like-fallback': { perfis: ['perfil visitado', 'perfis visitados'] },
 }
 // chaves "boas" (verde) e "ruins" (vermelho) — o resto fica neutro
 const SALDO_BOM = new Set(['follows', 'seguidos', 'enviadas', 'postados', 'criadas', 'removidas', 'novas',
-  'curtidas', 'repostadas', 'feeds', 'stories', 'ativem', 'enviados'])
+  'curtidas', 'repostadas', 'feeds', 'stories', 'ativem', 'enviados', 'destaques'])
 const SALDO_RUIM = new Set(['falhas'])
 
 export type ChipSaldo = { key: string; valor: string; rotulo: string; tom: 'bom' | 'ruim' | 'neutro' }
 
-export function chipsDoSaldo(saldo?: Record<string, number | string> | null): ChipSaldo[] {
+export function chipsDoSaldo(saldo?: Record<string, number | string> | null, bot?: string | null): ChipSaldo[] {
   if (!saldo) return []
   return Object.entries(saldo).map(([k, v]) => {
     const n = typeof v === 'number' ? v : Number(v)
-    const par = ROTULO_SALDO[k]
+    const par = (bot ? ROTULO_SALDO_BOT[bot]?.[k] : undefined) ?? ROTULO_SALDO[k]
     const rotulo = par ? (n === 1 ? par[0] : par[1]) : k
     const tom: ChipSaldo['tom'] = SALDO_RUIM.has(k) && n > 0 ? 'ruim' : SALDO_BOM.has(k) && n > 0 ? 'bom' : 'neutro'
     return { key: k, valor: String(v), rotulo, tom }

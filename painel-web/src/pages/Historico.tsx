@@ -376,7 +376,7 @@ function LinhaHistorico({ r, nomeDe, i }: { r: RunHistorico; nomeDe: (k: string)
   const saldoEl = r.acao ? (
     <span className="text-xs text-txt-dim line-clamp-2">{r.motivo || NOMES_ACAO[chaveRun(r)] || r.acao}</span>
   ) : (
-    <SaldoChips saldo={r.saldo} vazio="sem saldo" />
+    <SaldoChips saldo={r.saldo} bot={r.bot} vazio="sem saldo" />
   )
   const conteudo = (
     <>

@@ -3,6 +3,24 @@
 Todas as mudanças relevantes do Quase Nada Bots ficam registradas aqui.
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/).
 
+## [2.11.0] — 2026-11-17
+
+### Adicionado
+- feat: "Sobre o bot" no topo da tela de cada bot, com a descrição inteira (ver mais / ver menos) — no hub em grade ela fica cortada em 3 linhas
+- feat: hub dos bots em **grade 2 por linha** — segure e arraste pra reordenar (a ordem fica salva no aparelho), o card levanta (borda e sombra) enquanto arrasta, os outros deslizam pros lugares novos; os cards crescem entrando na tela ao rolar e afundam com mola ao tocar (o ícone dá um pulinho)
+
+### Modificado
+- update: o campo "Modo funil" saiu do editor do Auto Follow (app e painel) — o Auto Follow agora sempre começa pelo funil da conta e segue pros curtidores do chat com o que sobrar da meta, numa run só
+
+### Corrigido
+- fix: o editor de modo (app e painel) usa o padrão do bot num campo liga/desliga que o modo ainda não tem — o `frio` do Like Fallback saía desligado ao editar outro campo e a fonte do chat parava sozinha
+
+### Manutenção
+- chore: OTA 121 a 126 (card segurado sem balanço e sem escala, com a sombra no próprio card: girar/escalar a camada pixelava o card no iPhone)
+
+### Documentação
+- docs: README com o funil no começo do Auto Follow
+
 ## [2.10.0] — 2026-11-13
 
 ### Adicionado

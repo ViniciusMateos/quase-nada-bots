@@ -23,7 +23,7 @@ import { VerificandoContaScreen } from '@/screens/VerificandoContaScreen';
 import { HistoricoScreen } from '@/screens/HistoricoScreen';
 
 export type RootStackParamList = {
-  Bot: { botId: string; nome: string };
+  Bot: { botId: string; nome: string; desc?: string };
   Run: { runId: string; nome: string };
   Settings: undefined;
   Historico: undefined;

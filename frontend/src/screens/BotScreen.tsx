@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -9,6 +9,7 @@ import { bucketData, fmtHora } from '@/lib/datas';
 import { garantirLA } from '@/lib/la';
 import { colors } from '@/theme';
 import { Aparece, Botao, Card, CartaoTocavel } from '@/ui/components';
+import { SobreBot } from '@/ui/SobreBot';
 import { SeletorConta } from '@/ui/SeletorConta';
 import { SeletorContas } from '@/ui/SeletorContas';
 import { acaoDe, ehProcessoDeConta, nomeDoProcesso } from '@/lib/processo';
@@ -64,7 +65,13 @@ function corRun(r: RunHistorico): string {
 
 export function BotScreen() {
   const nav = useNavigation<Nav>();
-  const { botId, nome } = useRoute<Rt>().params;
+  const { botId, nome, desc: descParam } = useRoute<Rt>().params;
+  // descrição inteira do bot (no hub em grade ela é cortada): vem do hub; senão busca no backend
+  const [desc, setDesc] = useState<string | null>(descParam ?? null);
+  useEffect(() => {
+    if (descParam) return;
+    api.listBots().then((b) => setDesc(b[botId]?.descricao ?? null)).catch(() => { /* offline */ });
+  }, [botId, descParam]);
   const [modos, setModos] = useState<string[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const [modo, setModo] = useState<string | null>(null);   // nada pré-selecionado: a pessoa escolhe
@@ -383,6 +390,9 @@ export function BotScreen() {
     <TecladoView>
     <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ padding: 16, gap: 16 }}
       keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+      <Aparece>
+        <SobreBot texto={desc} />
+      </Aparece>
       {ehVitrine ? (
       <Aparece>
       <Card>

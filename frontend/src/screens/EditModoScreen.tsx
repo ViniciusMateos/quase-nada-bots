@@ -228,8 +228,9 @@ const META_BOT: Record<string, Record<string, Partial<MetaF>>> = {
     pausa_entre_contas: { sug: [30, 90] },
   },
   'like-fallback': {
-    stories: { label: 'Curtir os stories', cat: 'alvo',
+    stories: { label: 'Curtir os stories', cat: 'alvo', sug: true,
       dica: 'Se a pessoa tiver story no ar, a conta vê e curte.' },
+    destaque: { sug: true },
   },
 };
 
@@ -342,8 +343,11 @@ export function EditModoScreen() {
           const meta = metaDe(k, orig, botId);
           // string SEM meta 'text' (não editável) → passthrough: preserva e não renderiza
           if (!usarTemplate && typeof orig === 'string' && !ehString(meta.tipo)) { passa[k] = orig; return; }
+          // campo liga/desliga que o modo ainda não tem → o padrão do BOT (`sug`), não "desligado": o `frio`
+          // do Like Fallback saía false ao editar outro campo e a fonte do chat parava sem ninguém pedir (13/11)
           const v = usarTemplate || orig === undefined
-            ? (meta.tipo === 'lista' ? [] : ehString(meta.tipo) ? ((meta.sug as string) ?? '') : zerado(meta.tipo))
+            ? (meta.tipo === 'lista' ? [] : ehString(meta.tipo) ? ((meta.sug as string) ?? '')
+              : meta.tipo === 'bool' && typeof meta.sug === 'boolean' ? meta.sug : zerado(meta.tipo))
             : orig;
           base[k] = v;
           if (!ehString(meta.tipo) && temValor(meta.tipo, v)) on.add(k);   // já vem ligado se tinha valor

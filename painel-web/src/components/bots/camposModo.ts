@@ -212,8 +212,9 @@ const META_BOT: Record<string, Record<string, Partial<MetaF>>> = {
     pausa_entre_contas: { sug: [60, 180] },
   },
   'like-fallback': {
-    stories: { label: 'Curtir os stories', cat: 'alvo',
+    stories: { label: 'Curtir os stories', cat: 'alvo', sug: true,
       dica: 'Se a pessoa tiver story no ar, a conta vê e curte.' },
+    destaque: { sug: true },
   },
 }
 

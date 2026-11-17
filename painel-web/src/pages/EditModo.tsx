@@ -77,7 +77,8 @@ function TelaEditModo({ botId, modoParam }: { botId: string; modoParam: string }
           const meta = metaDe(k, orig, botId)
           if (!usarTemplate && typeof orig === 'string' && !ehString(meta.tipo)) { passa[k] = orig; return }
           const v = usarTemplate || orig === undefined
-            ? (meta.tipo === 'lista' ? [] : ehString(meta.tipo) ? ((meta.sug as string) ?? '') : zerado(meta.tipo))
+            ? (meta.tipo === 'lista' ? [] : ehString(meta.tipo) ? ((meta.sug as string) ?? '')
+              : meta.tipo === 'bool' && typeof meta.sug === 'boolean' ? meta.sug : zerado(meta.tipo))
             : orig
           base[k] = v
           if (!ehString(meta.tipo) && temValor(meta.tipo, v)) on.add(k)   // já vem ligado se tinha valor

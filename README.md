@@ -33,9 +33,10 @@ seu repo: `auto-follow-emulador`, `dm-followers-emulador`, `story-repost-emulado
 
 ## Bots
 
-- **Auto Follow** — segue os curtidores dos posts de um chat, em lote de contas. No **modo funil**
-  (campo `funil`, modo "funil 125") ele não usa o chat: cada conta segue quem ela mesma já tocou pelo
-  Like Fallback — os privados que não pôde curtir e quem curtiu há 1+ dia e não seguiu o brechó.
+- **Auto Follow** — segue os curtidores dos posts de um chat, em lote de contas. Cada conta começa
+  pelo **funil**: segue quem ela mesma já tocou pelo Like Fallback — os privados que não pôde curtir e
+  quem curtiu há 1+ dia e não seguiu o brechó — e, sobrando meta, continua pelos curtidores do chat, na
+  mesma run (não existe mais um modo funil à parte).
 - **DM Followers** — DM de boas-vindas pros novos seguidores (5 variações, desconto de 10%, ou as
   mensagens do próprio modo).
 - **Story Repost** — peças disponíveis do brechó no story, pelo app. A conta do brechó roda numa
@@ -72,8 +73,9 @@ seu repo: `auto-follow-emulador`, `dm-followers-emulador`, `story-repost-emulado
   seguir" da pessoa); quem já segue conta como conversão e sai da fila, e quem não deu pra conferir
   não leva like. A fila prioriza quem foi seguido nos últimos dias, do mais recente pro mais antigo.
   Acabou a fila, ela não para (**funil**): colhe os curtidores dos próximos posts do chat (mesma
-  fronteira do Auto Follow) e curte quem a frota nunca tocou; privado vai pro follow do modo funil.
-  Privado que a conta seguiu é reconferido 1x por dia e, se aceitou, recebe o like. A conversão é
+  fronteira do Auto Follow) e curte quem a frota nunca tocou; privado vai pro começo do próximo Auto
+  Follow da conta. Privado que a conta seguiu é reconferido no máximo 2 vezes (~1x por dia) e, se
+  aceitou, recebe o like. A conversão é
   medida pelos seguidores novos do brechó, lidos pela instância dele, e sai por caminho (só follow,
   follow → like, só like, like → follow) em `metricas.py`. Modo: perfis por conta, fotos por perfil,
   janela de dias, stories, destaque e a fonte do chat.

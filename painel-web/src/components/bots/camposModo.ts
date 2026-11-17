@@ -152,10 +152,8 @@ const META_EMULADOR: Record<string, MetaF> = {
   destaque: { label: 'Abrir um destaque', cat: 'alvo', tipo: 'bool',
     dica: 'Além das curtidas, abre um destaque da pessoa (aparece pra ela que a conta viu).' },
   // funil (13/11): o like vem primeiro e o follow vira a 2ª chamada
-  frio: { label: 'Quando a fila acabar, curtir os curtidores do chat', cat: 'alvo', tipo: 'bool',
-    dica: 'Acabou quem a conta seguiu: ela curte os curtidores dos posts do chat que a frota nunca tocou. Privado vai pro follow do funil.' },
-  funil: { label: 'Modo funil', cat: 'alvo', tipo: 'bool',
-    dica: 'Em vez dos curtidores do chat, a conta segue quem ela já tocou pelo Like Fallback: os privados que ela não pôde curtir e quem ela curtiu há 1+ dia e não seguiu o brechó.' },
+  frio: { label: 'Quando a fila acabar, curtir os curtidores do chat', cat: 'alvo', tipo: 'bool', sug: true,
+    dica: 'Acabou quem a conta seguiu: ela curte os curtidores dos posts do chat que a frota nunca tocou. Privado vai pro começo do próximo Auto Follow dessa conta.' },
   // pré-drop (05/11)
   feed: { label: 'Carrossel no feed', cat: 'outros', tipo: 'bool',
     dica: 'Publica as fotos do pré-drop no feed da conta, com a legenda do brechó + "no @brechoquasenadaa".' },
@@ -236,7 +234,7 @@ export const ESQUEMA_NOVO = new Set(['auto-follow', 'dm-followers', 'story-brech
 // campos de um modo NOVO (zerado), por bot
 export const CAMPOS_NOVO: Record<string, string[]> = {
   'auto-follow': [
-    'funil', 'limite_follows_conta', 'max_posts_conta', 'teto_follows_lote', 'parar_lote_apos_softblocks',
+    'limite_follows_conta', 'max_posts_conta', 'teto_follows_lote', 'parar_lote_apos_softblocks',
     'cooldown_softblock_h', 'delay_follow', 'pausa_longa_cada', 'pausa_longa', 'delay_post', 'pausa_entre_contas',
   ],
   'dm-followers': [

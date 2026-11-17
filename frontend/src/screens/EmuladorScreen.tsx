@@ -1,5 +1,6 @@
-import React, { useCallback, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Animated, NativeScrollEvent, NativeSyntheticEvent, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,21 +8,25 @@ import { Account, api, Bot, EmuladorStatus, locaisDe, RunInfo } from '@/lib/api'
 import { CONTA_BRECHO, aindaVerificando, ehUsername, sincronizarEmulador } from '@/lib/syncEmulador';
 import { cmpTexto } from '@/lib/ordenar';
 import { colors } from '@/theme';
-import { Aparece, Card, CartaoTocavel, Pill, Pulsar } from '@/ui/components';
+import { Aparece, Card, Pill, Pulsar } from '@/ui/components';
 import { Esqueleto, EsqueletoCartao } from '@/ui/Esqueleto';
 import { BarraTopo } from '@/ui/BarraTopo';
 import { useDogRefresh } from '@/ui/DogRefresh';
 import { RodandoAgora } from '@/ui/RodandoAgora';
+import { GradeArrastavel } from '@/ui/GradeArrastavel';
+import { gravarPref, lerPref } from '@/lib/prefs';
 import type { RootStackParamList } from '@/navigation/RootNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 // Bots que rodam NO EMULADOR (device real): auto-follow e DM (desde 19/10) e o story do brechó
 // (20/10, numa instância do MuMu só dele). Fallback cobre backend que não devolva o bot em /bots.
-const BOTS_EMULADOR: {
+type BotHub = {
   id: string; icone: keyof typeof Ionicons.glyphMap; nomeFallback: string; descFallback: string;
   tela?: 'CriarConta' | 'RemoverContas';   // bots normais abrem o BotScreen; esses têm tela própria
-}[] = [
+};
+
+const BOTS_EMULADOR: BotHub[] = [
   { id: 'auto-follow', icone: 'person-add', nomeFallback: 'Auto Follow',
     descFallback: 'Segue os curtidores dos posts compartilhados num chat.' },
   { id: 'dm-followers', icone: 'chatbubbles', nomeFallback: 'DM Followers',
@@ -46,6 +51,66 @@ const BOTS_EMULADOR: {
     descFallback: 'Tira contas do app do Instagram no emulador pra liberar vaga.', tela: 'RemoverContas' },
 ];
 
+// hub em GRADE (13/11): 2 por linha, altura fixa (a grade arrastável precisa), ordem salva no aparelho
+const ALTURA_CARD = 168;
+const CHAVE_ORDEM = 'ordem_bots_hub';
+
+function CartaoBot({
+  bot, nome, desc, onAbrir, segurar, dedoSaiu, erguido, entrada, delay,
+}: {
+  bot: BotHub; nome: string; desc: string; onAbrir: () => void; segurar: () => void; dedoSaiu: () => void;
+  erguido: boolean; entrada: Animated.AnimatedInterpolation<number> | Animated.Value; delay: number;
+}) {
+  // tudo no driver JS: o valor de rolagem (entrada) é JS e entra no mesmo transform
+  const aperto = useRef(new Animated.Value(1)).current;
+  const pulo = useRef(new Animated.Value(1)).current;
+  const apertar = () => Animated.spring(aperto, { toValue: 0.93, useNativeDriver: false, friction: 6, tension: 170 }).start();
+  const soltar = () => {
+    Animated.spring(aperto, { toValue: 1, useNativeDriver: false, friction: 3.5, tension: 120 }).start();
+    dedoSaiu();
+  };
+  const tocar = () => {
+    // o ícone dá um pulinho e a tela abre logo em seguida (dá pra ver o toque)
+    Animated.sequence([
+      Animated.timing(pulo, { toValue: 1.28, duration: 110, useNativeDriver: false }),
+      Animated.spring(pulo, { toValue: 1, useNativeDriver: false, friction: 3, tension: 150 }),
+    ]).start();
+    setTimeout(onAbrir, 130);
+  };
+  const escalaEntrada = entrada.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1] });
+  return (
+    <Aparece delay={delay} style={{ flex: 1 }}>
+      <Animated.View style={{
+        flex: 1,
+        opacity: entrada.interpolate({ inputRange: [0, 1], outputRange: [0.25, 1] }),
+        transform: [
+          { translateY: entrada.interpolate({ inputRange: [0, 1], outputRange: [34, 0] }) },
+          { scale: Animated.multiply(aperto, escalaEntrada) },
+        ],
+      }}>
+        <TouchableOpacity activeOpacity={0.92} style={{ flex: 1 }} onPress={tocar}
+          onLongPress={() => {
+            // virou "segurar": volta pro tamanho certo na hora (preso nos 93% do toque ele ficava borrado)
+            aperto.stopAnimation(); aperto.setValue(1);
+            segurar();
+          }}
+          delayLongPress={300} onPressIn={apertar} onPressOut={soltar}>
+          <View style={[styles.cardBot, erguido && styles.cardBotErguido]}>
+            <Animated.View style={{ transform: [{ scale: pulo }], alignSelf: 'flex-start' }}>
+              <LinearGradient colors={colors.gradiente} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                style={styles.iconeBot}>
+                <Ionicons name={bot.icone} size={22} color="#FFFFFF" />
+              </LinearGradient>
+            </Animated.View>
+            <Text style={styles.botNome} numberOfLines={1}>{nome}</Text>
+            <Text style={styles.botDesc} numberOfLines={3}>{desc}</Text>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    </Aparece>
+  );
+}
+
 export function EmuladorScreen() {
   const nav = useNavigation<Nav>();
   const [bots, setBots] = useState<Record<string, Bot>>({});
@@ -55,6 +120,40 @@ export function EmuladorScreen() {
   const [runs, setRuns] = useState<RunInfo[]>([]);
   const [contas, setContas] = useState<Account[] | null>(null);   // contas cadastradas (todas)
   const [sincronizando, setSincronizando] = useState(false);
+  // hub em grade: ordem dos bots (salva no aparelho), rolagem travada enquanto arrasta, animação ao rolar
+  const [ordem, setOrdem] = useState<string[] | null>(null);
+  const [arrastando, setArrastando] = useState(false);
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const umValor = useRef(new Animated.Value(1)).current;
+  const [vh, setVh] = useState(0);
+  const [gradeY, setGradeY] = useState(-1);
+
+  useEffect(() => {
+    lerPref(CHAVE_ORDEM).then((txt) => {
+      try { setOrdem(txt ? JSON.parse(txt) : []); } catch { setOrdem([]); }
+    });
+  }, []);
+
+  const botsOrdenados = useMemo(() => {
+    const pos = new Map((ordem ?? []).map((id, i) => [id, i] as const));
+    const base = (b: BotHub) => pos.get(b.id) ?? (1000 + BOTS_EMULADOR.indexOf(b));   // bot novo vai pro fim
+    return [...BOTS_EMULADOR].sort((a, b) => base(a) - base(b));
+  }, [ordem]);
+
+  const reordenar = useCallback((novos: BotHub[]) => {
+    const ids = novos.map((b) => b.id);
+    setOrdem(ids);
+    gravarPref(CHAVE_ORDEM, JSON.stringify(ids));
+  }, []);
+
+  // o card "cresce" entrando na tela conforme rola (0 = ainda embaixo da borda, 1 = já dentro)
+  const entradaDe = (topo: number) => {
+    if (vh <= 0 || gradeY < 0) return umValor;
+    const abs = gradeY + topo;
+    return scrollY.interpolate({
+      inputRange: [abs - vh - 1, abs - vh + 170], outputRange: [0, 1], extrapolate: 'clamp',
+    });
+  };
 
   // busca o status do agente isolado — pode falhar sozinho (endpoint ausente) sem derrubar a tela
   const puxarStatus = useCallback(async () => {
@@ -168,7 +267,13 @@ export function EmuladorScreen() {
       <BarraTopo />
       <View style={{ flex: 1 }}>
       {dog}
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }} {...scrollProps}>
+      <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }} {...scrollProps}
+        onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
+          scrollProps.onScroll(e);
+          scrollY.setValue(e.nativeEvent.contentOffset.y);
+        }}
+        scrollEnabled={!arrastando}
+        onLayout={(e) => setVh(e.nativeEvent.layout.height)}>
         {spacerEl}
 
         {/* status do PC (agente + emulador que rodam os bots) */}
@@ -274,27 +379,38 @@ export function EmuladorScreen() {
           </Card>
         </Aparece>
 
-        {/* bots do device — tocam pra tela de rodar (BotScreen reusado: modos, conta, fila,
-            garantirLA e navegação pro Run já vivem lá). */}
-        {BOTS_EMULADOR.map((b, i) => {
-          const real = bots[b.id];
-          const nome = real?.nome ?? b.nomeFallback;
-          const desc = real?.descricao ?? b.descFallback;
-          return (
-            <Aparece key={b.id} delay={(i + 1) * 60}>
-              <CartaoTocavel onPress={() => b.tela ? nav.navigate(b.tela) : nav.navigate('Bot', { botId: b.id, nome })}>
-                <View style={styles.linha}>
-                  <Ionicons name={b.icone} size={24} color={colors.marca} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.botNome}>{nome}</Text>
-                    <Text style={styles.botDesc}>{desc}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={colors.textoFraco} />
-                </View>
-              </CartaoTocavel>
-            </Aparece>
-          );
-        })}
+        {/* bots do device em GRADE (13/11): 2 por linha; segura e arrasta pra mudar a ordem (salva no
+            aparelho). Tocar abre a tela de rodar (BotScreen: modos, conta, fila, LA e Run vivem lá). */}
+        <Aparece delay={45}>
+          <View style={styles.botsHead}>
+            <Text style={styles.secao}>Bots</Text>
+            <View style={styles.dicaArrastar}>
+              <Ionicons name="move-outline" size={13} color={colors.textoFraco} />
+              <Text style={styles.dicaArrastarTxt}>segure e arraste pra reordenar</Text>
+            </View>
+          </View>
+        </Aparece>
+        <View onLayout={(e) => setGradeY(e.nativeEvent.layout.y)}>
+          {ordem !== null && (
+            <GradeArrastavel
+              itens={botsOrdenados}
+              chave={(b) => b.id}
+              altura={ALTURA_CARD}
+              onReordenar={reordenar}
+              onArrastando={setArrastando}
+              render={(b, i, { segurar, dedoSaiu, erguido, topo }) => {
+                const real = bots[b.id];
+                const nome = real?.nome ?? b.nomeFallback;
+                const desc = real?.descricao ?? b.descFallback;
+                return (
+                  <CartaoBot bot={b} nome={nome} desc={desc} delay={80 + i * 55}
+                    segurar={segurar} dedoSaiu={dedoSaiu} erguido={erguido} entrada={entradaDe(topo)}
+                    onAbrir={() => b.tela ? nav.navigate(b.tela) : nav.navigate('Bot', { botId: b.id, nome, desc })} />
+                );
+              }}
+            />
+          )}
+        </View>
       </ScrollView>
       </View>
     </View>
@@ -307,9 +423,24 @@ const styles = StyleSheet.create({
   statusEsq: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   statusTitulo: { color: colors.texto, fontSize: 16, fontWeight: '800' },
   statusSub: { color: colors.textoFraco, fontSize: 12, marginTop: 2 },
-  linha: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  botNome: { color: colors.texto, fontSize: 18, fontWeight: '700' },
-  botDesc: { color: colors.textoFraco, fontSize: 13, marginTop: 4 },
+  botNome: { color: colors.texto, fontSize: 15, fontWeight: '800', marginTop: 12 },
+  botDesc: { color: colors.textoFraco, fontSize: 12, lineHeight: 16, marginTop: 4 },
+  // card da grade do hub
+  cardBot: {
+    flex: 1, backgroundColor: colors.card, borderRadius: 18, padding: 14,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  // destaque do card que está sendo arrastado: borda + sombra NO card (tem fundo sólido — sombra numa
+  // camada sem fundo + escala pixelavam o card no iPhone, 13/11)
+  cardBotErguido: {
+    borderColor: colors.marca, borderWidth: 1.5,
+    shadowColor: '#000', shadowOpacity: 0.55, shadowRadius: 14, shadowOffset: { width: 0, height: 10 },
+    elevation: 12,
+  },
+  iconeBot: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  botsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
+  dicaArrastar: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  dicaArrastarTxt: { color: colors.textoFraco, fontSize: 11 },
   // seção "Contas no emulador"
   contasHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
   secao: { color: colors.textoFraco, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
